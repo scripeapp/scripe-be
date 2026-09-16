@@ -1,0 +1,316 @@
+# OpenAPI Specification - Events Module
+
+paths:
+  /api/events:
+    get:
+      tags: [Events]
+      summary: List all events (Public)
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, published, cancelled, completed]
+      responses:
+        200:
+          description: List of events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './components.yaml#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          events:
+                            type: array
+                            items:
+                              $ref: './components.yaml#/components/schemas/Event'
+                          pagination:
+                            $ref: './components.yaml#/components/schemas/PaginationMeta'
+
+    post:
+      tags: [Events]
+      summary: Create new event
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [title, business_id, start_date]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                business_id:
+                  type: string
+                  format: uuid
+                cover_image:
+                  type: string
+                  format: binary
+                start_date:
+                  type: string
+                  format: date-time
+                end_date:
+                  type: string
+                  format: date-time
+                location:
+                  type: string
+                venue:
+                  type: string
+      responses:
+        201:
+          description: Event created
+        400:
+          description: Validation error
+        403:
+          description: Not authorized
+
+  /api/events/{id}:
+    get:
+      tags: [Events]
+      summary: Get event details (Public)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Event details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './components.yaml#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: './components.yaml#/components/schemas/Event'
+        404:
+          description: Event not found
+
+    patch:
+      tags: [Events]
+      summary: Update event
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                cover_image:
+                  type: string
+                  format: binary
+                start_date:
+                  type: string
+                  format: date-time
+                end_date:
+                  type: string
+                  format: date-time
+                status:
+                  type: string
+                  enum: [draft, published, cancelled, completed]
+      responses:
+        200:
+          description: Event updated
+        403:
+          description: Not authorized
+
+    delete:
+      tags: [Events]
+      summary: Delete event
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Event deleted
+        403:
+          description: Not authorized
+
+  # ============================================================================
+  # Q&A ROUTES
+  # ============================================================================
+  
+  /api/events/{id}/questions:
+    get:
+      tags: [Events]
+      summary: Get event questions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: List of questions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './components.yaml#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: './components.yaml#/components/schemas/EventQuestion'
+
+    post:
+      tags: [Events]
+      summary: Ask a question
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question:
+                  type: string
+      responses:
+        201:
+          description: Question submitted
+        401:
+          description: Not authenticated
+
+  /api/events/{id}/questions/{questionId}:
+    delete:
+      tags: [Events]
+      summary: Delete question
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: questionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Question deleted
+        403:
+          description: Not authorized
+
+  /api/events/{id}/questions/{questionId}/visibility:
+    patch:
+      tags: [Events]
+      summary: Toggle question visibility
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: questionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_visible:
+                  type: boolean
+      responses:
+        200:
+          description: Visibility updated
+
+  /api/events/{id}/questions/{questionId}/answer:
+    post:
+      tags: [Events]
+      summary: Answer a question
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: questionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer:
+                  type: string
+      responses:
+        200:
+          description: Answer submitted
+        403:
+          description: Not authorized

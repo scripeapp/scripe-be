@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      // "@config/*": ["src/config/*"],
+      // "@controllers/*": ["src/controllers/*"],
+      // "@services/*": ["src/services/*"],
+      // "@utils/*": ["src/utils/*"],
+      // "@routes/*": ["src/routes/*"]
+    }
+  },
+  "include": ["src/**/*", "src/scripts/resend-issued-event-tickets.ts"],
+  "exclude": ["node_modules", "dist", "src/queues"]
+}

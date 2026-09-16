@@ -1,0 +1,118 @@
+# OpenAPI Specification - Webhook Module
+
+paths:
+  /api/webhook/paystack:
+    post:
+      tags: [Webhook]
+      summary: Paystack Payment Webhook
+      description: |
+        Handles Paystack payment webhook events.
+        
+        **Security**: This endpoint uses HMAC signature verification instead of JWT.
+        The `x-paystack-signature` header must match the SHA-512 HMAC of the request body.
+        
+        **Events Handled**:
+        - `charge.success` - Payment completed
+        - `subscription.create` - New subscription created
+        - `subscription.not_renew` - Subscription cancelled
+      parameters:
+        - in: header
+          name: x-paystack-signature
+          required: true
+          schema:
+            type: string
+          description: HMAC SHA-512 signature for payload verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/PaystackWebhookPayload'
+      responses:
+        200:
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        401:
+          description: Invalid signature
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Invalid signature"
+
+  /api/webhook/paystack/free:
+    post:
+      tags: [Webhook]
+      summary: Process Free Tickets
+      description: Process free event ticket registrations (no payment required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, tickets, customer]
+              properties:
+                event_id:
+                  type: string
+                  format: uuid
+                tickets:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      ticket_type_id:
+                        type: string
+                        format: uuid
+                      quantity:
+                        type: integer
+                customer:
+                  type: object
+                  required: [email, full_name]
+                  properties:
+                    email:
+                      type: string
+                      format: email
+                    full_name:
+                      type: string
+                    phone:
+                      type: string
+      responses:
+        200:
+          description: Tickets processed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './components.yaml#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          order_reference:
+                            type: string
+                          tickets:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                ticket_id:
+                                  type: string
+                                ticket_code:
+                                  type: string
+        400:
+          description: Validation error
