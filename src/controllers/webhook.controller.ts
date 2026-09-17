@@ -376,11 +376,6 @@ class WebhookController {
         await this.bankingService().handleTransferEvent(event.data, "reversed");
         break;
 
-      case "charge.failed":
-      case "charge.abandoned":
-        await this.handleChargeFailedOrAbandoned(event.event, event.data);
-        break;
-
       case "subscription.disable":
         await this.handleSubscriptionDisable(event.data);
         break;
@@ -808,13 +803,7 @@ class WebhookController {
     }
 
     // 3. Store Purchase fallback (incomplete metadata but has store_id)
-    // Exclude Circle-linked membership payments — they carry store_id for attribution
-    // but must be routed through the Circle plan subscription handler.
-    if (
-      metadata.store_id &&
-      !metadata.items &&
-      metadata.type !== "circle_plan_subscription"
-    ) {
+    if (metadata.store_id && !metadata.items) {
       await this.handleIncompleteStorePurchase(verified);
       return;
     }
@@ -858,26 +847,10 @@ class WebhookController {
       return;
     }
 
-    // 7. Cohort enrollment payment
-    if (this.isCohortEnrollment(metadata)) {
-      await this.processCohortEnrollment(verified);
-      console.log(`Successfully processed cohort enrollment: ${reference}`);
-      return;
-    }
-
     // 9. Campaign credit top-up
     if (this.isCampaignCreditTopUp(metadata)) {
       await this.processCampaignCreditTopUp(verified);
       console.log(`Successfully processed campaign credit top-up: ${reference}`);
-      return;
-    }
-
-    // 8. Circle plan subscription
-    if (this.isCirclePlanSubscription(metadata)) {
-      await this.processCirclePlanSubscription(verified);
-      console.log(
-        `Successfully processed circle plan subscription: ${reference}`,
-      );
       return;
     }
 
@@ -969,23 +942,10 @@ class WebhookController {
     );
   }
 
-  private isCirclePlanSubscription(metadata: PaystackMetadata): boolean {
-    return (
-      metadata.type === "circle_plan_subscription" ||
-      metadata.transaction_type === "circle_plan_subscription"
-    );
-  }
-
   private isCoursePurchase(metadata: PaystackMetadata): boolean {
     return (
       (metadata as any).transaction_type === "course_purchase" &&
       !!(metadata as any).course_id
-    );
-  }
-
-  private isCohortEnrollment(metadata: PaystackMetadata): boolean {
-    return (
-      metadata.transaction_type === "cohort_enrollment" && !!metadata.cohort_id
     );
   }
 
@@ -1022,21 +982,8 @@ class WebhookController {
       this.isFormSubmission(metadata) ||
       this.isPublicationSubscription(metadata) ||
       this.isStoreMembershipSubscription(metadata) ||
-      this.isCirclePlanSubscription(metadata) ||
       this.isCoursePurchase(metadata) ||
-      this.isCohortEnrollment(metadata) ||
       this.isCampaignCreditTopUp(metadata)
-    );
-  }
-
-  private async processCohortEnrollment(
-    paymentData: NormalisedPaymentData,
-  ): Promise<void> {
-    const { CircleCohortsService } =
-      await import("../services/circle-cohorts.service");
-    const service = new CircleCohortsService(this.supabase);
-    await service.verifyCohortEnrollmentPayment(
-      paymentData.reference,
     );
   }
 
@@ -1460,67 +1407,6 @@ class WebhookController {
     });
   }
 
-  private async processCirclePlanSubscription(
-    paymentData: NormalisedPaymentData,
-  ): Promise<void> {
-    const service = new CircleSubscriptionService(this.supabase);
-    const result = await service.verifySubscription(
-      paymentData.reference,
-      paymentData.provider ?? "paystack",
-    );
-
-    // If the payment originated from the Store, also create a store_order record
-    const { metadata, amount } = paymentData;
-    if (
-      metadata?.source === "store" &&
-      metadata.store_id &&
-      metadata.store_product_id
-    ) {
-      try {
-        const { StoreService } = require("../services/store.service");
-        const storeSvc = new StoreService(this.supabase);
-
-        const { data: product } = await this.supabase
-          .from("products")
-          .select("name, type, cover_image")
-          .eq("id", metadata.store_product_id)
-          .single();
-
-        if (product) {
-          await storeSvc.createOrder({
-            store_id: metadata.store_id,
-            payment_reference: paymentData.reference,
-            payment_provider: paymentData.provider ?? "paystack",
-            customer: {
-              name:
-                metadata.customer_name ||
-                paymentData.customer?.email ||
-                "Member",
-              email: paymentData.customer?.email || "",
-            },
-            items: [
-              {
-                product_id: metadata.store_product_id,
-                product_name: product.name,
-                product_type: "membership",
-                quantity: 1,
-                price: amount / 100,
-                cover_image: product.cover_image || null,
-                slot: null,
-              },
-            ],
-          });
-        }
-      } catch (err) {
-        // Non-blocking: Circle subscription already activated; log but don't fail webhook
-        console.error(
-          "[Webhook] Failed to create store_order for circle membership:",
-          err,
-        );
-      }
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // Booking Payment Processing
   // ---------------------------------------------------------------------------
@@ -1771,12 +1657,6 @@ class WebhookController {
       await subService.updateFromWebhook(data.subscription_code, {
         status: "cancelled",
       });
-
-      // Also try circle subscription service
-      const circleSubService = new CircleSubscriptionService(this.supabase);
-      await circleSubService.updateFromWebhook(data.subscription_code, {
-        status: "cancelled",
-      });
     }
   }
 
@@ -1802,11 +1682,6 @@ class WebhookController {
       console.log(
         `[StoreSubscription] Payment failed for code: ${data.subscription_code}`,
       );
-
-      const circleSubService = new CircleSubscriptionService(this.supabase);
-      await circleSubService.updateFromWebhook(data.subscription_code, {
-        status: "expired",
-      });
 
       // Trigger dunning for business subscriptions
       if (data?.metadata?.business_id) {
@@ -1846,20 +1721,6 @@ class WebhookController {
           err,
         ),
       );
-  }
-
-  private async handleChargeFailedOrAbandoned(
-    eventType: string,
-    paymentData: NormalisedPaymentData,
-  ): Promise<void> {
-    const metadata = paymentData?.metadata || ({} as PaystackMetadata);
-    if (!this.isCirclePlanSubscription(metadata) || !paymentData?.reference) {
-      return;
-    }
-
-    const status = eventType === "charge.abandoned" ? "cancelled" : "expired";
-    const service = new CircleSubscriptionService(this.supabase);
-    await service.markSubscriptionPaymentFailed(paymentData.reference, status);
   }
 
   private async handleExpiringCards(data: any): Promise<void> {
@@ -2752,10 +2613,8 @@ class WebhookController {
     if (this.isBookingPayment(metadata)) return "booking";
     if (this.isFormSubmission(metadata)) return "form";
     if (this.isCoursePurchase(metadata)) return "course";
-    if (this.isCohortEnrollment(metadata)) return "cohort";
     if (this.isCampaignCreditTopUp(metadata)) return "campaign_credit_topup";
     if (this.isStoreMembershipSubscription(metadata)) return "store_membership";
-    if (this.isCirclePlanSubscription(metadata)) return "circle";
     if (this.isPublicationSubscription(metadata)) return "publication";
     return "unknown";
   }

@@ -1,8 +1,8 @@
 /**
  * Module Registry Service
  *
- * Adapter pattern that allows any platform module (circles, publications,
- * forms, event_types) to register itself as "store-listable."  Each adapter
+ * Adapter pattern that allows any platform module (publications, forms,
+ * event_types, courses) to register itself as "store-listable."  Each adapter
  * implements a small contract:
  *
  *   validate  – confirm entity exists & belongs to the business
@@ -75,59 +75,6 @@ export interface StoreListableAdapter {
 // ============================================================================
 // Adapter implementations
 // ============================================================================
-
-const circleAdapter: StoreListableAdapter = {
-  async validate(supabase, entityId, businessId) {
-    const { data } = await supabase
-      .from("circles")
-      .select("id")
-      .eq("id", entityId)
-      .eq("business_id", businessId)
-      .maybeSingle();
-    return !!data;
-  },
-
-  async fetchMeta(supabase, entityId) {
-    const { data } = await supabase
-      .from("circles")
-      .select("id, title, description, slug, cover_image_url, access_type, price, currency")
-      .eq("id", entityId)
-      .maybeSingle();
-    if (!data) return null;
-    return {
-      name: data.title,
-      description: data.description ?? undefined,
-      slug: data.slug ?? undefined,
-      price: data.price ?? 0,
-      currency: data.currency ?? "NGN",
-      image_url: data.cover_image_url ?? null,
-      url: `/circles/${data.id}`,
-    };
-  },
-
-  async listForBusiness(supabase, businessId) {
-    const { data } = await supabase
-      .from("circles")
-      .select("id, title, description, slug, cover_image_url, access_type, price, currency")
-      .eq("business_id", businessId)
-      .order("created_at", { ascending: false });
-    return (data ?? []).map((c) => ({
-      id: c.id,
-      name: c.title,
-      description: c.description ?? undefined,
-      slug: c.slug ?? undefined,
-      price: c.price ?? 0,
-      currency: c.currency ?? "NGN",
-      image_url: c.cover_image_url ?? null,
-      type_label: "Circle",
-      extras: { access_type: c.access_type },
-    }));
-  },
-
-  getUrl(entityId) {
-    return `/circles/${entityId}`;
-  },
-};
 
 const publicationAdapter: StoreListableAdapter = {
   async validate(supabase, entityId, businessId) {
@@ -377,7 +324,6 @@ const eventTypeAdapter: StoreListableAdapter = {
 // ============================================================================
 
 const MODULE_ADAPTERS: Record<ModuleLinkTypeValue, StoreListableAdapter> = {
-  circle: circleAdapter,
   publication: publicationAdapter,
   // form: formAdapter,
   event_type: eventTypeAdapter,
@@ -424,8 +370,8 @@ export class ModuleRegistryService {
   /**
    * List all entities across ALL module types for a business.
    *
-   * Uses a single Postgres RPC (`get_linkable_items`) that queries all four
-   * tables in one round-trip instead of four separate PostgREST calls.
+   * Uses a single Postgres RPC (`get_linkable_items`) that queries all module
+   * tables in one round-trip instead of separate PostgREST calls.
    * Falls back to the parallel-query path if the RPC is unavailable.
    */
   async listAllForBusiness(
@@ -437,9 +383,8 @@ export class ModuleRegistryService {
     });
 
     if (!error && data) {
-      // RPC returns JSONB shaped as { circle: [], publication: [], event_type: [], course: [] }
+      // RPC returns JSONB shaped as { publication: [], event_type: [], course: [] }
       return {
-        circle:      (data.circle      ?? []) as ListableEntity[],
         publication: (data.publication ?? []) as ListableEntity[],
         // form:     (data.form        ?? []) as ListableEntity[],
         event_type:  (data.event_type  ?? []) as ListableEntity[],
@@ -447,7 +392,7 @@ export class ModuleRegistryService {
       };
     }
 
-    // Fallback: run the four adapters in parallel (pre-RPC behaviour)
+    // Fallback: run the registered adapters in parallel (pre-RPC behaviour)
     console.warn("get_linkable_items RPC unavailable, falling back to parallel queries:", error?.message);
     const types = Object.keys(MODULE_ADAPTERS) as ModuleLinkTypeValue[];
     const results = await Promise.all(

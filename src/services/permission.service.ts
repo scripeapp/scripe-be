@@ -180,20 +180,6 @@ export class PermissionService {
   }
 
   /**
-   * Resolve business ID from circle ID
-   */
-  async getBusinessIdFromCircle(circleId: string): Promise<string | null> {
-    const { data, error } = await this.supabase
-      .from("circles")
-      .select("business_id")
-      .eq("id", circleId)
-      .single();
-
-    if (error || !data) return null;
-    return data.business_id;
-  }
-
-  /**
    * Check permission with automatic business resolution from store
    */
   async hasPermissionViaStore(

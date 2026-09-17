@@ -675,7 +675,7 @@ class StoreController {
 
   /**
    * List all linkable items from a given module (or all modules) for the business.
-   * GET /api/store/linkable-items?module_type=circle|publication|form|event_type
+   * GET /api/store/linkable-items?module_type=publication|form|event_type
    * If module_type is omitted, returns items grouped by all module types.
    */
   async getModuleLinkableItems(

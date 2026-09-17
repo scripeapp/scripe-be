@@ -398,7 +398,6 @@ class CRMService {
     activities: any[];
     transactions: any[];
     subscriptions: any[];
-    circleJoins: any[];
     products: any[];
     analytics: { spent: number; pending: number };
   }> {
@@ -435,11 +434,10 @@ class CRMService {
       }
     }
 
-    // 3. Fetch user-linked data (subscriptions + circle joins) via user lookup.
-    // All three tables have permissive SELECT policies so this works with the
-    // authenticated client. We do one user lookup then fan out to both tables.
+    // 3. Fetch user-linked subscriptions via user lookup. The subscriptions
+    // table has permissive SELECT policies so this works with the
+    // authenticated client. We do one user lookup then query subscriptions.
     let contactSubscriptions: any[] = [];
-    let circleJoins: any[] = [];
 
     if (contactEmail) {
       const { data: userRow } = await this.supabase
@@ -467,29 +465,6 @@ class CRMService {
           contactSubscriptions = (subs || []).map((s: any) => ({
             ...s,
             created_at: s.subscribed_at, // normalise field name for frontend
-          }));
-        }
-
-        // 3b. Circle joins scoped to this business's circles
-        const { data: bizCircles } = await this.supabase
-          .from("circles")
-          .select("id, name")
-          .eq("business_id", businessId);
-        const circleIds = (bizCircles || []).map((c: any) => c.id);
-        const circleNameMap = new Map((bizCircles || []).map((c: any) => [c.id, c.name]));
-
-        if (circleIds.length > 0) {
-          const { data: memberships } = await this.supabase
-            .from("circle_members")
-            .select("id, circle_id, role, joined_at, payment_status")
-            .eq("user_id", userRow.id)
-            .in("circle_id", circleIds)
-            .order("joined_at", { ascending: false });
-
-          circleJoins = (memberships || []).map((m: any) => ({
-            ...m,
-            circle_name: circleNameMap.get(m.circle_id) || "Circle",
-            created_at: m.joined_at,
           }));
         }
       }
@@ -573,7 +548,7 @@ class CRMService {
     });
     const products = Array.from(productsMap.values());
 
-    // 7. Build activities timeline (store orders + event tickets + subscriptions + circle joins)
+    // 7. Build activities timeline (store orders + event tickets + subscriptions)
     const activities: any[] = [
       ...storeOrders.map((order) => ({
         id: `order-${order.id}`,
@@ -593,12 +568,6 @@ class CRMService {
         description: `Subscribed to ${(sub.publication as any)?.name || "a publication"} (${sub.subscription_type})`,
         created_at: sub.created_at,
       })),
-      ...circleJoins.map((m) => ({
-        id: `circle-${m.id}`,
-        type: "circle" as const,
-        description: `Joined circle: ${m.circle_name}`,
-        created_at: m.created_at,
-      })),
     ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     // 8. Analytics — total spent across orders and tickets
@@ -611,7 +580,7 @@ class CRMService {
       .filter((o) => ["pending", "processing"].includes(o.status))
       .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
-    return { activities, transactions, subscriptions: contactSubscriptions, circleJoins, products, analytics: { spent, pending } };
+    return { activities, transactions, subscriptions: contactSubscriptions, products, analytics: { spent, pending } };
   }
 
   /**

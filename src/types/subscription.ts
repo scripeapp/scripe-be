@@ -22,7 +22,6 @@ export interface BusinessSubscription {
 
 export interface PlanLimits {
   publications: number | "unlimited";
-  sessions: number | "unlimited";
   products: number | "unlimited";
   website_pages: number | "unlimited";
   crm_contacts: number | "unlimited";
@@ -72,7 +71,6 @@ export interface UsageItemWithAvailable {
 
 export interface UsageReport {
   publications: UsageItem;
-  sessions: UsageItem;
   products: UsageItem;
   website_pages: UsageItem;
   crm_contacts: UsageItem;
@@ -92,7 +90,6 @@ export interface ExtendedUsageReport {
     crm_contacts: UsageItemWithAvailable;
     segments: UsageItemWithAvailable;
     emails_per_month: UsageItemWithAvailable;
-    sessions: UsageItemWithAvailable;
     forms: UsageItemWithAvailable;
   };
   features: PlanFeatures;

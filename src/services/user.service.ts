@@ -259,19 +259,15 @@ export class UserService {
 
   /**
    * Get aggregated profile data for a user
-   * Fetches notes, halqahs, posts, events, publication, store, and products count
+   * Fetches notes, posts, events, publication, store, and products count
    */
   async getUserProfile(targetUserId: string): Promise<{
     notes: Array<Record<string, unknown>>;
     notesCount: number;
-    halqahs: Array<Record<string, unknown>>;
-    halqahsCount: number;
     posts: Array<Record<string, unknown>>;
     postsCount: number;
     events: Array<Record<string, unknown>>;
     eventsCount: number;
-    circles: Array<Record<string, unknown>>;
-    circlesCount: number;
     publication: Record<string, unknown> | null;
     store: { slug: string } | null;
     productsCount: number;
@@ -312,23 +308,6 @@ export class UserService {
       .limit(5);
 
     if (notesError) throw notesError;
-
-    // Fetch halqahs (published) - limit to 5 for performance
-    const {
-      data: halqahs,
-      error: halqahsError,
-      count: halqahsCount,
-    } = await this.supabase
-      .from("halqahs")
-      .select("*, user_id(id, name, username, bio, avatar_url, website)", {
-        count: "exact",
-      })
-      .eq("user_id", targetUserId)
-      .eq("status", "published")
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    if (halqahsError) throw halqahsError;
 
     // Fetch posts (published) - limit to 5 for performance
     const {
@@ -401,36 +380,14 @@ export class UserService {
       .select("*", { count: "exact", head: true })
       .eq("user_id", targetUserId);
 
-    // Fetch circles (published/active) - limit to 5
-    const {
-      data: circles,
-      error: circlesError,
-      count: circlesCount,
-    } = await this.supabase
-      .from("circles")
-      .select(
-        "*, creator:creator_id(id, name, username, bio, avatar_url, website)",
-        { count: "exact" },
-      )
-      .eq("creator_id", targetUserId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    if (circlesError) throw circlesError;
-
     return {
       user: userData,
       notes: notes || [],
       notesCount: notesCount || 0,
-      halqahs: halqahs || [],
-      halqahsCount: halqahsCount || 0,
       posts: posts || [],
       postsCount: postsCount || 0,
       events: events || [],
       eventsCount: eventsCount || 0,
-      circles: circles || [],
-      circlesCount: circlesCount || 0,
       publication,
       store,
       productsCount: productsCount || 0,

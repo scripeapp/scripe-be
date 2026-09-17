@@ -39,10 +39,7 @@ export function enforcePlanLimit(resource: LimitResource) {
           .single();
 
         const plan = business?.subscription_plan || "starter";
-        const resourceLabel =
-          resource === "sessions"
-            ? `${resource} per month`
-            : resource;
+        const resourceLabel = resource;
 
         // Fire-and-forget: record this as an upgrade signal
         upgradeSignalsService

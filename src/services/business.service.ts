@@ -187,7 +187,7 @@ export class BusinessService {
 
   /**
    * Get enriched public business profile by slug — includes content (events,
-   * circles, products, publication) for the elevated /b/[slug] creator page.
+   * products, publication) for the elevated /b/[slug] creator page.
    */
   async getBusinessPublicProfile(slug: string): Promise<any | null> {
     const business = await this.getBusinessBySlug(slug);
@@ -243,25 +243,6 @@ export class BusinessService {
     const events = eventsResult.data || [];
     const eventsCount = eventsResult.count || events.length;
 
-    // Circles — column is "title" not "name", cover is "cover_image_url"
-    const {
-      data: circles,
-      count: circlesCount,
-      error: circlesError,
-    } = await this.supabase
-      .from("circles")
-      .select("id, title, description, cover_image_url", { count: "exact" })
-      .eq("business_id", business.id)
-      .is("deleted_at", null)
-      .limit(4);
-
-    if (circlesError) {
-      console.error(
-        "[BusinessService] Circles query error:",
-        circlesError.message,
-      );
-    }
-
     // Products — use store id from business.store (already loaded)
     let products: any[] = [];
     let productsCount = 0;
@@ -316,8 +297,6 @@ export class BusinessService {
       owner: owner ?? null,
       events: events || [],
       eventsCount: eventsCount || 0,
-      circles: circles || [],
-      circlesCount: circlesCount || 0,
       products,
       productsCount,
       publications,
@@ -616,8 +595,6 @@ export class BusinessService {
     const tableConfigs = [
       { table: "publications", userIdColumn: "user_id" },
       { table: "events", userIdColumn: "owner_id" },
-      { table: "halqahs", userIdColumn: "user_id" },
-      { table: "circles", userIdColumn: "creator_id" },
       { table: "websites", userIdColumn: "user_id" },
       { table: "contacts", userIdColumn: "user_id" },
       { table: "segments", userIdColumn: "user_id" },

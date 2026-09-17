@@ -302,18 +302,8 @@ export const DonationCoreSchema = z
   })
   .partial();
 
-export const ProductCircleLinkSchema = z.object({
-  product_id: z.string().uuid().optional(), // filled by the server from the route param
-  circle_id: z.string().uuid(),
-  default_plan_id: z.string().uuid().nullable().default(null),
-  allow_tier_selection: z.boolean().default(false),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
-});
-
 // Unified Module Link — links a store product to any platform module entity.
 export const ModuleLinkType = {
-  CIRCLE: "circle",
   PUBLICATION: "publication",
   COURSE: "course",
   EVENT_TYPE: "event_type",
@@ -324,7 +314,7 @@ export type ModuleLinkTypeValue =
 
 export const ProductModuleLinkSchema = z.object({
   product_id: z.string().uuid().optional(),
-  module_type: z.enum(["circle", "publication", "course", "event_type"]),
+  module_type: z.enum(["publication", "course", "event_type"]),
   entity_id: z.string().uuid(),
   config: z
     .record(z.string(), z.unknown())
@@ -413,7 +403,6 @@ export const ProductCoreSchema = z.object({
   membership: MembershipCoreSchema.nullable(),
   bundle: BundleCoreSchema.nullable(),
   donation: DonationCoreSchema.nullable(),
-  circle_link: ProductCircleLinkSchema.nullable().optional(),
   module_link: ProductModuleLinkSchema.nullable().optional(),
   cover_image: z.string().nullable(),
   images: z.array(z.string()).nullable(),
@@ -590,7 +579,6 @@ export const ProductBaseSchema = z.object({
     ProductCoreSchema.shape.availability_profile_id.default(null),
   variants: ProductCoreSchema.shape.variants.default([]),
   options_config: ProductCoreSchema.shape.options_config,
-  circle_link: ProductCircleLinkSchema.nullable().optional().default(null),
   module_link: ProductModuleLinkSchema.nullable().optional().default(null),
   is_pre_order: z.boolean().default(false),
   pre_order_release_date: z.string().nullable().default(null),
@@ -1527,7 +1515,6 @@ export function createDefaultProduct(
     marketplace_enabled: true,
     digital_link_expiry_hours: null,
     availability_profile_id: null,
-    circle_link: null,
     module_link: null,
     stock: null,
     orders_count: 0,
@@ -1562,7 +1549,6 @@ export type Order = z.infer<typeof OrderSchema>;
 export type StoreSettings = z.infer<typeof StoreSettingsSchema>;
 export type DiscountCode = z.infer<typeof DiscountCodeSchema>;
 export type ServiceBooking = z.infer<typeof ServiceBookingSchema>;
-export type ProductCircleLink = z.infer<typeof ProductCircleLinkSchema>;
 export type ProductModuleLink = z.infer<typeof ProductModuleLinkSchema>;
 
 export const PermissionSchema = z.object({

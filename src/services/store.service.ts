@@ -2813,7 +2813,6 @@ export class StoreService {
       category_ids,
       marketplace_category_id,
       variants,
-      circle_link,
       module_link,
       supplier_ids,
       ...productData
@@ -2949,15 +2948,6 @@ export class StoreService {
         store.business_id!,
       );
     }
-    // Backward compat: legacy circle_link field
-    else if (productData.type === "membership" && circle_link) {
-      const store = await this.getStoreById(storeId, businessId);
-      await this.syncProductCircleLink(
-        data.id,
-        circle_link,
-        store.business_id!,
-      );
-    }
 
     // Fetch final product state with links
     const finalProduct = await this.getStoreProduct(
@@ -2987,7 +2977,6 @@ export class StoreService {
       category_ids,
       marketplace_category_id,
       variants,
-      circle_link,
       module_link,
       supplier_ids,
       ...productUpdates
@@ -3132,22 +3121,6 @@ export class StoreService {
           module_link.module_type as ModuleLinkTypeValue,
           module_link.entity_id,
           (module_link.config ?? {}) as Record<string, unknown>,
-          store.business_id!,
-        );
-      }
-    }
-    // Backward compat: legacy circle_link field
-    else if (
-      (data.type === "membership" || productUpdates.type === "membership") &&
-      circle_link !== undefined
-    ) {
-      if (circle_link === null) {
-        await this.deleteProductCircleLink(productId);
-      } else {
-        const store = await this.getStoreById(storeId, businessId);
-        await this.syncProductCircleLink(
-          productId,
-          circle_link,
           store.business_id!,
         );
       }
@@ -3524,12 +3497,11 @@ export class StoreService {
   }
 
   // ============================================================================
-  // Product Module Linkage (unified — circles, publications, forms, event_types)
+  // Product Module Linkage (unified — publications, forms, event_types, courses)
   // ============================================================================
 
   /**
    * Fetch the module link for a single product (from the unified table).
-   * Falls back to legacy product_circle_links for backward compat.
    */
   async getProductModuleLink(
     productId: string,
@@ -3540,7 +3512,6 @@ export class StoreService {
     config: Record<string, unknown>;
     _entity_meta?: EntityMeta;
   } | null> {
-    // Try unified table first
     const { data, error } = await this.supabase
       .from("product_module_links")
       .select("*")
@@ -3562,24 +3533,6 @@ export class StoreService {
         entity_id: data.entity_id,
         config: (data.config ?? {}) as Record<string, unknown>,
       };
-    } else {
-      // Fallback: legacy circle links (pre-migration data)
-      const { data: legacy } = await this.supabase
-        .from("product_circle_links")
-        .select("*")
-        .eq("product_id", productId)
-        .maybeSingle();
-
-      if (legacy) {
-        result = {
-          module_type: "circle" as ModuleLinkTypeValue,
-          entity_id: legacy.circle_id,
-          config: {
-            default_plan_id: legacy.default_plan_id,
-            allow_tier_selection: legacy.allow_tier_selection ?? false,
-          },
-        };
-      }
     }
 
     // Enrich with entity metadata (slug, name, image, url) when requested.
@@ -3603,21 +3556,6 @@ export class StoreService {
     }
 
     return result;
-  }
-
-  /** @deprecated Use getProductModuleLink — kept for call-sites that still expect circle shape */
-  async getProductCircleLink(
-    productId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const link = await this.getProductModuleLink(productId);
-    if (!link || link.module_type !== "circle") return null;
-    return {
-      product_id: productId,
-      circle_id: link.entity_id,
-      default_plan_id: (link.config.default_plan_id as string) ?? null,
-      allow_tier_selection:
-        (link.config.allow_tier_selection as boolean) ?? false,
-    };
   }
 
   /**
@@ -3646,24 +3584,7 @@ export class StoreService {
       );
     }
 
-    // 2. Module-specific config validation (e.g. circle plan)
-    if (moduleType === "circle" && config.default_plan_id) {
-      const { data: plan, error: planError } = await this.supabase
-        .from("circle_plans")
-        .select("id")
-        .eq("id", config.default_plan_id as string)
-        .eq("circle_id", entityId)
-        .single();
-
-      if (planError || !plan) {
-        throw Object.assign(
-          new Error("Default plan not found for the selected circle"),
-          { statusCode: 404 },
-        );
-      }
-    }
-
-    // 3. Upsert into unified table
+    // 2. Upsert into unified table
     const { error } = await this.supabase.from("product_module_links").upsert({
       product_id: productId,
       module_type: moduleType,
@@ -3673,43 +3594,10 @@ export class StoreService {
     });
 
     if (error) throw error;
-
-    // 4. Also keep legacy table in sync for circle type (backward compat)
-    if (moduleType === "circle") {
-      await this.supabase.from("product_circle_links").upsert({
-        product_id: productId,
-        circle_id: entityId,
-        default_plan_id: (config.default_plan_id as string) || null,
-        allow_tier_selection: (config.allow_tier_selection as boolean) ?? false,
-        updated_at: new Date().toISOString(),
-      });
-    }
-  }
-
-  /** @deprecated Use syncProductModuleLink */
-  async syncProductCircleLink(
-    productId: string,
-    linkData: {
-      circle_id: string;
-      default_plan_id?: string | null;
-      allow_tier_selection?: boolean;
-    },
-    businessId: string,
-  ): Promise<void> {
-    await this.syncProductModuleLink(
-      productId,
-      "circle",
-      linkData.circle_id,
-      {
-        default_plan_id: linkData.default_plan_id ?? null,
-        allow_tier_selection: linkData.allow_tier_selection ?? false,
-      },
-      businessId,
-    );
   }
 
   /**
-   * Delete a product's module link (and legacy circle link if applicable).
+   * Delete a product's module link.
    */
   async deleteProductModuleLink(productId: string): Promise<void> {
     const { error } = await this.supabase
@@ -3718,33 +3606,18 @@ export class StoreService {
       .eq("product_id", productId);
 
     if (error) throw error;
-
-    // Also clean legacy table
-    await this.supabase
-      .from("product_circle_links")
-      .delete()
-      .eq("product_id", productId);
-  }
-
-  /** @deprecated Use deleteProductModuleLink */
-  async deleteProductCircleLink(productId: string): Promise<void> {
-    await this.deleteProductModuleLink(productId);
   }
 
   /**
    * Batch-fetch module links for a list of product IDs.
-   * Returns both `module_link` (new) and `circle_link` (backward compat).
    */
   async batchFetchModuleLinks(productIds: string[]): Promise<
     Record<
       string,
       {
-        module_link: {
-          module_type: ModuleLinkTypeValue;
-          entity_id: string;
-          config: Record<string, unknown>;
-        };
-        circle_link: any;
+        module_type: ModuleLinkTypeValue;
+        entity_id: string;
+        config: Record<string, unknown>;
       }
     >
   > {
@@ -3758,37 +3631,19 @@ export class StoreService {
     const result: Record<
       string,
       {
-        module_link: {
-          module_type: ModuleLinkTypeValue;
-          entity_id: string;
-          config: Record<string, unknown>;
-        };
-        circle_link: any;
+        module_type: ModuleLinkTypeValue;
+        entity_id: string;
+        config: Record<string, unknown>;
       }
     > = {};
 
     (links ?? []).forEach((l: Record<string, unknown>) => {
       const pid = l.product_id as string;
-      const moduleLink = {
+      result[pid] = {
         module_type: l.module_type as ModuleLinkTypeValue,
         entity_id: l.entity_id as string,
         config: (l.config ?? {}) as Record<string, unknown>,
       };
-
-      // Build backward-compatible circle_link shape
-      let circleLink: any = null;
-      if (l.module_type === "circle") {
-        const config = (l.config ?? {}) as Record<string, unknown>;
-        circleLink = {
-          product_id: pid,
-          circle_id: l.entity_id as string,
-          default_plan_id: (config.default_plan_id as string) ?? null,
-          allow_tier_selection:
-            (config.allow_tier_selection as boolean) ?? false,
-        };
-      }
-
-      result[pid] = { module_link: moduleLink, circle_link: circleLink };
     });
 
     return result;
@@ -4051,7 +3906,7 @@ export class StoreService {
       }
     }
 
-    // Fetch module link (unified) + backward-compat circle_link
+    // Fetch module link (unified)
     // includeMeta=true enriches with slug/url so the frontend can build correct redirect paths
     const publicModuleLink = await this.getProductModuleLink(
       resolvedProductId,
@@ -4059,17 +3914,6 @@ export class StoreService {
     );
     if (publicModuleLink) {
       (productWithCategories as any).module_link = publicModuleLink;
-      // Backward compat
-      if (publicModuleLink.module_type === "circle") {
-        (productWithCategories as any).circle_link = {
-          product_id: resolvedProductId,
-          circle_id: publicModuleLink.entity_id,
-          default_plan_id:
-            (publicModuleLink.config.default_plan_id as string) ?? null,
-          allow_tier_selection:
-            (publicModuleLink.config.allow_tier_selection as boolean) ?? false,
-        };
-      }
     }
 
     // Apply per-branch price/availability override, if any, before
@@ -4272,8 +4116,7 @@ export class StoreService {
       categories: productCategories[p.id] || [],
       variants: productVariants[p.id] || [],
       supplier_ids: supplierIdsByProduct[p.id] ?? [],
-      circle_link: moduleLinks[p.id]?.circle_link ?? null,
-      module_link: moduleLinks[p.id]?.module_link ?? null,
+      module_link: moduleLinks[p.id] ?? null,
     }));
 
     return {
@@ -4323,20 +4166,9 @@ export class StoreService {
 
     const supplierIdsByProduct = await this.getSupplierIdsByProduct(storeId, [productId]);
 
-    // Fetch module link (unified) and backward-compat circle_link
+    // Fetch module link (unified)
     // includeMeta=true enriches with slug/url so the frontend can build correct redirect paths
     const moduleLink = await this.getProductModuleLink(productId, true);
-    const circleLink =
-      moduleLink?.module_type === "circle"
-        ? {
-            product_id: productId,
-            circle_id: moduleLink.entity_id,
-            default_plan_id:
-              (moduleLink.config.default_plan_id as string) ?? null,
-            allow_tier_selection:
-              (moduleLink.config.allow_tier_selection as boolean) ?? false,
-          }
-        : null;
 
     return {
       ...product,
@@ -4344,7 +4176,6 @@ export class StoreService {
       categories,
       variants: variants || [],
       supplier_ids: supplierIdsByProduct[productId] ?? [],
-      circle_link: circleLink,
       module_link: moduleLink,
     };
   }
@@ -5647,28 +5478,6 @@ export class StoreService {
       await this.assertBranchAcceptingOrders(data.branch_id);
     }
 
-    // Guard: Circle-linked memberships must not reach this path — they need
-    // CircleSubscriptionService to enroll the buyer. Reject with a clear error
-    // so the frontend can re-route to initiateCheckout.
-    for (const item of data.items) {
-      const { data: product } = await this.supabase
-        .from("products")
-        .select("type")
-        .eq("id", item.product_id)
-        .single();
-      if (product?.type === "membership") {
-        const circleLink = await this.getProductCircleLink(item.product_id);
-        if (circleLink?.circle_id) {
-          throw Object.assign(
-            new Error(
-              "Circle-linked memberships must use the checkout/initiate endpoint",
-            ),
-            { statusCode: 400 },
-          );
-        }
-      }
-    }
-
     // 0. Guard availability for service products
     const availabilityService = new AvailabilityService(this.supabase);
 
@@ -6853,116 +6662,6 @@ export class StoreService {
   }> {
     const itemValidations = await this.loadItemValidations(data.items);
     await this.assertServiceSlotsAvailable(itemValidations);
-
-    // ── Circle-linked membership detection ───────────────────────────────────
-    // If the cart contains a membership product linked to a Circle, delegate
-    // payment initiation to CircleSubscriptionService.
-    const membershipItem = itemValidations.find(
-      (v) => v.product.type === "membership",
-    );
-    if (membershipItem) {
-      const circleLink = await this.getProductCircleLink(
-        membershipItem.item.product_id,
-      );
-      if (circleLink?.circle_id) {
-        // Enforce constraints
-        if (data.items.length > 1) {
-          throw Object.assign(
-            new Error(
-              "Circle-linked membership cannot be purchased with other products",
-            ),
-            { statusCode: 400 },
-          );
-        }
-        if (membershipItem.item.quantity !== 1) {
-          throw Object.assign(
-            new Error("Quantity must be 1 for a membership"),
-            { statusCode: 400 },
-          );
-        }
-        if (!data.user_id) {
-          throw Object.assign(
-            new Error("You must be signed in to purchase this membership"),
-            { statusCode: 401 },
-          );
-        }
-
-        // Resolve plan
-        const planId =
-          circleLink.allow_tier_selection && data.selected_plan_id
-            ? data.selected_plan_id
-            : circleLink.default_plan_id;
-
-        if (!planId) {
-          throw Object.assign(
-            new Error("No plan selected for this membership"),
-            { statusCode: 400 },
-          );
-        }
-
-        const {
-          CircleSubscriptionService,
-        } = require("./circle-subscription.service");
-        const circleSvc = new CircleSubscriptionService(this.supabase);
-        const result = await circleSvc.initiateSubscription(
-          planId,
-          data.user_id,
-          data.customer.email,
-          data.callback_url,
-          {
-            store_id: data.store_id,
-            product_id: membershipItem.item.product_id,
-          },
-        );
-
-        // For free Circle plans: activation is immediate (no webhook will fire).
-        // Create the store_order now so the purchase is recorded.
-        if (!result.authorization_url && result.reference) {
-          try {
-            const { data: product } = await this.supabase
-              .from("products")
-              .select("name, cover_image")
-              .eq("id", membershipItem.item.product_id)
-              .single();
-
-            if (product) {
-              await this.createOrder({
-                store_id: data.store_id,
-                payment_reference: result.reference,
-                customer: data.customer,
-                items: [
-                  {
-                    product_id: membershipItem.item.product_id,
-                    product_name: product.name,
-                    product_type: "membership",
-                    quantity: 1,
-                    price: 0,
-                    cover_image: product.cover_image || null,
-                    slot: null,
-                  },
-                ],
-              });
-            }
-          } catch (orderErr) {
-            // Non-blocking: Circle enrollment already succeeded; log but don't fail
-            console.error(
-              "[StoreService] Failed to create store_order for free circle membership:",
-              orderErr,
-            );
-          }
-        }
-
-        return {
-          authorization_url: result.authorization_url,
-          reference: result.reference,
-          amount: result.amount,
-          platform_fee: 0,
-          gateway_fee: 0,
-          total_charged: result.amount,
-        };
-      }
-    }
-    // ── End Circle-linked membership ─────────────────────────────────────────
 
     const charge = await this.resolveStoreCharge(data);
     const result = await charge.provider.initializePayment({

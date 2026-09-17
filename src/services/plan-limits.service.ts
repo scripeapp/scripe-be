@@ -124,39 +124,6 @@ export class PlanLimitsService {
         break;
       }
 
-      case "sessions": {
-        // Session limits are monthly and apply to circle session occurrences
-        // scheduled in the current calendar month.
-        const { data: circles } = await this.supabase
-          .from("circles")
-          .select("id")
-          .eq("business_id", businessId)
-          .is("deleted_at", null);
-
-        if (circles && circles.length > 0) {
-          const circleIds = circles.map((c) => c.id);
-
-          const startOfMonth = new Date();
-          startOfMonth.setUTCDate(1);
-          startOfMonth.setUTCHours(0, 0, 0, 0);
-
-          const startOfNextMonth = new Date(startOfMonth);
-          startOfNextMonth.setUTCMonth(startOfNextMonth.getUTCMonth() + 1);
-
-          const { count: sessCount } = await this.supabase
-            .from("circle_sessions")
-            .select("*", { count: "exact", head: true })
-            .in("circle_id", circleIds)
-            .gte("start_datetime", startOfMonth.toISOString())
-            .lt("start_datetime", startOfNextMonth.toISOString());
-
-          count = sessCount || 0;
-        } else {
-          count = 0;
-        }
-        break;
-      }
-
       case "products": {
         // Product limits are applied to free products only (price <= 0).
         // Paid products are intentionally unlimited across plans.
@@ -296,7 +263,6 @@ export class PlanLimitsService {
 
     const resources: LimitResource[] = [
       "publications",
-      "sessions",
       "products",
       "website_pages",
       "crm_contacts",
@@ -361,7 +327,6 @@ export class PlanLimitsService {
 
     const resourceTypes: LimitResource[] = [
       "publications",
-      "sessions",
       "products",
       "website_pages",
       "crm_contacts",
