@@ -1,14 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import type { Principal } from "../db/principal.js";
 import { anonymousPrincipal } from "../db/principal.js";
-
-declare global {
-  namespace Express {
-    interface Request {
-      principal: Principal;
-    }
-  }
-}
 
 export function attachPrincipal(
   request: Request,

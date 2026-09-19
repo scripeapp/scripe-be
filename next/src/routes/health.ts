@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { getDatabaseGateway } from "../db/database.js";
+import { ApiResponse } from "../shared/api-response.js";
 
 export function createHealthRouter(): Router {
   const router = Router();
 
   router.get("/health/live", (_request, response) => {
-    response.json({ status: "ok" });
+    ApiResponse.success(response, { status: "ok" as const });
   });
 
   router.get("/health/ready", async (_request, response) => {
@@ -18,14 +19,22 @@ export function createHealthRouter(): Router {
     }
 
     if (!databaseUp) {
-      response.status(503).json({
-        status: "down",
-        checks: { database: "down" as const },
-      });
+      ApiResponse.error(
+        response,
+        {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Service is not ready",
+          details: {
+            status: "down",
+            checks: { database: "down" as const },
+          },
+        },
+        503,
+      );
       return;
     }
 
-    response.status(200).json({
+    ApiResponse.success(response, {
       status: "ok",
       checks: { database: "up" as const },
     });

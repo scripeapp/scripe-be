@@ -9,15 +9,45 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type Json = JsonValue;
+
+export type JsonArray = JsonValue[];
+
+export type JsonObject = {
+  [x: string]: JsonValue | undefined;
+};
+
+export type JsonPrimitive = boolean | number | string | null;
+
+export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export interface UserProfiles {
+  accountStatus: Generated<string>;
+  accountType: Generated<string>;
+  bio: Generated<string>;
   createdAt: Generated<Timestamp>;
   email: string;
+  firstName: Generated<string>;
+  gender: Generated<string>;
   image: string | null;
+  lastName: Generated<string>;
+  location: Generated<string>;
   name: Generated<string>;
+  phoneNumber: Generated<string>;
+  /**
+   * JSON object for onboarding and display preferences (e.g. onboarding_role, onboarding_completed).
+   */
+  preferences: Generated<Json>;
+  socialLinks: Generated<Json>;
   updatedAt: Generated<Timestamp>;
   userId: string;
+  /**
+   * Public handle; null until set from profile settings.
+   */
+  username: string | null;
+  website: Generated<string>;
 }
 
 export interface DB {

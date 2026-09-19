@@ -6,23 +6,34 @@ interface PlunkSendResponse {
   message?: string;
 }
 
+interface OutboundEmail {
+  readonly to: string;
+  readonly subject: string;
+  readonly html: string;
+  /** Secret-free fragment included in the development log line. */
+  readonly logHint: string;
+}
+
 /**
  * Sends transactional emails via Plunk (REST). In development/test without a
  * PLUNK_API_KEY the email is logged instead, so local flows still complete.
  * In production a missing key is a hard failure (validated at startup).
  */
 export interface EmailSender {
-  sendVerificationEmail(to: string, url: string): Promise<void>;
+  sendVerificationCode(to: string, code: string): Promise<void>;
   sendPasswordResetEmail(to: string, url: string): Promise<void>;
 }
 
 export class PlunkEmailSender implements EmailSender {
-  async sendVerificationEmail(to: string, url: string): Promise<void> {
+  async sendVerificationCode(to: string, code: string): Promise<void> {
     await this.send({
       to,
-      subject: "Verify your email address",
-      link: url,
-      html: `<p>Verify your email to activate your Surge account:</p><p><a href="${url}">${url}</a></p>`,
+      subject: "Your Surge verification code",
+      html:
+        `<p>Enter this code to verify your email address:</p>` +
+        `<p style="font-size:24px;font-weight:700;letter-spacing:6px">${code}</p>` +
+        `<p>This code expires in 10 minutes. If you did not request it, ignore this email.</p>`,
+      logHint: `code=${code}`,
     });
   }
 
@@ -30,17 +41,12 @@ export class PlunkEmailSender implements EmailSender {
     await this.send({
       to,
       subject: "Reset your password",
-      link: url,
       html: `<p>Reset your Surge account password:</p><p><a href="${url}">${url}</a></p>`,
+      logHint: `link=${url}`,
     });
   }
 
-  private async send(message: {
-    to: string;
-    subject: string;
-    link: string;
-    html: string;
-  }): Promise<void> {
+  private async send(email: OutboundEmail): Promise<void> {
     const environment = loadEnvironment();
     const apiKey = environment.PLUNK_API_KEY;
 
@@ -51,7 +57,7 @@ export class PlunkEmailSender implements EmailSender {
         );
       }
       console.log(
-        `[email:dev] to=${message.to} subject="${message.subject}" link=${message.link}`,
+        `[email:dev] to=${email.to} subject="${email.subject}" ${email.logHint}`,
       );
       return;
     }
@@ -63,9 +69,9 @@ export class PlunkEmailSender implements EmailSender {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        to: message.to,
-        subject: message.subject,
-        body: message.html,
+        to: email.to,
+        subject: email.subject,
+        body: email.html,
         ...(environment.PLUNK_FROM_EMAIL
           ? { from: environment.PLUNK_FROM_EMAIL }
           : {}),

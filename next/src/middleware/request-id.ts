@@ -3,14 +3,6 @@ import type { Request, Response, NextFunction } from "express";
 
 export const REQUEST_ID_HEADER = "x-request-id";
 
-declare global {
-  namespace Express {
-    interface Request {
-      requestId: string;
-    }
-  }
-}
-
 export function attachRequestId(
   request: Request,
   response: Response,

@@ -11,14 +11,6 @@ export interface AuthContext {
   readonly emailVerified: boolean;
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      auth: AuthContext | null;
-    }
-  }
-}
-
 interface RawSession {
   session: { id: string };
   user: { id: string; email: string; emailVerified: boolean };
@@ -87,4 +79,15 @@ export async function requireAuth(
   } catch (error) {
     next(error);
   }
+}
+
+/**
+ * Reads the authenticated context that `requireAuth` guarantees, narrowing the
+ * nullable `request.auth` for downstream handlers.
+ */
+export function requireAuthContext(request: Request): AuthContext {
+  if (!request.auth) {
+    throw authRequiredError();
+  }
+  return request.auth;
 }

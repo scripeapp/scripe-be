@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { DatabaseError } from "../db/errors.js";
+import { ApiResponse } from "../shared/api-response.js";
 import { AppError } from "../shared/errors.js";
 
 export function notFoundHandler(request: Request, _response: Response): void {
@@ -16,19 +17,23 @@ export function errorHandler(
   const context = { requestId: request.requestId, method: request.method, path: request.path };
 
   if (error instanceof AppError) {
-    response.status(error.statusCode).json(error.toPayload());
+    ApiResponse.error(response, error.toPayload(), error.statusCode);
     return;
   }
 
   if (error instanceof ZodError) {
-    response.status(400).json({
-      code: "VALIDATION_ERROR",
-      message: "Validation failed",
-      details: error.issues.map((issue) => ({
-        path: issue.path.join("."),
-        message: issue.message,
-      })),
-    });
+    ApiResponse.error(
+      response,
+      {
+        code: "VALIDATION_ERROR",
+        message: "Validation failed",
+        details: error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+      400,
+    );
     return;
   }
 
@@ -42,13 +47,17 @@ export function errorHandler(
       : isInvalidInput
         ? "VALIDATION_ERROR"
         : "SERVICE_UNAVAILABLE";
-    response.status(status).json({ code, message: error.message });
+    ApiResponse.error(response, { code, message: error.message }, status);
     return;
   }
 
   console.error("[error] unhandled", context, error);
-  response.status(500).json({
-    code: "INTERNAL",
-    message: "An unexpected error occurred",
-  });
+  ApiResponse.error(
+    response,
+    {
+      code: "INTERNAL",
+      message: "An unexpected error occurred",
+    },
+    500,
+  );
 }

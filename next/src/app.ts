@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { initializeAuthContext } from "./middleware/auth.js";
 import { attachPrincipal } from "./middleware/principal.js";
 import { attachRequestId } from "./middleware/request-id.js";
+import { createProfilesRouter } from "./domains/profiles/profiles.routes.js";
 import { createHealthRouter } from "./routes/health.js";
 
 export function createApp(): Express {
@@ -25,6 +26,7 @@ export function createApp(): Express {
   app.use(initializeAuthContext);
 
   app.use(createHealthRouter());
+  app.use(createProfilesRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);

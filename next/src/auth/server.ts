@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
+import { emailOTP } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { getDatabase } from "../db/database.js";
 import { loadEnvironment } from "../shared/environment.js";
 import { emailSender } from "../shared/email.js";
+
+const EMAIL_VERIFICATION_CODE_LENGTH = 6;
+const EMAIL_VERIFICATION_CODE_TTL_SECONDS = 600;
+const EMAIL_VERIFICATION_MAX_ATTEMPTS = 5;
+const EMAIL_VERIFICATION_RATE_LIMIT = { window: 300, max: 10 } as const;
 
 let authInstance: ReturnType<typeof createAuth> | undefined;
 
@@ -37,12 +43,26 @@ function createAuth() {
       },
     },
     emailVerification: {
-      sendVerificationEmail: async ({ user, url }) => {
-        await emailSender.sendVerificationEmail(user.email, url);
-      },
+      // Verify by an emailed code, not a link; the OTP plugin owns the email
+      // and auto-signs the user in once the code is accepted.
+      autoSignInAfterVerification: true,
     },
     socialProviders,
-    plugins: [passkey()],
+    plugins: [
+      passkey(),
+      emailOTP({
+        otpLength: EMAIL_VERIFICATION_CODE_LENGTH,
+        expiresIn: EMAIL_VERIFICATION_CODE_TTL_SECONDS,
+        allowedAttempts: EMAIL_VERIFICATION_MAX_ATTEMPTS,
+        storeOTP: "hashed",
+        overrideDefaultEmailVerification: true,
+        rateLimit: EMAIL_VERIFICATION_RATE_LIMIT,
+        sendVerificationOTP: async ({ email, otp, type }) => {
+          if (type !== "email-verification") return;
+          await emailSender.sendVerificationCode(email, otp);
+        },
+      }),
+    ],
     trustedOrigins: [
       baseUrl.origin,
       environment.AUTH_TRUSTED_ORIGINS,
