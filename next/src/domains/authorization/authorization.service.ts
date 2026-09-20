@@ -12,6 +12,7 @@ import {
   notFoundError,
   validationError,
 } from "../../shared/errors.js";
+import * as auditRepository from "../audit/audit.repository.js";
 import * as businessesRepository from "../businesses/businesses.repository.js";
 import * as repository from "./authorization.repository.js";
 import type {
@@ -89,6 +90,15 @@ export class AuthorizationService {
       if (resolved.some((role) => role.code === "owner")) throw validationError("The owner role cannot be assigned");
 
       await repository.setMembershipRoles(context, operation.businessId, membershipId, uniqueRoleIds);
+      await auditRepository.log(context, {
+        businessId: operation.businessId,
+        actorUserId: operation.userId,
+        action: "team.member_role_changed",
+        targetType: "membership",
+        targetId: membershipId,
+        metadata: { oldRoleCodes: target.roles.map((role) => role.code), newRoleIds: uniqueRoleIds },
+        requestId: operation.requestId,
+      });
       const updated = await repository.findMembership(context, operation.businessId, membershipId);
       return toMembership(updated!);
     });
@@ -101,6 +111,15 @@ export class AuthorizationService {
       if (!target) throw notFoundError("Membership not found");
       if (target.roles.some((role) => role.code === "owner")) throw forbiddenError("Cannot remove the owner");
       await repository.endMembership(context, operation.businessId, membershipId);
+      await auditRepository.log(context, {
+        businessId: operation.businessId,
+        actorUserId: operation.userId,
+        action: "team.member_removed",
+        targetType: "membership",
+        targetId: membershipId,
+        metadata: { removedUserId: target.userId },
+        requestId: operation.requestId,
+      });
     });
   }
 
@@ -151,6 +170,16 @@ export class AuthorizationService {
         const acceptUrl = `${frontendUrl}/accept-invite?token=${token}`;
         await emailSender.sendBusinessInvitation(email, { businessName, inviterName, acceptUrl });
 
+        await auditRepository.log(context, {
+          businessId: operation.businessId,
+          actorUserId: operation.userId,
+          action: "team.member_invited",
+          targetType: "invitation",
+          targetId: invitation.id,
+          metadata: { email, roleId },
+          requestId: operation.requestId,
+        });
+
         return { email, success: true, invitationId: invitation.id };
       });
     } catch (error) {
@@ -167,6 +196,14 @@ export class AuthorizationService {
       const tokenHash = createHash("sha256").update(token).digest("hex");
       const accepted = await repository.acceptInvitation(context, tokenHash);
       if (!accepted) throw notFoundError("Invalid or expired invitation");
+      await auditRepository.log(context, {
+        businessId: accepted.businessId,
+        actorUserId: operation.userId,
+        action: "team.member_joined",
+        targetType: "membership",
+        targetId: accepted.membershipId,
+        requestId: operation.requestId,
+      });
       return { businessId: accepted.businessId };
     });
   }
@@ -193,6 +230,14 @@ export class AuthorizationService {
       if (!(await repository.revokeInvitation(context, operation.businessId, invitationId))) {
         throw notFoundError("Pending invitation not found");
       }
+      await auditRepository.log(context, {
+        businessId: operation.businessId,
+        actorUserId: operation.userId,
+        action: "team.invitation_revoked",
+        targetType: "invitation",
+        targetId: invitationId,
+        requestId: operation.requestId,
+      });
     });
   }
 
@@ -223,6 +268,16 @@ export class AuthorizationService {
       const role = await repository.createRole(context, operation.businessId, code, input.name);
       if (resolvedPermissionIds.length > 0) await repository.setRolePermissions(context, role.id, resolvedPermissionIds);
 
+      await auditRepository.log(context, {
+        businessId: operation.businessId,
+        actorUserId: operation.userId,
+        action: "team.role_created",
+        targetType: "role",
+        targetId: role.id,
+        metadata: { name: input.name },
+        requestId: operation.requestId,
+      });
+
       const created = await repository.findRole(context, operation.businessId, role.id);
       return toRole(created!);
     });
@@ -242,6 +297,15 @@ export class AuthorizationService {
         await repository.setRolePermissions(context, roleId, resolvedPermissionIds);
       }
 
+      await auditRepository.log(context, {
+        businessId: operation.businessId,
+        actorUserId: operation.userId,
+        action: "team.role_updated",
+        targetType: "role",
+        targetId: roleId,
+        requestId: operation.requestId,
+      });
+
       const updated = await repository.findRole(context, operation.businessId, roleId);
       return toRole(updated!);
     });
@@ -254,6 +318,15 @@ export class AuthorizationService {
       if (!existing) throw notFoundError("Role not found");
       if (await repository.roleInUse(context, roleId)) throw conflictError("Cannot delete a role that is assigned to members");
       await repository.deleteRole(context, roleId);
+      await auditRepository.log(context, {
+        businessId: operation.businessId,
+        actorUserId: operation.userId,
+        action: "team.role_deleted",
+        targetType: "role",
+        targetId: roleId,
+        metadata: { name: existing.name },
+        requestId: operation.requestId,
+      });
     });
   }
 

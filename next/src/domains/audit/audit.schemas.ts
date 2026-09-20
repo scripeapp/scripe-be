@@ -1,5 +1,8 @@
-/**
- * Zod request and response contracts for the immutable privileged and business action
- * audit domain belong here.
- */
-export {};
+import { z } from "zod";
+
+export const businessParamsSchema = z.object({ businessId: z.string().uuid() });
+
+export const listQuerySchema = z.object({
+  action: z.string().trim().min(1).max(100).optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+});
