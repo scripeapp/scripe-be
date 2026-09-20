@@ -15,6 +15,7 @@ import { createProductsRouter } from "./domains/products/products.routes.js";
 import { createPricingRouter } from "./domains/pricing/pricing.routes.js";
 import { createInventoryRouter } from "./domains/inventory/inventory.routes.js";
 import { createCartsRouter } from "./domains/carts/carts.routes.js";
+import { createPromotionsRouter } from "./domains/promotions/promotions.routes.js";
 import { createOrdersRouter } from "./domains/orders/orders.routes.js";
 import { createProcurementRouter } from "./domains/procurement/procurement.routes.js";
 import { createPayablesRouter } from "./domains/payables/payables.routes.js";
@@ -49,6 +50,7 @@ export function createApp(): Express {
   app.use(createPricingRouter());
   app.use(createInventoryRouter());
   app.use(createCartsRouter());
+  app.use(createPromotionsRouter());
   app.use(createOrdersRouter());
   app.use(createProcurementRouter());
   app.use(createPayablesRouter());

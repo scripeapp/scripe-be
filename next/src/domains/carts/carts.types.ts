@@ -7,4 +7,4 @@ export interface CartOperation { readonly userId: string; readonly businessId: s
 export interface CreateCartInput { readonly storeId: string; readonly channelId: string; readonly customerPartyId?: string | null; readonly currency?: string; }
 export interface AddCartLineInput { readonly productVariantId: string; readonly quantity: number; readonly selectedModifiers?: Record<string, unknown>; readonly assetCode?: string; }
 export interface UpdateCartLineInput { readonly quantity: number; readonly selectedModifiers?: Record<string, unknown>; }
-export interface CheckoutInput { readonly locationId?: string | null; readonly idempotencyKey: string; }
+export interface CheckoutInput { readonly locationId?: string | null; readonly discountCode?: string | null; readonly idempotencyKey: string; }
