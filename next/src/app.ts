@@ -22,6 +22,7 @@ import { createPayablesRouter } from "./domains/payables/payables.routes.js";
 import { createPaymentsRouter } from "./domains/payments/payments.routes.js";
 import { createFulfillmentRouter } from "./domains/fulfillment/fulfillment.routes.js";
 import { createReceiptsRouter } from "./domains/receipts/receipts.routes.js";
+import { createReturnsRouter } from "./domains/returns/returns.routes.js";
 import { createHealthRouter } from "./routes/health.js";
 
 export function createApp(): Express {
@@ -57,6 +58,7 @@ export function createApp(): Express {
   app.use(createPaymentsRouter());
   app.use(createFulfillmentRouter());
   app.use(createReceiptsRouter());
+  app.use(createReturnsRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);
