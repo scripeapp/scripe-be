@@ -1,5 +1,11 @@
-/**
- * Zod request and response contracts for the fiscal receipt, invoice, and credit note
- * domain belong here.
- */
-export {};
+import { z } from "zod";
+
+export const businessParamsSchema = z.object({ businessId: z.string().uuid() });
+
+export const orderParamsSchema = businessParamsSchema.extend({
+  orderId: z.string().uuid(),
+});
+
+export const documentParamsSchema = businessParamsSchema.extend({
+  documentId: z.string().uuid(),
+});

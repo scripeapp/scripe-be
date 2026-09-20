@@ -1,6 +1,18 @@
-/**
- * Express route composition for the fiscal receipt, invoice, and credit note domain
- * belongs here. Routes are registered only after the capability and contract are
- * approved.
- */
-export {};
+import { Router } from "express";
+import { getDatabase } from "../../db/database.js";
+import { requireAuth } from "../../middleware/auth.js";
+import { ReceiptsController } from "./receipts.controller.js";
+import { ReceiptsService } from "./receipts.service.js";
+
+export function createReceiptsRouter(): Router {
+  const router = Router();
+  const controller = new ReceiptsController(new ReceiptsService(getDatabase()));
+  const base = "/api/businesses/:businessId/receipts";
+
+  router.use(base, requireAuth);
+  router.get(base, controller.list);
+  router.get(`${base}/:documentId`, controller.get);
+  router.get("/api/businesses/:businessId/orders/:orderId/receipt", requireAuth, controller.getForOrder);
+
+  return router;
+}
