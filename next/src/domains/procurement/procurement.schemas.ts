@@ -1,5 +1,4 @@
-/**
- * Zod request and response contracts for the supplier sourcing, purchase order, and
- * goods receipt domain belong here.
- */
-export {};
+import { z } from "zod"; const uuid=z.string().uuid();
+export const businessParamsSchema=z.object({businessId:uuid});
+export const purchaseOrderSchema=z.object({supplierAccountId:uuid,storeId:uuid,orderNumber:z.string().trim().min(1).max(80),expectedAt:z.string().datetime().nullable().optional(),notes:z.string().max(2000).optional(),lines:z.array(z.object({inventoryItemId:uuid,quantityOrdered:z.number().positive(),unitCostMinor:z.number().int().nonnegative()})).min(1)});
+export const receiptSchema=z.object({purchaseOrderId:uuid,inventoryLocationId:uuid,idempotencyKey:z.string().trim().min(1).max(160),lines:z.array(z.object({purchaseOrderLineId:uuid,inventoryItemId:uuid,quantityReceived:z.number().positive(),quantityRejected:z.number().nonnegative().optional(),unitCostMinor:z.number().int().nonnegative()})).min(1)});

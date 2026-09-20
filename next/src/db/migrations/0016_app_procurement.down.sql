@@ -1,0 +1,1 @@
+drop table if exists app.goods_receipt_lines cascade; drop table if exists app.goods_receipts cascade; drop table if exists app.purchase_order_lines cascade; drop table if exists app.purchase_orders cascade; drop table if exists app.supplier_products cascade;

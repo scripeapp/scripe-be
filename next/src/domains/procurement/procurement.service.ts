@@ -1,5 +1,2 @@
-/**
- * Business workflows and transaction boundaries for the supplier sourcing, purchase
- * order, and goods receipt domain belong here.
- */
-export {};
+import type { Database } from "../../db/database.types.js"; import { withDatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import * as repo from "./procurement.repository.js"; import type { GoodsReceiptInput, ProcurementOperation, PurchaseOrderInput } from "./procurement.types.js";
+export class ProcurementService{constructor(private readonly database:Database){} async createOrder(o:ProcurementOperation,i:PurchaseOrderInput){return this.run(o,async c=>{if(!await repo.hasPermission(c,"procurement.manage"))throw new Error("Missing permission: procurement.manage");return repo.createPurchaseOrder(c,o.businessId,o.userId,i);});} async receive(o:ProcurementOperation,i:GoodsReceiptInput){return this.run(o,async c=>{if(!await repo.hasPermission(c,"procurement.manage"))throw new Error("Missing permission: procurement.manage");const r=await repo.createReceipt(c,o.businessId,o.userId,o.requestId,i);if(!r)throw new Error("Receipt idempotency key already used");return r;});} private run<T>(o:ProcurementOperation,w:Parameters<typeof withDatabaseContext<T>>[2]):Promise<T>{return withDatabaseContext(this.database,withIdentity(o.requestId,o.userId,o.businessId),w);}}

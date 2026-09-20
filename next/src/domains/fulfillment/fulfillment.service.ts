@@ -1,5 +1,1 @@
-/**
- * Business workflows and transaction boundaries for the order allocation and
- * fulfillment domain belong here.
- */
-export {};
+import type{Database}from'../../db/database.types.js';import{withDatabaseContext}from'../../db/database-context.js';import{withIdentity}from'../../db/principal.js';import*as repo from'./fulfillment.repository.js';import type{CreateFulfillmentInput,FulfillmentOperation}from'./fulfillment.types.js';export class FulfillmentService{constructor(private readonly db:Database){}async create(o:FulfillmentOperation,i:CreateFulfillmentInput){return withDatabaseContext(this.db,withIdentity(o.requestId,o.userId,o.businessId),async c=>{if(!await repo.hasPermission(c,'fulfillment.manage'))throw new Error('Missing permission: fulfillment.manage');return repo.create(c,o.businessId,o.userId,o.requestId,i)})}}

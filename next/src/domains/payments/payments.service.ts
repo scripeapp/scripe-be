@@ -1,5 +1,2 @@
-/**
- * Business workflows and transaction boundaries for the payment gateway, payment,
- * refund, dispute, and settlement domain belong here.
- */
-export {};
+import type { Database } from "../../db/database.types.js"; import { withDatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import * as repo from "./payments.repository.js"; import type { PaymentOperation, RecordPaymentInput } from "./payments.types.js";
+export class PaymentsService{constructor(private readonly database:Database){} async record(o:PaymentOperation,i:RecordPaymentInput){return withDatabaseContext(this.database,withIdentity(o.requestId,o.userId,o.businessId),async c=>{if(!await repo.hasPermission(c,'payment.manage'))throw new Error('Missing permission: payment.manage');return repo.record(c,o.businessId,o.userId,i);});}}

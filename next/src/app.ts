@@ -7,6 +7,18 @@ import { initializeAuthContext } from "./middleware/auth.js";
 import { attachPrincipal } from "./middleware/principal.js";
 import { attachRequestId } from "./middleware/request-id.js";
 import { createProfilesRouter } from "./domains/profiles/profiles.routes.js";
+import { createBusinessesRouter } from "./domains/businesses/businesses.routes.js";
+import { createStoresRouter } from "./domains/stores/stores.routes.js";
+import { createPartiesRouter } from "./domains/parties/parties.routes.js";
+import { createProductsRouter } from "./domains/products/products.routes.js";
+import { createPricingRouter } from "./domains/pricing/pricing.routes.js";
+import { createInventoryRouter } from "./domains/inventory/inventory.routes.js";
+import { createCartsRouter } from "./domains/carts/carts.routes.js";
+import { createOrdersRouter } from "./domains/orders/orders.routes.js";
+import { createProcurementRouter } from "./domains/procurement/procurement.routes.js";
+import { createPayablesRouter } from "./domains/payables/payables.routes.js";
+import { createPaymentsRouter } from "./domains/payments/payments.routes.js";
+import { createFulfillmentRouter } from "./domains/fulfillment/fulfillment.routes.js";
 import { createHealthRouter } from "./routes/health.js";
 
 export function createApp(): Express {
@@ -27,6 +39,18 @@ export function createApp(): Express {
 
   app.use(createHealthRouter());
   app.use(createProfilesRouter());
+  app.use(createBusinessesRouter());
+  app.use(createStoresRouter());
+  app.use(createPartiesRouter());
+  app.use(createProductsRouter());
+  app.use(createPricingRouter());
+  app.use(createInventoryRouter());
+  app.use(createCartsRouter());
+  app.use(createOrdersRouter());
+  app.use(createProcurementRouter());
+  app.use(createPayablesRouter());
+  app.use(createPaymentsRouter());
+  app.use(createFulfillmentRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);

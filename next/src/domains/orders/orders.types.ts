@@ -1,5 +1,6 @@
-/**
- * API and domain types for the order and immutable order line domain belong here.
- * Database row types remain generated and separate.
- */
-export {};
+export type OrderStatus = "placed" | "cancelled" | "fulfilled" | "refunded";
+export interface OrderRow { readonly id: string; readonly businessId: string; readonly orderNumber: string; readonly storeId: string; readonly channelId: string; readonly locationId: string | null; readonly customerPartyId: string | null; readonly cartId: string | null; readonly currency: string; readonly status: OrderStatus; readonly paymentStatus: "unpaid" | "partially_paid" | "paid" | "refunded"; readonly fulfillmentStatus: "unfulfilled" | "partial" | "fulfilled"; readonly subtotalMinor: string; readonly discountMinor: string; readonly taxMinor: string; readonly totalMinor: string; readonly createdBy: string | null; readonly createdAt: Date; readonly updatedAt: Date; readonly cancelledAt: Date | null; }
+export interface OrderLineRow { readonly id: string; readonly businessId: string; readonly orderId: string; readonly productVariantId: string; readonly sku: string | null; readonly description: string; readonly quantity: number; readonly unitPriceMinor: string; readonly discountMinor: string; readonly taxMinor: string; readonly lineTotalMinor: string; readonly assetCode: string; readonly selectedModifiers: Record<string, unknown>; readonly createdAt: Date; }
+export interface Order extends Omit<OrderRow, "createdAt" | "updatedAt" | "cancelledAt"> { readonly createdAt: string; readonly updatedAt: string; readonly cancelledAt: string | null; readonly lines: OrderLine[]; }
+export interface OrderLine extends Omit<OrderLineRow, "createdAt"> { readonly createdAt: string; }
+export interface OrderOperation { readonly userId: string; readonly businessId: string; readonly requestId: string; }

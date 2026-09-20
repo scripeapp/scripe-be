@@ -1,5 +1,8 @@
-/**
- * API and domain types for the product price, location availability, lead time, and tax
- * domain belong here. Database row types remain generated and separate.
- */
-export {};
+export type PricingStatus = "active" | "archived";
+export interface PriceRow { readonly id: string; readonly businessId: string; readonly productVariantId: string; readonly locationId: string | null; readonly assetCode: string; readonly amountMinor: string; readonly compareAtMinor: string | null; readonly status: PricingStatus; readonly effectiveFrom: Date; readonly effectiveTo: Date | null; readonly createdBy: string; readonly createdAt: Date; readonly updatedAt: Date; readonly archivedAt: Date | null; }
+export interface Price extends Omit<PriceRow, "effectiveFrom" | "effectiveTo" | "createdAt" | "updatedAt" | "archivedAt"> { readonly effectiveFrom: string; readonly effectiveTo: string | null; readonly createdAt: string; readonly updatedAt: string; readonly archivedAt: string | null; }
+export interface PriceInput { readonly productVariantId: string; readonly locationId?: string | null; readonly assetCode: string; readonly amountMinor: number; readonly compareAtMinor?: number | null; readonly effectiveFrom?: string; readonly effectiveTo?: string | null; }
+export interface LocationSetting { readonly id: string; readonly businessId: string; readonly productId: string; readonly locationId: string; readonly isAvailable: boolean; readonly leadTimeMinutes: number | null; readonly createdAt: string; readonly updatedAt: string; }
+export interface LocationSettingInput { readonly productId: string; readonly locationId: string; readonly isAvailable?: boolean; readonly leadTimeMinutes?: number | null; }
+export interface TaxRate { readonly id: string; readonly businessId: string; readonly code: string; readonly name: string; readonly rateBps: number; readonly isInclusive: boolean; readonly status: PricingStatus; readonly effectiveFrom: string; readonly effectiveTo: string | null; }
+export interface PricingOperation { readonly userId: string; readonly businessId: string; readonly requestId: string; }

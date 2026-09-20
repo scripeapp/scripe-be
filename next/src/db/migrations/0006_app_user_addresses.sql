@@ -32,7 +32,7 @@ create table app.user_addresses (
   "postalCode"    text,
   "country"       text        not null default 'Nigeria',
   "createdAt"     timestamptz not null default now(),
-  "updatedAt"     timestptz   not null default now()
+  "updatedAt"     timestamptz   not null default now()
 );
 
 -- Exactly one default per user, enforced declaratively (DRI) instead of the

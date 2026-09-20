@@ -1,5 +1,10 @@
-/**
- * Zod request and response contracts for the stock custody, movement, reservation,
- * count, transfer, cost, waste, and reorder domain belong here.
- */
-export {};
+import { z } from "zod";
+const uuid = z.string().uuid();
+export const businessParamsSchema = z.object({ businessId: uuid });
+export const itemParamsSchema = z.object({ businessId: uuid, itemId: uuid });
+export const reservationParamsSchema = z.object({ businessId: uuid, reservationId: uuid });
+export const movementSchema = z.object({ inventoryItemId: uuid, inventoryLocationId: uuid, quantity: z.number().finite().refine((v) => v !== 0), type: z.enum(["receipt", "sale", "return", "adjustment", "transfer_in", "transfer_out", "waste", "count", "reservation", "release"]), reason: z.string().trim().min(1).max(500), idempotencyKey: z.string().trim().min(1).max(160), unitCostMinor: z.number().int().min(0).nullable().optional() });
+export const reservationSchema = z.object({ inventoryItemId: uuid, inventoryLocationId: uuid, quantity: z.number().finite().positive(), referenceType: z.string().trim().min(1).max(40), referenceId: z.string().trim().min(1).max(160), expiresAt: z.string().datetime().nullable().optional() });
+export const balanceQuerySchema = z.object({ businessId: uuid, inventoryItemId: uuid.optional(), inventoryLocationId: uuid.optional() });
+export const inventoryItemSchema = z.object({ name: z.string().trim().min(1).max(200), sku: z.string().trim().max(120).nullable().optional(), variantId: uuid.nullable().optional(), trackingMode: z.enum(["quantity", "lot", "serial"]).optional() });
+export const inventoryLocationSchema = z.object({ locationId: uuid, name: z.string().trim().min(1).max(120) });

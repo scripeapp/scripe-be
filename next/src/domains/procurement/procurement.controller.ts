@@ -1,6 +1,2 @@
-/**
- * HTTP adaptation for the supplier sourcing, purchase order, and goods receipt domain
- * belongs here. Controllers validate transport concerns and delegate workflows to
- * services.
- */
-export {};
+import type {NextFunction,Request,Response} from "express";import {requireAuthContext} from "../../middleware/auth.js";import {ApiResponse} from "../../shared/api-response.js";import {businessParamsSchema,purchaseOrderSchema,receiptSchema} from "./procurement.schemas.js";import type {ProcurementService} from "./procurement.service.js";
+export class ProcurementController{constructor(private readonly service:ProcurementService){} readonly createOrder=this.handle(async r=>{const p=businessParamsSchema.parse(r.params);return{purchaseOrder:await this.service.createOrder(this.op(r,p.businessId),purchaseOrderSchema.parse(r.body))}},201);readonly receive=this.handle(async r=>{const p=businessParamsSchema.parse(r.params);return{receipt:await this.service.receive(this.op(r,p.businessId),receiptSchema.parse(r.body))}},201);private op(r:Request,businessId:string){return{userId:requireAuthContext(r).userId,businessId,requestId:r.requestId}}private handle<T>(w:(r:Request)=>Promise<T>,status=200){return async(r:Request,res:Response,next:NextFunction)=>{try{ApiResponse.success(res,await w(r),status)}catch(e){next(e)}}}}

@@ -1,0 +1,1 @@
+-- The previous function remains valid if this migration is rolled back.

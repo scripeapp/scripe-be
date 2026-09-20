@@ -1,6 +1,12 @@
-/**
- * API and domain types for the stock custody, movement, reservation, count, transfer,
- * cost, waste, and reorder domain belong here. Database row types remain generated and
- * separate.
- */
-export {};
+export type InventoryStatus = "active" | "archived";
+export type StockTransactionType = "receipt" | "sale" | "return" | "adjustment" | "transfer_in" | "transfer_out" | "waste" | "count" | "reservation" | "release";
+export interface InventoryItem { readonly id: string; readonly businessId: string; readonly variantId: string | null; readonly name: string; readonly sku: string | null; readonly trackingMode: "quantity" | "lot" | "serial"; readonly status: InventoryStatus; readonly createdAt: string; readonly updatedAt: string; }
+export interface InventoryLocation { readonly id: string; readonly businessId: string; readonly locationId: string; readonly name: string; readonly status: InventoryStatus; readonly createdAt: string; }
+export interface StockBalance { readonly id: string; readonly businessId: string; readonly inventoryItemId: string; readonly inventoryLocationId: string; readonly onHand: string; readonly reserved: string; readonly available: string; readonly updatedAt: string; }
+export interface StockMovement { readonly id: string; readonly transactionId: string; readonly inventoryItemId: string; readonly inventoryLocationId: string; readonly quantity: string; readonly unitCostMinor: string | null; readonly createdAt: string; }
+export interface Reservation { readonly id: string; readonly businessId: string; readonly inventoryItemId: string; readonly inventoryLocationId: string; readonly quantity: string; readonly referenceType: string; readonly referenceId: string; readonly status: "active" | "released" | "expired"; readonly expiresAt: string | null; readonly createdAt: string; readonly releasedAt: string | null; }
+export interface InventoryOperation { readonly userId: string; readonly businessId: string; readonly requestId: string; }
+export interface MovementInput { readonly inventoryItemId: string; readonly inventoryLocationId: string; readonly quantity: number; readonly type: StockTransactionType; readonly reason: string; readonly idempotencyKey: string; readonly unitCostMinor?: number | null; }
+export interface ReservationInput { readonly inventoryItemId: string; readonly inventoryLocationId: string; readonly quantity: number; readonly referenceType: string; readonly referenceId: string; readonly expiresAt?: string | null; }
+export interface InventoryItemInput { readonly name: string; readonly sku?: string | null; readonly variantId?: string | null; readonly trackingMode?: "quantity" | "lot" | "serial"; }
+export interface InventoryLocationInput { readonly locationId: string; readonly name: string; }

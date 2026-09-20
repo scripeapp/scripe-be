@@ -1,0 +1,10 @@
+drop table if exists app.product_modifier_groups cascade;
+drop table if exists app.modifier_options cascade;
+drop table if exists app.modifier_groups cascade;
+drop table if exists app.product_barcodes cascade;
+drop table if exists app.unit_conversions cascade;
+drop table if exists app.units cascade;
+drop table if exists app.product_categories cascade;
+drop table if exists app.product_variants cascade;
+drop table if exists app.products cascade;
+drop table if exists app.categories cascade;

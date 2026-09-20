@@ -1,5 +1,2 @@
-/**
- * API and domain types for the payment gateway, payment, refund, dispute, and
- * settlement domain belong here. Database row types remain generated and separate.
- */
-export {};
+export interface PaymentOperation { readonly userId: string; readonly businessId: string; readonly requestId: string; }
+export interface RecordPaymentInput { readonly orderId: string; readonly method: "cash"|"card"|"bank_transfer"|"online"; readonly assetCode: string; readonly amountMinor: number; readonly status?: "pending"|"authorized"|"captured"|"failed"|"cancelled"; readonly externalReference?: string | null; readonly idempotencyKey: string; }

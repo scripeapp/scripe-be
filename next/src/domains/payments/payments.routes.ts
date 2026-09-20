@@ -1,6 +1,1 @@
-/**
- * Express route composition for the payment gateway, payment, refund, dispute, and
- * settlement domain belongs here. Routes are registered only after the capability and
- * contract are approved.
- */
-export {};
+import {Router} from "express";import{getDatabase}from"../../db/database.js";import{requireAuth}from"../../middleware/auth.js";import{PaymentsController}from"./payments.controller.js";import{PaymentsService}from"./payments.service.js";export function createPaymentsRouter(){const r=Router();const c=new PaymentsController(new PaymentsService(getDatabase()));const b='/api/businesses/:businessId/payments';r.use(b,requireAuth);r.post(b,c.record);return r;}

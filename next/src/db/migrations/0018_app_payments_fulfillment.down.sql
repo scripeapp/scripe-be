@@ -1,0 +1,1 @@
+drop table if exists app.fulfillment_lines; drop table if exists app.fulfillments; drop table if exists app.payment_allocations; drop table if exists app.payment_attempts; drop table if exists app.payments;

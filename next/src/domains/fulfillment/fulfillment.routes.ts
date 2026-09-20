@@ -1,5 +1,1 @@
-/**
- * Express route composition for the order allocation and fulfillment domain belongs
- * here. Routes are registered only after the capability and contract are approved.
- */
-export {};
+import{Router}from'express';import{getDatabase}from'../../db/database.js';import{requireAuth}from'../../middleware/auth.js';import{FulfillmentController}from'./fulfillment.controller.js';import{FulfillmentService}from'./fulfillment.service.js';export function createFulfillmentRouter(){const r=Router();const c=new FulfillmentController(new FulfillmentService(getDatabase()));const b='/api/businesses/:businessId/fulfillment';r.use(b,requireAuth);r.post(b,c.create);return r;}

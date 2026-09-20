@@ -9,6 +9,8 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
+
 export type Json = JsonValue;
 
 export type JsonArray = JsonValue[];
@@ -21,7 +23,763 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
+export type Numeric = ColumnType<string, number | string, number | string>;
+
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
+
+export interface BillLines {
+  accountCategory: string;
+  billId: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  description: string;
+  goodsReceiptId: string | null;
+  id: Generated<string>;
+  lineTotalMinor: Int8;
+  purchaseOrderId: string | null;
+  purchaseOrderLineId: string | null;
+  quantity: Generated<Numeric>;
+  taxMinor: Generated<Int8>;
+  unitAmountMinor: Int8;
+}
+
+export interface BillPaymentAllocations {
+  amountMinor: Int8;
+  assetCode: string;
+  billId: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  paidAt: Generated<Timestamp>;
+  paymentReference: string;
+}
+
+export interface Bills {
+  amountPaidMinor: Generated<Int8>;
+  assetCode: Generated<string>;
+  billNumber: string;
+  billType: Generated<string>;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  dueAt: Timestamp | null;
+  id: Generated<string>;
+  issuedAt: Timestamp | null;
+  notes: Generated<string>;
+  status: Generated<string>;
+  subtotalMinor: Generated<Int8>;
+  supplierAccountId: string | null;
+  taxMinor: Generated<Int8>;
+  totalMinor: Int8;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Businesses {
+  archivedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  defaultCurrency: Generated<string>;
+  displayName: string;
+  id: Generated<string>;
+  primaryVertical: string | null;
+  status: Generated<string>;
+  timezone: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface BusinessMemberships {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  endedAt: Timestamp | null;
+  id: Generated<string>;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+}
+
+export interface CartLines {
+  assetCode: string;
+  businessId: string;
+  cartId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  productVariantId: string;
+  quantity: number;
+  quotedUnitMinor: Int8 | null;
+  selectedModifiers: Generated<Json>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Carts {
+  businessId: string;
+  channelId: string;
+  convertedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  currency: string;
+  customerPartyId: string | null;
+  id: Generated<string>;
+  status: Generated<string>;
+  storeId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface CashMovements {
+  actorMembershipId: string;
+  amountMinor: Int8;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  idempotencyKey: string;
+  locationId: string;
+  occurredAt: Generated<Timestamp>;
+  reason: string;
+  registerId: string;
+  requestId: string;
+  shiftId: string;
+  storeId: string;
+  type: string;
+}
+
+export interface Categories {
+  archivedAt: Timestamp | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  description: Generated<string>;
+  id: Generated<string>;
+  name: string;
+  parentId: string | null;
+  slug: string;
+  sortOrder: Generated<number>;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface CheckoutSessions {
+  businessId: string;
+  cartId: string;
+  convertedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  idempotencyKey: string;
+  orderId: string | null;
+  status: Generated<string>;
+}
+
+export interface CustomerAccounts {
+  acquisitionChannel: string | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  lifecycleState: Generated<string>;
+  partyId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface FulfillmentLines {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  fulfillmentId: string;
+  id: Generated<string>;
+  orderLineId: string;
+  quantity: number;
+}
+
+export interface Fulfillments {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  fulfilledAt: Timestamp | null;
+  id: Generated<string>;
+  inventoryLocationId: string;
+  method: Generated<string>;
+  orderId: string;
+  status: Generated<string>;
+  trackingReference: string | null;
+}
+
+export interface GoodsReceiptLines {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  inventoryItemId: string;
+  purchaseOrderLineId: string;
+  quantityReceived: Numeric;
+  quantityRejected: Generated<Numeric>;
+  receiptId: string;
+  unitCostMinor: Int8;
+}
+
+export interface GoodsReceipts {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  idempotencyKey: string;
+  inventoryLocationId: string;
+  purchaseOrderId: string;
+  receivedAt: Generated<Timestamp>;
+  receivedBy: string;
+  status: Generated<string>;
+}
+
+export interface InventoryItems {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  name: string;
+  sku: string | null;
+  status: Generated<string>;
+  trackingMode: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+  variantId: string | null;
+}
+
+export interface InventoryLocations {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  locationId: string;
+  name: string;
+  status: Generated<string>;
+}
+
+export interface Locations {
+  addressLine1: string | null;
+  addressLine2: string | null;
+  archivedAt: Timestamp | null;
+  businessHours: Generated<Json>;
+  businessId: string;
+  city: string | null;
+  countryCode: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isDefault: Generated<boolean>;
+  kind: Generated<string>;
+  latitude: Numeric | null;
+  longitude: Numeric | null;
+  name: string;
+  phone: string | null;
+  postalCode: string | null;
+  prepTimeMinutes: number | null;
+  state: string | null;
+  status: Generated<string>;
+  storeId: string;
+  timezone: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface MembershipRoles {
+  businessId: string;
+  membershipId: string;
+  roleId: string;
+}
+
+export interface ModifierGroups {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  maxSelections: number | null;
+  minSelections: Generated<number>;
+  name: string;
+  selectionMode: Generated<string>;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ModifierOptions {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  groupId: string;
+  id: Generated<string>;
+  name: string;
+  priceAdjustmentMinor: Generated<Int8>;
+  sortOrder: Generated<number>;
+  status: Generated<string>;
+}
+
+export interface OrderLines {
+  assetCode: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  description: string;
+  discountMinor: Generated<Int8>;
+  id: Generated<string>;
+  lineTotalMinor: Int8;
+  orderId: string;
+  productVariantId: string;
+  quantity: number;
+  selectedModifiers: Generated<Json>;
+  sku: string | null;
+  taxMinor: Generated<Int8>;
+  unitPriceMinor: Int8;
+}
+
+export interface Orders {
+  businessId: string;
+  cancelledAt: Timestamp | null;
+  cartId: string | null;
+  channelId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  currency: string;
+  customerPartyId: string | null;
+  discountMinor: Generated<Int8>;
+  fulfillmentStatus: Generated<string>;
+  id: Generated<string>;
+  locationId: string | null;
+  orderNumber: string;
+  paymentStatus: Generated<string>;
+  status: Generated<string>;
+  storeId: string;
+  subtotalMinor: Int8;
+  taxMinor: Generated<Int8>;
+  totalMinor: Int8;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Parties {
+  archivedAt: Timestamp | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  displayName: string;
+  id: Generated<string>;
+  kind: string;
+  legalName: string | null;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface PartyAddresses {
+  businessId: string;
+  city: string | null;
+  countryCode: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isDefault: Generated<boolean>;
+  kind: string;
+  label: string | null;
+  line1: string;
+  line2: string | null;
+  partyId: string;
+  postalCode: string | null;
+  state: string | null;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface PartyContacts {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isPrimary: Generated<boolean>;
+  kind: string;
+  label: string | null;
+  normalizedValue: string;
+  partyId: string;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+  value: string;
+}
+
+export interface PaymentAllocations {
+  amountMinor: Int8;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  orderId: string;
+  paymentId: string;
+}
+
+export interface PaymentAttempts {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  failureReason: string | null;
+  id: Generated<string>;
+  paymentId: string;
+  provider: string | null;
+  providerReference: string | null;
+  status: Generated<string>;
+}
+
+export interface Payments {
+  amountMinor: Int8;
+  assetCode: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  externalReference: string | null;
+  id: Generated<string>;
+  idempotencyKey: string;
+  method: string;
+  orderId: string;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Permissions {
+  code: string;
+  description: string;
+  id: Generated<string>;
+}
+
+export interface PosDevices {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  label: string;
+  lastSeenAt: Timestamp | null;
+  pairedAt: Timestamp | null;
+  pairingCodeExpiresAt: Timestamp | null;
+  pairingCodeHash: string | null;
+  platform: Generated<string>;
+  registerId: string;
+  revokedAt: Timestamp | null;
+  status: Generated<string>;
+  storeId: string;
+  tokenHash: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ProductBarcodes {
+  businessId: string;
+  code: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: Generated<string>;
+  variantId: string;
+}
+
+export interface ProductCategories {
+  businessId: string;
+  categoryId: string;
+  createdAt: Generated<Timestamp>;
+  productId: string;
+}
+
+export interface ProductLocationSettings {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isAvailable: Generated<boolean>;
+  leadTimeMinutes: number | null;
+  locationId: string;
+  productId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ProductModifierGroups {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  groupId: string;
+  productId: string;
+  sortOrder: Generated<number>;
+}
+
+export interface ProductPrices {
+  amountMinor: Int8;
+  archivedAt: Timestamp | null;
+  assetCode: string;
+  businessId: string;
+  compareAtMinor: Int8 | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  effectiveFrom: Generated<Timestamp>;
+  effectiveTo: Timestamp | null;
+  id: Generated<string>;
+  locationId: string | null;
+  productVariantId: string;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Products {
+  allowBackorder: Generated<boolean>;
+  archivedAt: Timestamp | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  description: Generated<string>;
+  id: Generated<string>;
+  isSellable: Generated<boolean>;
+  name: string;
+  productType: Generated<string>;
+  slug: string;
+  status: Generated<string>;
+  storeId: string;
+  trackInventory: Generated<boolean>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ProductVariants {
+  archivedAt: Timestamp | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isDefault: Generated<boolean>;
+  name: string;
+  optionValues: Generated<Json>;
+  productId: string;
+  sku: string | null;
+  status: Generated<string>;
+  unitId: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface PurchaseOrderLines {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  inventoryItemId: string;
+  purchaseOrderId: string;
+  quantityOrdered: Numeric;
+  quantityReceived: Generated<Numeric>;
+  unitCostMinor: Int8;
+}
+
+export interface PurchaseOrders {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  expectedAt: Timestamp | null;
+  id: Generated<string>;
+  notes: Generated<string>;
+  orderedAt: Timestamp | null;
+  orderNumber: string;
+  status: Generated<string>;
+  storeId: string;
+  supplierAccountId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Registers {
+  archivedAt: Timestamp | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  locationId: string;
+  name: string;
+  status: Generated<string>;
+  storeId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface RegisterShifts {
+  businessId: string;
+  closedAt: Timestamp | null;
+  closedByMembershipId: string | null;
+  countedCashMinor: Int8 | null;
+  createdAt: Generated<Timestamp>;
+  expectedCashMinor: Int8 | null;
+  id: Generated<string>;
+  locationId: string;
+  notes: string | null;
+  openedAt: Generated<Timestamp>;
+  openedByMembershipId: string;
+  openingCashMinor: Generated<Int8>;
+  registerId: string;
+  status: Generated<string>;
+  storeId: string;
+  updatedAt: Generated<Timestamp>;
+  varianceMinor: Int8 | null;
+}
+
+export interface RolePermissions {
+  permissionId: string;
+  roleId: string;
+}
+
+export interface Roles {
+  businessId: string | null;
+  code: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isSystem: Generated<boolean>;
+  name: string;
+}
+
+export interface SalesChannels {
+  businessId: string;
+  code: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  name: string;
+  status: Generated<string>;
+  storeId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface StockBalances {
+  businessId: string;
+  id: Generated<string>;
+  inventoryItemId: string;
+  inventoryLocationId: string;
+  onHand: Generated<Numeric>;
+  reserved: Generated<Numeric>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface StockMovements {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  inventoryItemId: string;
+  inventoryLocationId: string;
+  quantity: Numeric;
+  transactionId: string;
+  unitCostMinor: Int8 | null;
+}
+
+export interface StockReservations {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp | null;
+  id: Generated<string>;
+  inventoryItemId: string;
+  inventoryLocationId: string;
+  quantity: Numeric;
+  referenceId: string;
+  referenceType: string;
+  releasedAt: Timestamp | null;
+  status: Generated<string>;
+}
+
+export interface StockTransactions {
+  actorUserId: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  idempotencyKey: string;
+  reason: string;
+  requestId: string;
+  type: string;
+}
+
+export interface Stores {
+  archivedAt: Timestamp | null;
+  businessId: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  description: Generated<string>;
+  id: Generated<string>;
+  isDefault: Generated<boolean>;
+  name: string;
+  sellsInPerson: Generated<boolean>;
+  sellsOnline: Generated<boolean>;
+  slug: string;
+  status: Generated<string>;
+  timezone: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface SupplierAccounts {
+  businessId: string;
+  code: string | null;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  partyId: string;
+  paymentTerms: Generated<string>;
+  status: Generated<string>;
+  taxId: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface SupplierProducts {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  inventoryItemId: string;
+  isPreferred: Generated<boolean>;
+  leadTimeDays: number | null;
+  minimumOrderQuantity: Generated<Numeric>;
+  packSize: Generated<Numeric>;
+  status: Generated<string>;
+  supplierAccountId: string;
+  supplierSku: string | null;
+  unitCostMinor: Int8;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface SupportTicketReplies {
+  authorEmail: string | null;
+  authorId: string | null;
+  body: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isInternal: Generated<boolean>;
+  ticketId: string;
+}
+
+export interface SupportTickets {
+  assignedTo: string | null;
+  businessId: string | null;
+  category: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  description: string;
+  id: Generated<string>;
+  priority: Generated<string>;
+  resolvedAt: Timestamp | null;
+  status: Generated<string>;
+  subject: string;
+  submitterEmail: string | null;
+  submitterId: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface TaxRates {
+  businessId: string;
+  code: string;
+  createdAt: Generated<Timestamp>;
+  effectiveFrom: Generated<Timestamp>;
+  effectiveTo: Timestamp | null;
+  id: Generated<string>;
+  isInclusive: Generated<boolean>;
+  name: string;
+  rateBps: number;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface UnitConversions {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  factor: Numeric;
+  fromUnitId: string;
+  id: Generated<string>;
+  toUnitId: string;
+}
+
+export interface Units {
+  businessId: string;
+  code: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isBase: Generated<boolean>;
+  name: string;
+  symbol: string;
+}
+
+export interface UserAddresses {
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  country: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isDefault: Generated<boolean>;
+  label: string | null;
+  phone: string;
+  postalCode: string | null;
+  recipientName: string;
+  state: string;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+}
 
 export interface UserProfiles {
   accountStatus: Generated<string>;
@@ -51,5 +809,63 @@ export interface UserProfiles {
 }
 
 export interface DB {
+  bill_lines: BillLines;
+  bill_payment_allocations: BillPaymentAllocations;
+  bills: Bills;
+  business_memberships: BusinessMemberships;
+  businesses: Businesses;
+  cart_lines: CartLines;
+  carts: Carts;
+  cash_movements: CashMovements;
+  categories: Categories;
+  checkout_sessions: CheckoutSessions;
+  customer_accounts: CustomerAccounts;
+  fulfillment_lines: FulfillmentLines;
+  fulfillments: Fulfillments;
+  goods_receipt_lines: GoodsReceiptLines;
+  goods_receipts: GoodsReceipts;
+  inventory_items: InventoryItems;
+  inventory_locations: InventoryLocations;
+  locations: Locations;
+  membership_roles: MembershipRoles;
+  modifier_groups: ModifierGroups;
+  modifier_options: ModifierOptions;
+  order_lines: OrderLines;
+  orders: Orders;
+  parties: Parties;
+  party_addresses: PartyAddresses;
+  party_contacts: PartyContacts;
+  payment_allocations: PaymentAllocations;
+  payment_attempts: PaymentAttempts;
+  payments: Payments;
+  permissions: Permissions;
+  pos_devices: PosDevices;
+  product_barcodes: ProductBarcodes;
+  product_categories: ProductCategories;
+  product_location_settings: ProductLocationSettings;
+  product_modifier_groups: ProductModifierGroups;
+  product_prices: ProductPrices;
+  product_variants: ProductVariants;
+  products: Products;
+  purchase_order_lines: PurchaseOrderLines;
+  purchase_orders: PurchaseOrders;
+  register_shifts: RegisterShifts;
+  registers: Registers;
+  role_permissions: RolePermissions;
+  roles: Roles;
+  sales_channels: SalesChannels;
+  stock_balances: StockBalances;
+  stock_movements: StockMovements;
+  stock_reservations: StockReservations;
+  stock_transactions: StockTransactions;
+  stores: Stores;
+  supplier_accounts: SupplierAccounts;
+  supplier_products: SupplierProducts;
+  support_ticket_replies: SupportTicketReplies;
+  support_tickets: SupportTickets;
+  tax_rates: TaxRates;
+  unit_conversions: UnitConversions;
+  units: Units;
+  user_addresses: UserAddresses;
   user_profiles: UserProfiles;
 }

@@ -1,6 +1,1 @@
-/**
- * Express route composition for the supplier sourcing, purchase order, and goods
- * receipt domain belongs here. Routes are registered only after the capability and
- * contract are approved.
- */
-export {};
+import{Router}from"express";import{getDatabase}from"../../db/database.js";import{requireAuth}from"../../middleware/auth.js";import{ProcurementController}from"./procurement.controller.js";import{ProcurementService}from"./procurement.service.js";export function createProcurementRouter():Router{const r=Router();const c=new ProcurementController(new ProcurementService(getDatabase()));const b="/api/businesses/:businessId/procurement";r.use(b,requireAuth);r.post(`${b}/purchase-orders`,c.createOrder);r.post(`${b}/goods-receipts`,c.receive);return r}

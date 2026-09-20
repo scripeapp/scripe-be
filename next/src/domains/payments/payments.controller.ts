@@ -1,6 +1,2 @@
-/**
- * HTTP adaptation for the payment gateway, payment, refund, dispute, and settlement
- * domain belongs here. Controllers validate transport concerns and delegate workflows
- * to services.
- */
-export {};
+import type {NextFunction,Request,Response} from "express"; import {requireAuthContext} from "../../middleware/auth.js"; import {ApiResponse} from "../../shared/api-response.js"; import * as s from "./payments.schemas.js"; import type {PaymentsService} from "./payments.service.js";
+export class PaymentsController{constructor(private readonly service:PaymentsService){} readonly record=this.handle(async req=>{const p=s.params.parse(req.params);return{payment:await this.service.record({userId:requireAuthContext(req).userId,businessId:p.businessId,requestId:req.requestId},s.recordPayment.parse(req.body))}},201);private handle<T>(w:(r:Request)=>Promise<T>,status=200){return async(r:Request,res:Response,next:NextFunction)=>{try{ApiResponse.success(res,await w(r),status)}catch(e){next(e)}}}}

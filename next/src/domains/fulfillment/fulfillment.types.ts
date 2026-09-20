@@ -1,5 +1,1 @@
-/**
- * API and domain types for the order allocation and fulfillment domain belong here.
- * Database row types remain generated and separate.
- */
-export {};
+export interface FulfillmentOperation{readonly userId:string;readonly businessId:string;readonly requestId:string}export interface CreateFulfillmentInput{readonly orderId:string;readonly inventoryLocationId:string;readonly method:'pickup'|'shipping'|'delivery';readonly lines:readonly {orderLineId:string;quantity:number}[];readonly trackingReference?:string|null}

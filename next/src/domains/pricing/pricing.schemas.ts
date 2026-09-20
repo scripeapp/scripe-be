@@ -1,5 +1,11 @@
-/**
- * Zod request and response contracts for the product price, location availability, lead
- * time, and tax domain belong here.
- */
-export {};
+import { z } from "zod";
+const uuid = z.string().uuid();
+const assetCode = z.string().regex(/^[A-Z]{3}$/);
+export const businessParamsSchema = z.object({ businessId: uuid });
+export const priceParamsSchema = z.object({ businessId: uuid, priceId: uuid });
+export const variantParamsSchema = z.object({ businessId: uuid, variantId: uuid });
+export const priceInputSchema = z.object({ productVariantId: uuid, locationId: uuid.nullable().optional(), assetCode, amountMinor: z.number().int().min(0), compareAtMinor: z.number().int().min(0).nullable().optional(), effectiveFrom: z.string().datetime().optional(), effectiveTo: z.string().datetime().nullable().optional() }).refine((v) => v.compareAtMinor === null || v.compareAtMinor === undefined || v.compareAtMinor >= v.amountMinor, { message: "compareAtMinor must be greater than or equal to amountMinor", path: ["compareAtMinor"] });
+export const priceListSchema = z.object({ businessId: uuid, productVariantId: uuid.optional(), locationId: uuid.optional(), assetCode: assetCode.optional() });
+export const resolvePriceSchema = z.object({ businessId: uuid, productVariantId: uuid, locationId: uuid.optional(), assetCode });
+export const locationSettingSchema = z.object({ productId: uuid, locationId: uuid, isAvailable: z.boolean().optional(), leadTimeMinutes: z.number().int().min(0).nullable().optional() });
+export const taxRateSchema = z.object({ code: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/), name: z.string().trim().min(1).max(120), rateBps: z.number().int().min(0).max(10000), isInclusive: z.boolean().optional(), effectiveFrom: z.string().datetime().optional(), effectiveTo: z.string().datetime().nullable().optional() });

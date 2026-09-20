@@ -1,0 +1,16 @@
+alter table app.support_tickets drop constraint if exists support_tickets_business_fkey;
+drop policy if exists businesses_member_update on app.businesses;
+drop policy if exists businesses_member_select on app.businesses;
+drop policy if exists memberships_self_select on app.business_memberships;
+drop policy if exists roles_member_select on app.roles;
+drop policy if exists permissions_authenticated_select on app.permissions;
+drop policy if exists role_permissions_member_select on app.role_permissions;
+drop policy if exists membership_roles_member_select on app.membership_roles;
+drop function if exists app.has_business_permission(uuid, text);
+drop function if exists app.is_business_member(uuid);
+drop table if exists app.membership_roles;
+drop table if exists app.role_permissions;
+drop table if exists app.roles;
+drop table if exists app.permissions;
+drop table if exists app.business_memberships;
+drop table if exists app.businesses;

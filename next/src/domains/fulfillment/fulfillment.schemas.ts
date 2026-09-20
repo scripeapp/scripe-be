@@ -1,5 +1,1 @@
-/**
- * Zod request and response contracts for the order allocation and fulfillment domain
- * belong here.
- */
-export {};
+import{z}from'zod';const uuid=z.string().uuid();export const params=z.object({businessId:uuid});export const create=z.object({orderId:uuid,inventoryLocationId:uuid,method:z.enum(['pickup','shipping','delivery']),trackingReference:z.string().max(200).nullable().optional(),lines:z.array(z.object({orderLineId:uuid,quantity:z.number().int().positive()})).min(1)});
