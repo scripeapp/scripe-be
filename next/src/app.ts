@@ -11,6 +11,7 @@ import { createAddressesRouter } from "./domains/addresses/addresses.routes.js";
 import { createHelpdeskRouter } from "./domains/helpdesk/helpdesk.routes.js";
 import { createPreferencesRouter } from "./domains/preferences/preferences.routes.js";
 import { createNotificationsRouter } from "./domains/notifications/notifications.routes.js";
+import { createComplianceRouter } from "./domains/compliance/compliance.routes.js";
 import { createBusinessesRouter } from "./domains/businesses/businesses.routes.js";
 import { createAuthorizationRouter } from "./domains/authorization/authorization.routes.js";
 import { createStoresRouter } from "./domains/stores/stores.routes.js";
@@ -51,6 +52,7 @@ export function createApp(): Express {
   app.use(createHelpdeskRouter());
   app.use(createPreferencesRouter());
   app.use(createNotificationsRouter());
+  app.use(createComplianceRouter());
   app.use(createBusinessesRouter());
   app.use(createAuthorizationRouter());
   app.use(createStoresRouter());
