@@ -15,23 +15,6 @@ import type {
   StoreUpdateInput,
 } from "./stores.types.js";
 
-export async function findAuthorizedMembership(
-  context: DatabaseContext,
-  businessId: string,
-  permission: string,
-): Promise<string | undefined> {
-  const result = await sql<{ membershipId: string }>`
-    select membership."id" as "membershipId"
-    from app.business_memberships membership
-    where membership."businessId" = ${businessId}::uuid
-      and membership."userId"::text = app.current_user_id()
-      and membership."status" = 'active'
-      and app.has_business_permission(${businessId}::uuid, ${permission})
-    limit 1
-  `.execute(context.transaction);
-  return result.rows[0]?.membershipId;
-}
-
 export async function lockBusiness(
   context: DatabaseContext,
   businessId: string,

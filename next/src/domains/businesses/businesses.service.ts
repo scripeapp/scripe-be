@@ -3,7 +3,8 @@ import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
-import { AppError, forbiddenError, notFoundError } from "../../shared/errors.js";
+import { AppError, notFoundError } from "../../shared/errors.js";
+import * as authorization from "../authorization/authorization.service.js";
 import * as repository from "./businesses.repository.js";
 import type { Business, BusinessCreateInput, BusinessListRow, BusinessOperation, BusinessUpdateInput } from "./businesses.types.js";
 
@@ -54,10 +55,8 @@ export class BusinessesService {
     });
   }
 
-  private async requirePermission(context: Parameters<typeof repository.hasPermission>[0], businessId: string, permission: string): Promise<void> {
-    if (!(await repository.hasPermission(context, businessId, permission))) {
-      throw forbiddenError(`Missing permission: ${permission}`);
-    }
+  private async requirePermission(context: Parameters<typeof repository.findBusiness>[0], businessId: string, permission: string): Promise<void> {
+    return authorization.requirePermission(context, businessId, permission);
   }
 
   private async run<T>(operation: BusinessOperation, businessId: string | null, work: Parameters<typeof withDatabaseContext<T>>[2]): Promise<T> {

@@ -1,7 +1,6 @@
 import { sql } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
 import type { CreateFulfillmentInput } from "./fulfillment.types.js";
-export async function hasPermission(c: DatabaseContext, p: string) { const r = await sql<{ allowed: boolean }>`select app.has_business_permission(current_setting('app.business_id',true)::uuid,${p}) allowed`.execute(c.transaction); return r.rows[0]?.allowed === true; }
 export async function create(c: DatabaseContext, businessId: string, userId: string, requestId: string, i: CreateFulfillmentInput) {
   const order = (await sql<{ id: string; locationId: string | null }>`select "id","locationId" from app.orders where "id"=${i.orderId}::uuid and "businessId"=${businessId}::uuid and "status"='placed' for update`.execute(c.transaction)).rows[0];
   if (!order) throw new Error("Order is missing or not fulfillable");

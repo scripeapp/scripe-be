@@ -19,19 +19,6 @@ import type {
   UpdatePartyInput,
 } from "./parties.types.js";
 
-export async function authorizedMembership(context: DatabaseContext, businessId: string, permission: string): Promise<string | undefined> {
-  const result = await sql<{ membershipId: string }>`
-    select membership."id" as "membershipId"
-    from app.business_memberships membership
-    where membership."businessId" = ${businessId}::uuid
-      and membership."userId"::text = app.current_user_id()
-      and membership."status" = 'active'
-      and app.has_business_permission(${businessId}::uuid, ${permission})
-    limit 1
-  `.execute(context.transaction);
-  return result.rows[0]?.membershipId;
-}
-
 export async function listParties(context: DatabaseContext, businessId: string, options: { role?: "customer" | "supplier"; status?: PartyStatus; search?: string; limit: number; cursor?: string }): Promise<PartyRow[]> {
   const roleFilter = options.role === "customer"
     ? sql`and exists (select 1 from app.customer_accounts account where account."businessId" = party."businessId" and account."partyId" = party."id")`

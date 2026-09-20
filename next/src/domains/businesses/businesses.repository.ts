@@ -52,11 +52,6 @@ export async function setBusinessContext(context: DatabaseContext, businessId: s
   await sql`select set_config('app.business_id', ${businessId}, true)`.execute(context.transaction);
 }
 
-export async function hasPermission(context: DatabaseContext, businessId: string, permission: string): Promise<boolean> {
-  const result = await sql<{ allowed: boolean }>`select app.has_business_permission(${businessId}::uuid, ${permission}) as allowed`.execute(context.transaction);
-  return result.rows[0]?.allowed === true;
-}
-
 export async function updateBusiness(context: DatabaseContext, businessId: string, input: BusinessUpdateInput): Promise<BusinessRow | undefined> {
   const fields: RawBuilder<unknown>[] = [];
   if (input.displayName !== undefined) fields.push(sql`"displayName"=${input.displayName}`);

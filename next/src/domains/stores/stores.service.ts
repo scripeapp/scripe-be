@@ -5,9 +5,9 @@ import { withIdentity } from "../../db/principal.js";
 import {
   AppError,
   conflictError,
-  forbiddenError,
   notFoundError,
 } from "../../shared/errors.js";
+import * as authorization from "../authorization/authorization.service.js";
 import * as repository from "./stores.repository.js";
 import type {
   CashMovementRow,
@@ -494,18 +494,11 @@ export class StoresService {
   }
 
   private async authorize(
-    context: Parameters<typeof repository.findAuthorizedMembership>[0],
+    context: Parameters<typeof repository.findStore>[0],
     businessId: string,
     permission: string,
   ): Promise<string> {
-    const membershipId = await repository.findAuthorizedMembership(
-      context,
-      businessId,
-      permission,
-    );
-    if (!membershipId)
-      throw forbiddenError(`Missing permission: ${permission}`);
-    return membershipId;
+    return authorization.requireAuthorizedMembership(context, businessId, permission);
   }
 
   private async requireStore(

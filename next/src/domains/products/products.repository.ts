@@ -2,11 +2,6 @@ import { sql, type RawBuilder } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
 import type { CategoryInput, CategoryRow, ProductCreateInput, ProductRow, ProductUpdateInput, VariantInput, VariantRow } from "./products.types.js";
 
-export async function hasPermission(c: DatabaseContext, permission: string): Promise<boolean> {
-  const result = await sql<{ allowed: boolean }>`select app.has_business_permission(current_setting('app.business_id', true)::uuid, ${permission}) as allowed`.execute(c.transaction);
-  return result.rows[0]?.allowed === true;
-}
-
 export async function listProducts(c: DatabaseContext, businessId: string, filters: { storeId?: string; status?: string; search?: string }): Promise<ProductRow[]> {
   const clauses: RawBuilder<unknown>[] = [sql`p."businessId" = ${businessId}::uuid`];
   if (filters.storeId) clauses.push(sql`p."storeId" = ${filters.storeId}::uuid`);

@@ -2,7 +2,8 @@ import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
-import { AppError, forbiddenError, notFoundError } from "../../shared/errors.js";
+import { AppError, notFoundError } from "../../shared/errors.js";
+import * as authorization from "../authorization/authorization.service.js";
 import * as repository from "./parties.repository.js";
 import type {
   CreateAddressInput,
@@ -211,8 +212,8 @@ export class PartiesService {
     const [customer, supplier] = await Promise.all([repository.findCustomer(context, row.businessId, row.id), repository.findSupplier(context, row.businessId, row.id)]);
     return { ...toPartyBase(row), roles: [...(customer ? ["customer" as const] : []), ...(supplier ? ["supplier" as const] : [])] };
   }
-  private async authorize(context: Parameters<typeof repository.authorizedMembership>[0], businessId: string, permission: string): Promise<void> {
-    if (!(await repository.authorizedMembership(context, businessId, permission))) throw forbiddenError(`Missing permission: ${permission}`);
+  private async authorize(context: Parameters<typeof repository.findParty>[0], businessId: string, permission: string): Promise<void> {
+    return authorization.requirePermission(context, businessId, permission);
   }
   private async run<T>(operation: OperationContext, work: Parameters<typeof withDatabaseContext<T>>[2]): Promise<T> {
     try { return await withDatabaseContext(this.database, withIdentity(operation.requestId, operation.userId, operation.businessId), work); }
