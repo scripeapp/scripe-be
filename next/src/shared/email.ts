@@ -22,6 +22,13 @@ interface OutboundEmail {
 export interface EmailSender {
   sendVerificationCode(to: string, code: string): Promise<void>;
   sendPasswordResetEmail(to: string, url: string): Promise<void>;
+  sendBusinessInvitation(to: string, params: BusinessInvitationEmail): Promise<void>;
+}
+
+export interface BusinessInvitationEmail {
+  readonly businessName: string;
+  readonly inviterName: string;
+  readonly acceptUrl: string;
 }
 
 export class PlunkEmailSender implements EmailSender {
@@ -43,6 +50,18 @@ export class PlunkEmailSender implements EmailSender {
       subject: "Reset your password",
       html: `<p>Reset your Surge account password:</p><p><a href="${url}">${url}</a></p>`,
       logHint: `link=${url}`,
+    });
+  }
+
+  async sendBusinessInvitation(to: string, params: BusinessInvitationEmail): Promise<void> {
+    await this.send({
+      to,
+      subject: `You've been invited to join ${params.businessName} on Surge`,
+      html:
+        `<p>${params.inviterName} invited you to join <strong>${params.businessName}</strong> on Surge.</p>` +
+        `<p><a href="${params.acceptUrl}">${params.acceptUrl}</a></p>` +
+        `<p>This invitation expires in 7 days. If you weren't expecting this, ignore this email.</p>`,
+      logHint: `link=${params.acceptUrl}`,
     });
   }
 

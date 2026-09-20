@@ -23,6 +23,7 @@ const EnvironmentSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url(),
   AUTH_COOKIE_DOMAIN: z.string().default("localhost"),
+  FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   AUTH_TRUSTED_ORIGINS: z
     .string()
     .default("")

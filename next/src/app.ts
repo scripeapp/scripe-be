@@ -8,6 +8,7 @@ import { attachPrincipal } from "./middleware/principal.js";
 import { attachRequestId } from "./middleware/request-id.js";
 import { createProfilesRouter } from "./domains/profiles/profiles.routes.js";
 import { createBusinessesRouter } from "./domains/businesses/businesses.routes.js";
+import { createAuthorizationRouter } from "./domains/authorization/authorization.routes.js";
 import { createStoresRouter } from "./domains/stores/stores.routes.js";
 import { createPartiesRouter } from "./domains/parties/parties.routes.js";
 import { createProductsRouter } from "./domains/products/products.routes.js";
@@ -40,6 +41,7 @@ export function createApp(): Express {
   app.use(createHealthRouter());
   app.use(createProfilesRouter());
   app.use(createBusinessesRouter());
+  app.use(createAuthorizationRouter());
   app.use(createStoresRouter());
   app.use(createPartiesRouter());
   app.use(createProductsRouter());
