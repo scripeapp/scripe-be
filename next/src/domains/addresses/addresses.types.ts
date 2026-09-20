@@ -34,3 +34,23 @@ export interface UserAddress {
 export interface UserAddressListResponse {
   readonly addresses: readonly UserAddress[];
 }
+
+export interface AddressesOperation {
+  readonly userId: string;
+  readonly requestId: string;
+}
+
+export interface CreateAddressInput {
+  readonly label?: string | null;
+  readonly isDefault?: boolean;
+  readonly recipientName: string;
+  readonly phone: string;
+  readonly addressLine1: string;
+  readonly addressLine2?: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode?: string | null;
+  readonly country?: string;
+}
+
+export type UpdateAddressInput = Partial<CreateAddressInput>;
