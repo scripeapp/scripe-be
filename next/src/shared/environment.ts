@@ -51,6 +51,20 @@ const EnvironmentSchema = z.object({
   FLW_WEBHOOK_HASH: z.string().optional(),
   ANCHOR_WEBHOOK_TOKEN: z.string().optional(),
   BRAILS_WEBHOOK_SECRET: z.string().optional(),
+  SMS_PROVIDER: z.enum(["dev", "termii", "twilio"]).optional(),
+  WHATSAPP_PROVIDER: z.enum(["dev", "termii", "meta"]).optional(),
+  TERMII_API_KEY: z.string().optional(),
+  TERMII_SENDER_ID: z.string().optional(),
+  TERMII_BASE_URL: z.string().url().default("https://api.ng.termii.com"),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
+  META_WA_TOKEN: z.string().optional(),
+  META_WA_PHONE_NUMBER_ID: z.string().optional(),
+  COMMUNICATIONS_SMS_CREDITS_PER_PART: z.coerce.number().int().positive().default(3),
+  COMMUNICATIONS_WHATSAPP_CREDITS_PER_MESSAGE: z.coerce.number().int().positive().default(2),
+  COMMUNICATIONS_EMAIL_CREDITS_PER_MESSAGE: z.coerce.number().int().positive().default(1),
+  COMMUNICATIONS_MAX_RECIPIENTS_PER_SEND: z.coerce.number().int().positive().default(300),
 }).superRefine((environment, context) => {
   if (environment.NODE_ENV === "production" && !environment.PLUNK_API_KEY) {
     context.addIssue({

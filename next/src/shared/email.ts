@@ -10,6 +10,8 @@ interface OutboundEmail {
   readonly to: string;
   readonly subject: string;
   readonly html: string;
+  /** Overrides PLUNK_FROM_EMAIL — used by the communications domain to send as a business's own resolved sender. */
+  readonly from?: string;
   /** Secret-free fragment included in the development log line. */
   readonly logHint: string;
 }
@@ -23,6 +25,8 @@ export interface EmailSender {
   sendVerificationCode(to: string, code: string): Promise<void>;
   sendPasswordResetEmail(to: string, url: string): Promise<void>;
   sendBusinessInvitation(to: string, params: BusinessInvitationEmail): Promise<void>;
+  /** Arbitrary subject/body send used by the communications domain, sent as a business's own resolved sender rather than the platform's fixed templates above. */
+  sendTransactional(params: { to: string; subject: string; html: string; from?: string }): Promise<void>;
 }
 
 export interface BusinessInvitationEmail {
@@ -65,6 +69,10 @@ export class PlunkEmailSender implements EmailSender {
     });
   }
 
+  async sendTransactional(params: { to: string; subject: string; html: string; from?: string }): Promise<void> {
+    await this.send({ ...params, logHint: "transactional" });
+  }
+
   private async send(email: OutboundEmail): Promise<void> {
     const environment = loadEnvironment();
     const apiKey = environment.PLUNK_API_KEY;
@@ -91,8 +99,8 @@ export class PlunkEmailSender implements EmailSender {
         to: email.to,
         subject: email.subject,
         body: email.html,
-        ...(environment.PLUNK_FROM_EMAIL
-          ? { from: environment.PLUNK_FROM_EMAIL }
+        ...(email.from ?? environment.PLUNK_FROM_EMAIL
+          ? { from: email.from ?? environment.PLUNK_FROM_EMAIL }
           : {}),
       }),
     });

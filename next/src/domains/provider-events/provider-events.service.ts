@@ -1,6 +1,7 @@
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { anonymousPrincipal } from "../../db/principal.js";
+import * as communicationsRepository from "../communications/communications.repository.js";
 import * as repository from "./provider-events.repository.js";
 import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature } from "./provider-events.signatures.js";
 import type { ProviderName } from "./provider-events.types.js";
@@ -37,7 +38,9 @@ export class ProviderEventsService {
     const reference = asString(data.reference);
 
     await this.ingest("paystack", eventType, reference, signatureValid, body, requestId, async (context) => {
-      if (eventType !== "charge.success" || !reference) return "ignored";
+      if (!reference) return "ignored";
+      if (reference.startsWith("comm_credit_")) return this.handleCommunicationTopupReference(context, eventType === "charge.success", reference);
+      if (eventType !== "charge.success") return "ignored";
       const result = await repository.captureCheckoutPaymentByReference(context, reference);
       if (result.captured && result.isFullyPaid && result.businessId && result.orderId) {
         await repository.issueReceiptFromWebhook(context, result.businessId, result.orderId);
@@ -45,6 +48,16 @@ export class ProviderEventsService {
       return result.found ? "processed" : "ignored";
     });
     return signatureValid;
+  }
+
+  /** Both checkout gateways route a communication-credit top-up here by its "comm_credit_" reference prefix rather than through the order/payment capture path above, which owns a structurally different concern (allocating against an order's total, issuing a receipt). */
+  private async handleCommunicationTopupReference(context: DatabaseContext, succeeded: boolean, reference: string): Promise<"processed" | "ignored"> {
+    if (!succeeded) {
+      const found = await communicationsRepository.failTopupByReference(context, reference);
+      return found ? "processed" : "ignored";
+    }
+    const result = await communicationsRepository.completeTopupByReference(context, reference);
+    return result.found ? "processed" : "ignored";
   }
 
   async handleFlutterwaveWebhook(rawBody: Buffer, signature: string | undefined, requestId: string): Promise<boolean> {
@@ -57,6 +70,7 @@ export class ProviderEventsService {
 
     await this.ingest("flutterwave", eventType, reference, signatureValid, body, requestId, async (context) => {
       if (eventType !== "charge.completed" || !reference) return "ignored";
+      if (reference.startsWith("comm_credit_")) return this.handleCommunicationTopupReference(context, status === "successful", reference);
       if (status === "successful") {
         const result = await repository.captureCheckoutPaymentByReference(context, reference);
         if (result.captured && result.isFullyPaid && result.businessId && result.orderId) {

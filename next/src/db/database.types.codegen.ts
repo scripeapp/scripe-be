@@ -358,6 +358,135 @@ export interface CheckoutSessions {
   status: Generated<string>;
 }
 
+export interface CommunicationAudienceSegmentMembers {
+  addedAt: Generated<Timestamp>;
+  partyId: string;
+  segmentId: string;
+}
+
+export interface CommunicationAudienceSegments {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  description: string | null;
+  id: Generated<string>;
+  name: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface CommunicationCreditAccounts {
+  balance: Generated<Int8>;
+  businessId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface CommunicationCreditEntries {
+  balanceAfter: Int8;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  credits: Int8;
+  id: Generated<string>;
+  kind: string;
+  metadata: Generated<Json>;
+  referenceId: string | null;
+  referenceType: string | null;
+}
+
+export interface CommunicationCreditTopups {
+  amountMinor: Int8;
+  assetCode: string;
+  businessId: string;
+  completedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  credits: Int8;
+  gateway: string;
+  id: Generated<string>;
+  providerReference: string;
+  status: Generated<string>;
+}
+
+export interface CommunicationDeliveries {
+  createdAt: Generated<Timestamp>;
+  creditCost: Generated<Int8>;
+  destination: string;
+  errorMessage: string | null;
+  failedAt: Timestamp | null;
+  id: Generated<string>;
+  messageId: string;
+  partyId: string;
+  providerMessageId: string | null;
+  sentAt: Timestamp | null;
+  status: Generated<string>;
+}
+
+export interface CommunicationDomains {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  dnsRecords: Generated<Json>;
+  domain: string;
+  id: Generated<string>;
+  lastVerifiedAt: Timestamp | null;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+  verifiedAt: Timestamp | null;
+}
+
+export interface CommunicationMessages {
+  audienceSegmentId: string | null;
+  audienceType: string;
+  body: string | null;
+  businessId: string;
+  channel: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  creditsSpent: Generated<Int8>;
+  failedCount: Generated<number>;
+  id: Generated<string>;
+  name: string;
+  recipientCount: number | null;
+  senderId: string | null;
+  sentCount: Generated<number>;
+  status: Generated<string>;
+  subject: string | null;
+  templateId: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface CommunicationOptOuts {
+  businessId: string;
+  channel: string;
+  id: Generated<string>;
+  optedOutAt: Generated<Timestamp>;
+  partyId: string;
+  reason: string | null;
+}
+
+export interface CommunicationSenders {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  domainId: string | null;
+  email: string;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  isDefault: Generated<boolean>;
+  name: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface CommunicationTemplates {
+  body: string;
+  businessId: string;
+  channel: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  name: string;
+  subject: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface ComplianceCases {
   businessId: string;
   closedAt: Timestamp | null;
@@ -1307,6 +1436,17 @@ export interface DB {
   cash_movements: CashMovements;
   categories: Categories;
   checkout_sessions: CheckoutSessions;
+  communication_audience_segment_members: CommunicationAudienceSegmentMembers;
+  communication_audience_segments: CommunicationAudienceSegments;
+  communication_credit_accounts: CommunicationCreditAccounts;
+  communication_credit_entries: CommunicationCreditEntries;
+  communication_credit_topups: CommunicationCreditTopups;
+  communication_deliveries: CommunicationDeliveries;
+  communication_domains: CommunicationDomains;
+  communication_messages: CommunicationMessages;
+  communication_opt_outs: CommunicationOptOuts;
+  communication_senders: CommunicationSenders;
+  communication_templates: CommunicationTemplates;
   compliance_cases: ComplianceCases;
   compliance_documents: ComplianceDocuments;
   compliance_submissions: ComplianceSubmissions;
