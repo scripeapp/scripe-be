@@ -65,6 +65,14 @@ const EnvironmentSchema = z.object({
   COMMUNICATIONS_WHATSAPP_CREDITS_PER_MESSAGE: z.coerce.number().int().positive().default(2),
   COMMUNICATIONS_EMAIL_CREDITS_PER_MESSAGE: z.coerce.number().int().positive().default(1),
   COMMUNICATIONS_MAX_RECIPIENTS_PER_SEND: z.coerce.number().int().positive().default(300),
+  SHIPBUBBLE_API_KEY: z.string().optional(),
+  SHIPBUBBLE_WEBHOOK_SECRET: z.string().optional(),
+  SHIPBUBBLE_BASE_URL: z.string().url().default("https://api.shipbubble.com/v1"),
+  SHIPBUBBLE_DEFAULT_CATEGORY_ID: z.coerce.number().int().positive().default(20754594),
+  SHIPBUBBLE_DEFAULT_PKG_LENGTH: z.coerce.number().positive().default(30),
+  SHIPBUBBLE_DEFAULT_PKG_WIDTH: z.coerce.number().positive().default(20),
+  SHIPBUBBLE_DEFAULT_PKG_HEIGHT: z.coerce.number().positive().default(10),
+  SHIPBUBBLE_MARKUP_PERCENT: z.coerce.number().min(0).default(10),
 }).superRefine((environment, context) => {
   if (environment.NODE_ENV === "production" && !environment.PLUNK_API_KEY) {
     context.addIssue({

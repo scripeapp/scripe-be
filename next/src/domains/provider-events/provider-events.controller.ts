@@ -21,6 +21,8 @@ export class ProviderEventsController {
 
   readonly brails = this.handle((request) => this.service.handleBrailsWebhook(this.rawBody(request), header(request, "x-brails-signature"), request.requestId));
 
+  readonly shipbubble = this.handle((request) => this.service.handleShipbubbleWebhook(this.rawBody(request), header(request, "x-ship-signature"), request.requestId));
+
   private rawBody(request: Request): Buffer {
     return request.body as Buffer;
   }

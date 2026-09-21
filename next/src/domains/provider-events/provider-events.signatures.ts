@@ -38,3 +38,18 @@ export function verifyBrailsSignature(rawBody: Buffer, signature: string | undef
   const expected = createHmac("sha512", secret).update(rawBody).digest("hex");
   return safeEqual(expected, signature);
 }
+
+/**
+ * Shipbubble: HMAC-SHA512(rawBody, key=webhook secret), hex digest, header
+ * x-ship-signature. Legacy computed this over JSON.stringify(req.body)
+ * (the reparsed-then-restringified payload) rather than the exact bytes
+ * Shipbubble signed, which is fragile (key ordering/whitespace can differ)
+ * - this signs the true raw body instead, the same as every other provider
+ * here.
+ */
+export function verifyShipbubbleSignature(rawBody: Buffer, signature: string | undefined): boolean {
+  const secret = loadEnvironment().SHIPBUBBLE_WEBHOOK_SECRET;
+  if (!secret || !signature) return false;
+  const expected = createHmac("sha512", secret).update(rawBody).digest("hex");
+  return safeEqual(expected, signature);
+}

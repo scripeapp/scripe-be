@@ -2,8 +2,9 @@ import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { anonymousPrincipal } from "../../db/principal.js";
 import * as communicationsRepository from "../communications/communications.repository.js";
+import * as deliveryRepository from "../delivery/delivery.repository.js";
 import * as repository from "./provider-events.repository.js";
-import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature } from "./provider-events.signatures.js";
+import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature, verifyShipbubbleSignature } from "./provider-events.signatures.js";
 import type { ProviderName } from "./provider-events.types.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -208,6 +209,39 @@ export class ProviderEventsService {
       // No confirmed virtual-account-status event name exists in Brails'
       // public docs, so nothing else is auto-applied here.
       return "ignored";
+    });
+    return signatureValid;
+  }
+
+  /** Shipbubble's shipment.status.changed event, mapped to app.deliveries' status vocabulary (pending/booked/in_transit/delivered/failed/cancelled) - not the order-shipping-status vocabulary legacy used, since this only touches the delivery record, not the order. */
+  async handleShipbubbleWebhook(rawBody: Buffer, signature: string | undefined, requestId: string): Promise<boolean> {
+    const signatureValid = verifyShipbubbleSignature(rawBody, signature);
+    const body = parseJson(rawBody);
+    const eventType = asString(body.event) ?? "unknown";
+    const trackingCode = asString(body.order_id);
+    const shipStatus = asString(body.status);
+    const courier = asRecord(body.courier);
+
+    await this.ingest("shipbubble", eventType, trackingCode, signatureValid, body, requestId, async (context) => {
+      if (eventType !== "shipment.status.changed" || !trackingCode || !shipStatus) return "ignored";
+      const statusMap: Record<string, "pending" | "booked" | "in_transit" | "delivered" | "cancelled"> = {
+        pending: "pending",
+        confirmed: "booked",
+        picked_up: "in_transit",
+        in_transit: "in_transit",
+        out_for_delivery: "in_transit",
+        completed: "delivered",
+        cancelled: "cancelled",
+      };
+      const mappedStatus = statusMap[shipStatus];
+      if (!mappedStatus) return "ignored";
+
+      const result = await deliveryRepository.updateFromWebhookByTrackingCode(context, trackingCode, mappedStatus, {
+        location: asString(courier.name) ?? "",
+        message: `Status changed to ${shipStatus}`,
+        captured: new Date().toISOString(),
+      });
+      return result.found ? "processed" : "ignored";
     });
     return signatureValid;
   }

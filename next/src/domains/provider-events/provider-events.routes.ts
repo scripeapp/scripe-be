@@ -19,6 +19,7 @@ export function createProviderEventsRouter(): Router {
   router.post(`${base}/flutterwave`, controller.flutterwave);
   router.post(`${base}/anchor`, controller.anchor);
   router.post(`${base}/brails`, controller.brails);
+  router.post(`${base}/shipbubble`, controller.shipbubble);
 
   return router;
 }

@@ -1,4 +1,4 @@
-export type ProviderName = "paystack" | "flutterwave" | "anchor" | "brails";
+export type ProviderName = "paystack" | "flutterwave" | "anchor" | "brails" | "shipbubble";
 export type ProviderEventStatus = "received" | "processed" | "ignored" | "failed";
 
 export interface ProviderEventRow {

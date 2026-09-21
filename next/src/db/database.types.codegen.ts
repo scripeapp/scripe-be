@@ -548,6 +548,57 @@ export interface DataPrivacyRequests {
   userId: string;
 }
 
+export interface Deliveries {
+  businessId: string;
+  courierId: string | null;
+  courierName: string | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  deliveryMethodId: string | null;
+  destination: Json;
+  events: Generated<Json>;
+  feeMinor: Generated<Int8>;
+  fulfillmentId: string | null;
+  id: Generated<string>;
+  labelUrl: string | null;
+  orderId: string;
+  provider: string | null;
+  serviceCode: string | null;
+  status: Generated<string>;
+  storeId: string;
+  trackingCode: string | null;
+  trackingUrl: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface DeliveryMethods {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  description: string | null;
+  estimatedTime: string | null;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  name: string;
+  priceMinor: Generated<Int8>;
+  sortOrder: Generated<number>;
+  storeId: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface DeliveryZones {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  estimatedMinutes: number | null;
+  feeMinor: Generated<Int8>;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  locationId: string;
+  minOrderMinor: Int8 | null;
+  storeId: string;
+  updatedAt: Generated<Timestamp>;
+  zipCode: string;
+}
+
 export interface DiscountRedemptions {
   amountMinor: Int8;
   businessId: string;
@@ -1184,6 +1235,7 @@ export interface StockTransactions {
 export interface Stores {
   archivedAt: Timestamp | null;
   businessId: string;
+  carrierDeliveryEnabled: Generated<boolean>;
   contactEmail: string | null;
   contactPhone: string | null;
   createdAt: Generated<Timestamp>;
@@ -1492,6 +1544,9 @@ export interface DB {
   compliance_submissions: ComplianceSubmissions;
   customer_accounts: CustomerAccounts;
   data_privacy_requests: DataPrivacyRequests;
+  deliveries: Deliveries;
+  delivery_methods: DeliveryMethods;
+  delivery_zones: DeliveryZones;
   discount_redemptions: DiscountRedemptions;
   discounts: Discounts;
   fiscal_documents: FiscalDocuments;
