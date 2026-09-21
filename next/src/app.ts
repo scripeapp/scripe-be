@@ -35,6 +35,7 @@ import { createProviderEventsRouter } from "./domains/provider-events/provider-e
 import { createApprovalsRouter } from "./domains/approvals/approvals.routes.js";
 import { createPlatformRouter } from "./domains/platform/platform.routes.js";
 import { createCommunicationsRouter } from "./domains/communications/communications.routes.js";
+import { createRiskRouter } from "./domains/risk/risk.routes.js";
 import { createHealthRouter } from "./routes/health.js";
 
 export function createApp(): Express {
@@ -88,6 +89,7 @@ export function createApp(): Express {
   app.use(createApprovalsRouter());
   app.use(createPlatformRouter());
   app.use(createCommunicationsRouter());
+  app.use(createRiskRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);

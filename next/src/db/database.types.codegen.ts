@@ -1081,6 +1081,34 @@ export interface Returns {
   refundableAmountMinor: Generated<Int8>;
 }
 
+export interface RiskCases {
+  assignedTo: string | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  resolutionNotes: string | null;
+  resolvedAt: Timestamp | null;
+  status: Generated<string>;
+  title: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface RiskSignals {
+  createdAt: Generated<Timestamp>;
+  description: string;
+  entityId: string;
+  entityType: string;
+  id: Generated<string>;
+  metadata: Generated<Json>;
+  reviewedAt: Timestamp | null;
+  reviewedBy: string | null;
+  reviewNotes: string | null;
+  riskCaseId: string | null;
+  severity: string;
+  signalType: string;
+  status: Generated<string>;
+}
+
 export interface RolePermissions {
   permissionId: string;
   roleId: string;
@@ -1254,6 +1282,18 @@ export interface TaxRates {
   rateBps: number;
   status: Generated<string>;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface TransactionHolds {
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  entityId: string;
+  entityType: string;
+  id: Generated<string>;
+  reason: string;
+  releasedAt: Timestamp | null;
+  releasedBy: string | null;
+  status: Generated<string>;
 }
 
 export interface UnitConversions {
@@ -1492,6 +1532,8 @@ export interface DB {
   registers: Registers;
   return_lines: ReturnLines;
   returns: Returns;
+  risk_cases: RiskCases;
+  risk_signals: RiskSignals;
   role_permissions: RolePermissions;
   roles: Roles;
   sales_channels: SalesChannels;
@@ -1506,6 +1548,7 @@ export interface DB {
   support_tickets: SupportTickets;
   system_announcements: SystemAnnouncements;
   tax_rates: TaxRates;
+  transaction_holds: TransactionHolds;
   unit_conversions: UnitConversions;
   units: Units;
   upload_processing_jobs: UploadProcessingJobs;

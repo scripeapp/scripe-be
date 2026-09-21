@@ -38,14 +38,14 @@ export class PlatformService {
 
   async listAdministrators(operation: PlatformOperation): Promise<PlatformAdministrator[]> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "super_admin");
+      await requirePlatformAdministrator(context, operation.userId, "super_admin");
       return (await repository.listAdministrators(context)).map(toAdministrator);
     });
   }
 
   async createAdministrator(operation: PlatformOperation, input: CreatePlatformAdministratorInput): Promise<PlatformAdministrator> {
     return this.run(operation, async (context) => {
-      const actor = await this.requireAdministrator(context, operation.userId, "super_admin");
+      const actor = await requirePlatformAdministrator(context, operation.userId, "super_admin");
 
       const targetUser = await repository.findAuthUserByEmail(context, input.email);
       if (!targetUser) throw validationError("No account exists for that email yet; the person must sign up before being made an administrator.");
@@ -73,7 +73,7 @@ export class PlatformService {
 
   async updateAdministrator(operation: PlatformOperation, administratorId: string, input: UpdatePlatformAdministratorInput): Promise<PlatformAdministrator> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "super_admin");
+      await requirePlatformAdministrator(context, operation.userId, "super_admin");
       const existing = await repository.findAdministratorById(context, administratorId);
       if (!existing) throw notFoundError("Platform administrator not found");
 
@@ -93,7 +93,7 @@ export class PlatformService {
 
   async deactivateAdministrator(operation: PlatformOperation, administratorId: string): Promise<void> {
     return this.run(operation, async (context) => {
-      const actor = await this.requireAdministrator(context, operation.userId, "super_admin");
+      const actor = await requirePlatformAdministrator(context, operation.userId, "super_admin");
       if (actor.id === administratorId) throw validationError("You cannot deactivate your own administrator account.");
 
       const existing = await repository.findAdministratorById(context, administratorId);
@@ -113,7 +113,7 @@ export class PlatformService {
 
   async listAlerts(operation: PlatformOperation, filter: ListAdminAlertsFilter): Promise<AdminAlertsPage> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "viewer");
+      await requirePlatformAdministrator(context, operation.userId, "viewer");
       const [{ rows, total }, unread] = await Promise.all([repository.listAlerts(context, filter), repository.countUnreadAlerts(context)]);
       return { data: rows.map(toAlert), total, unread };
     });
@@ -121,21 +121,21 @@ export class PlatformService {
 
   async unreadAlertCount(operation: PlatformOperation): Promise<number> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "viewer");
+      await requirePlatformAdministrator(context, operation.userId, "viewer");
       return repository.countUnreadAlerts(context);
     });
   }
 
   async markAlertsRead(operation: PlatformOperation, alertIds: string[] | undefined): Promise<void> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "viewer");
+      await requirePlatformAdministrator(context, operation.userId, "viewer");
       await repository.markAlertsRead(context, alertIds);
     });
   }
 
   async listAnnouncements(operation: PlatformOperation, filter: ListSystemAnnouncementsFilter): Promise<SystemAnnouncementsPage> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "support");
+      await requirePlatformAdministrator(context, operation.userId, "support");
       const { rows, total } = await repository.listAnnouncements(context, filter);
       return { data: rows.map(toAnnouncement), total };
     });
@@ -143,7 +143,7 @@ export class PlatformService {
 
   async createAnnouncement(operation: PlatformOperation, input: CreateSystemAnnouncementInput): Promise<SystemAnnouncement> {
     return this.run(operation, async (context) => {
-      const actor = await this.requireAdministrator(context, operation.userId, "support");
+      const actor = await requirePlatformAdministrator(context, operation.userId, "support");
       const created = await repository.createAnnouncement(context, actor.id, input);
       await auditRepository.log(context, {
         businessId: null,
@@ -159,7 +159,7 @@ export class PlatformService {
 
   async updateAnnouncement(operation: PlatformOperation, announcementId: string, input: UpdateSystemAnnouncementInput): Promise<SystemAnnouncement> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "support");
+      await requirePlatformAdministrator(context, operation.userId, "support");
       const existing = await repository.findAnnouncementById(context, announcementId);
       if (!existing) throw notFoundError("Announcement not found");
 
@@ -178,7 +178,7 @@ export class PlatformService {
 
   async deleteAnnouncement(operation: PlatformOperation, announcementId: string): Promise<void> {
     return this.run(operation, async (context) => {
-      await this.requireAdministrator(context, operation.userId, "support");
+      await requirePlatformAdministrator(context, operation.userId, "support");
       const deleted = await repository.deleteAnnouncement(context, announcementId);
       if (!deleted) throw notFoundError("Announcement not found");
 
@@ -193,21 +193,6 @@ export class PlatformService {
     });
   }
 
-  /**
-   * Platform-admin authorization is independent of any business role - it
-   * never resolves through app.business_memberships. There is no
-   * self-service path to becoming a platform administrator; the first one is
-   * granted out-of-band (see db/bootstrap-platform-admin.ts).
-   */
-  private async requireAdministrator(context: DatabaseContext, userId: string, minimumRole: PlatformAdministratorRole): Promise<PlatformAdministratorRow> {
-    const administrator = await repository.findAdministratorByUserId(context, userId);
-    if (!administrator || !administrator.isActive) throw forbiddenError("Platform administrator access required");
-    if (ROLE_RANK[administrator.role] < ROLE_RANK[minimumRole]) {
-      throw forbiddenError(`Requires the ${minimumRole} role or higher`);
-    }
-    return administrator;
-  }
-
   private async run<T>(operation: PlatformOperation, work: (context: DatabaseContext) => Promise<T>): Promise<T> {
     try {
       return await withDatabaseContext(this.database, withIdentity(operation.requestId, operation.userId, null), work);
@@ -216,6 +201,26 @@ export class PlatformService {
       throw normalizeDatabaseError(error);
     }
   }
+}
+
+/**
+ * Platform-admin authorization is independent of any business role - it
+ * never resolves through app.business_memberships. There is no
+ * self-service path to becoming a platform administrator; the first one is
+ * granted out-of-band (see db/bootstrap-platform-admin.ts).
+ *
+ * Exported for other platform-staff-facing domains (e.g. risk) to reuse
+ * directly, the same way every domain imports authorization's
+ * requirePermission rather than re-querying membership permissions itself -
+ * this check should only be implemented once.
+ */
+export async function requirePlatformAdministrator(context: DatabaseContext, userId: string, minimumRole: PlatformAdministratorRole): Promise<PlatformAdministratorRow> {
+  const administrator = await repository.findAdministratorByUserId(context, userId);
+  if (!administrator || !administrator.isActive) throw forbiddenError("Platform administrator access required");
+  if (ROLE_RANK[administrator.role] < ROLE_RANK[minimumRole]) {
+    throw forbiddenError(`Requires the ${minimumRole} role or higher`);
+  }
+  return administrator;
 }
 
 function toAdministrator(row: PlatformAdministratorRow): PlatformAdministrator {

@@ -10,6 +10,7 @@ import * as auditRepository from "../audit/audit.repository.js";
 import * as authorizationRepository from "../authorization/authorization.repository.js";
 import { requirePermission } from "../authorization/authorization.service.js";
 import * as businessesRepository from "../businesses/businesses.repository.js";
+import { hasActiveHold, recordSignal } from "../risk/risk.service.js";
 import * as repository from "./banking.repository.js";
 import type {
   BankingOperation,
@@ -27,6 +28,9 @@ import type {
 
 const REQUERY_COOLDOWN_MS = 10 * 60 * 1000;
 const ASSET_CODE = "NGN";
+/** Ported from legacy fraud-detection.service.ts's runChecks() thresholds (₦500k/₦2m) - real rule values that existed in legacy but were never actually wired to any request path. This is that wiring. */
+const LARGE_WITHDRAWAL_HIGH_MINOR = 500_000_00n;
+const LARGE_WITHDRAWAL_CRITICAL_MINOR = 2_000_000_00n;
 
 export class BankingService {
   constructor(
@@ -193,6 +197,10 @@ export class BankingService {
     return this.run(operation, async (context) => {
       await requirePermission(context, operation.businessId, "banking.manage");
 
+      if (await hasActiveHold(context, "business", operation.businessId)) {
+        throw forbiddenError("This business's wallet is on hold; contact support before withdrawing.");
+      }
+
       const existing = await repository.findWithdrawalByIdempotencyKey(context, operation.businessId, input.idempotencyKey);
       if (existing) return existing;
 
@@ -201,6 +209,18 @@ export class BankingService {
 
       const balance = await repository.getAvailableBalance(context, operation.businessId);
       if (BigInt(input.amountMinor) > BigInt(balance)) throw validationError("Insufficient wallet balance");
+
+      const withdrawalAmount = BigInt(input.amountMinor);
+      if (withdrawalAmount >= LARGE_WITHDRAWAL_HIGH_MINOR) {
+        await recordSignal(context, {
+          entityType: "business",
+          entityId: operation.businessId,
+          signalType: withdrawalAmount >= LARGE_WITHDRAWAL_CRITICAL_MINOR ? "very_large_withdrawal" : "large_withdrawal",
+          description: `Withdrawal of ${input.amountMinor} ${ASSET_CODE} minor units requested`,
+          severity: withdrawalAmount >= LARGE_WITHDRAWAL_CRITICAL_MINOR ? "critical" : "high",
+          metadata: { amountMinor: input.amountMinor, assetCode: ASSET_CODE, requestedBy: operation.userId },
+        });
+      }
 
       const membership = await authorizationRepository.findMembershipByUserId(context, operation.businessId, operation.userId);
       const isOwner = membership?.roles.some((role) => role.code === "owner") ?? false;
