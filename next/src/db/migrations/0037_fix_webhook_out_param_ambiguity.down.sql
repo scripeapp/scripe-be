@@ -1,0 +1,4 @@
+-- The previous function bodies remain valid (functionally, if buggy) if this
+-- migration is rolled back — same precedent as 0010's down migration for a
+-- create-or-replace-only change. Not restoring the ambiguous-column bug on
+-- purpose.
