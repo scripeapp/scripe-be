@@ -16,6 +16,7 @@ export interface BankingProfileRow {
   readonly firstName: string | null;
   readonly lastName: string | null;
   readonly phone: string | null;
+  readonly bvn: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -100,6 +101,9 @@ export interface SubmitKycInput {
   readonly bvn: string;
   readonly bankCode: string;
   readonly accountNumber: string;
+  /** Required by some providers' identity verification (e.g. Anchor); unused by others. */
+  readonly dateOfBirth?: string;
+  readonly gender?: "male" | "female" | "other";
 }
 
 export interface RequestVirtualAccountInput {

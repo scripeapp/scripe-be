@@ -58,6 +58,12 @@ export async function updateBusiness(context: DatabaseContext, businessId: strin
   if (input.defaultCurrency !== undefined) fields.push(sql`"defaultCurrency"=${input.defaultCurrency}`);
   if (input.timezone !== undefined) fields.push(sql`"timezone"=${input.timezone}`);
   if (input.primaryVertical !== undefined) fields.push(sql`"primaryVertical"=${input.primaryVertical}`);
+  if (input.addressLine1 !== undefined) fields.push(sql`"addressLine1"=${input.addressLine1}`);
+  if (input.addressLine2 !== undefined) fields.push(sql`"addressLine2"=${input.addressLine2}`);
+  if (input.city !== undefined) fields.push(sql`"city"=${input.city}`);
+  if (input.state !== undefined) fields.push(sql`"state"=${input.state}`);
+  if (input.postalCode !== undefined) fields.push(sql`"postalCode"=${input.postalCode}`);
+  if (input.country !== undefined) fields.push(sql`"country"=${input.country}`);
   const result = await sql<BusinessRow>`
     update app.businesses set ${sql.join(fields, sql`, `)}
     where "id"=${businessId}::uuid and "status" <> 'archived'

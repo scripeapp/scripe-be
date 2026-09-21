@@ -41,6 +41,13 @@ const EnvironmentSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_NAME: z.string().optional(),
+  BANKING_PROVIDER: z.enum(["brails", "anchor"]).optional(),
+  BRAILS_API_KEY: z.string().optional(),
+  BRAILS_BASE_URL: z.string().url().default("https://sandboxapi.onbrails.com/api/v1"),
+  ANCHOR_API_KEY: z.string().optional(),
+  ANCHOR_BASE_URL: z.string().url().default("https://api.sandbox.getanchor.co/api/v1"),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
+  FLW_SECRET_KEY: z.string().optional(),
 }).superRefine((environment, context) => {
   if (environment.NODE_ENV === "production" && !environment.PLUNK_API_KEY) {
     context.addIssue({
@@ -63,6 +70,20 @@ const EnvironmentSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["R2_ACCOUNT_ID"],
       message: "R2 object storage credentials are required in production.",
+    });
+  }
+  if (environment.BANKING_PROVIDER === "brails" && !environment.BRAILS_API_KEY) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["BRAILS_API_KEY"],
+      message: "BRAILS_API_KEY is required when BANKING_PROVIDER is 'brails'.",
+    });
+  }
+  if (environment.BANKING_PROVIDER === "anchor" && !environment.ANCHOR_API_KEY) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ANCHOR_API_KEY"],
+      message: "ANCHOR_API_KEY is required when BANKING_PROVIDER is 'anchor'.",
     });
   }
 });

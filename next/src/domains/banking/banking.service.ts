@@ -7,6 +7,7 @@ import { paymentProvider } from "../../integrations/payment-provider.js";
 import { AppError, conflictError, forbiddenError, notFoundError, validationError } from "../../shared/errors.js";
 import * as auditRepository from "../audit/audit.repository.js";
 import { requirePermission } from "../authorization/authorization.service.js";
+import * as businessesRepository from "../businesses/businesses.repository.js";
 import * as repository from "./banking.repository.js";
 import type {
   BankingOperation,
@@ -68,6 +69,8 @@ export class BankingService {
         bvn: input.bvn,
         bankCode: input.bankCode,
         accountNumber: input.accountNumber,
+        dateOfBirth: input.dateOfBirth,
+        gender: input.gender,
       });
 
       const now = new Date();
@@ -81,6 +84,7 @@ export class BankingService {
         firstName: input.firstName,
         lastName: input.lastName,
         phone: input.phone,
+        bvn: input.bvn,
       });
 
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, { status: validation.status });
@@ -92,7 +96,14 @@ export class BankingService {
     return this.run(operation, async (context) => {
       await requirePermission(context, operation.businessId, "banking.manage");
       const profile = await repository.findProfile(context, operation.businessId);
-      if (profile?.kycStatus !== "verified") throw forbiddenError("Complete banking KYC before requesting a virtual account");
+      // Not every provider can confirm BVN validation synchronously (Anchor
+      // resolves it via webhook; Brails validates identity as part of the
+      // account-creation call itself), so a "pending" KYC status is allowed
+      // through here — the provider's own account-creation call is the real
+      // gate, and a still-unverified customer simply gets rejected by it.
+      if (!profile || profile.kycStatus === "not_started" || profile.kycStatus === "failed") {
+        throw forbiddenError("Complete banking KYC before requesting a virtual account");
+      }
 
       const existing = await repository.findCurrentVirtualAccount(context, operation.businessId);
       if (existing) return existing;
@@ -107,8 +118,10 @@ export class BankingService {
         lastName: profile.lastName,
         phone: profile.phone,
         preferredBank: input.preferredBank,
+        bvn: profile.bvn ?? undefined,
       });
 
+      const status = account.status;
       const created = await repository.createVirtualAccount(context, operation.businessId, {
         providerCustomerCode: profile.providerCustomerCode,
         providerAccountId: account.providerAccountId,
@@ -116,10 +129,17 @@ export class BankingService {
         accountName: account.accountName,
         bankName: account.bankName,
         bankSlug: account.bankSlug,
-        status: account.accountNumber ? "active" : "pending",
+        status,
         assignmentReference: account.assignmentReference,
         metadata: { ...account },
       });
+
+      // A successfully issued (active) virtual account is itself proof the
+      // provider accepted this customer's identity — close the loop on a
+      // KYC status that could only reach "pending" synchronously.
+      if (status === "active" && profile.kycStatus !== "verified") {
+        await repository.upsertProfile(context, operation.businessId, { kycStatus: "verified", kycVerifiedAt: new Date() });
+      }
 
       await this.logAction(context, operation, "banking.virtual_account_requested", "virtual_account", created.id, {});
       return created;
@@ -131,16 +151,28 @@ export class BankingService {
       await requirePermission(context, operation.businessId, "banking.manage");
       const account = await repository.findCurrentVirtualAccount(context, operation.businessId);
       if (!account) throw notFoundError("No virtual account request found");
-      if (!account.accountNumber || !account.bankSlug) throw conflictError("Virtual account is not ready for requery");
+      // Some providers (e.g. Anchor) issue accounts asynchronously and never
+      // return an accountNumber on the initial create call — requery is how
+      // that in-flight state gets resolved, so this only needs the
+      // provider's own id for the account, not a fully-provisioned number.
+      if (!account.providerAccountId) throw conflictError("Virtual account is not ready for requery");
 
       const lastRequeryAt = account.lastRequeryAt?.getTime() ?? 0;
       if (Date.now() - lastRequeryAt < REQUERY_COOLDOWN_MS) throw conflictError("Try requerying again after 10 minutes");
 
-      const refreshed = await paymentProvider.requeryDedicatedAccount({ accountNumber: account.accountNumber, bankSlug: account.bankSlug });
+      const refreshed = await paymentProvider.requeryDedicatedAccount({ accountNumber: account.accountNumber, bankSlug: account.bankSlug, providerAccountId: account.providerAccountId });
       const updated = await repository.updateVirtualAccount(context, account.id, {
-        status: refreshed.accountNumber ? "active" : "failed",
+        status: refreshed.status,
         lastRequeryAt: new Date(),
       });
+
+      if (refreshed.status === "active") {
+        const profile = await repository.findProfile(context, operation.businessId);
+        if (profile && profile.kycStatus !== "verified") {
+          await repository.upsertProfile(context, operation.businessId, { kycStatus: "verified", kycVerifiedAt: new Date() });
+        }
+      }
+
       return updated!;
     });
   }
@@ -165,13 +197,28 @@ export class BankingService {
       const balance = await repository.getAvailableBalance(context, operation.businessId);
       if (BigInt(input.amountMinor) > BigInt(balance)) throw validationError("Insufficient wallet balance");
 
-      const recipient = await paymentProvider.createTransferRecipient({ name: input.accountName, accountNumber: input.accountNumber, bankCode: input.bankCode });
+      // Some providers (e.g. Anchor) debit a specific deposit account rather
+      // than a platform-wide balance (e.g. Paystack), so the business's own
+      // current virtual account has to be resolved and passed through.
+      const virtualAccount = await repository.findCurrentVirtualAccount(context, operation.businessId);
+      // Some providers (e.g. Brails) require the sender's registered
+      // business address as compliance data when adding a payout
+      // beneficiary — resolved here rather than assumed present.
+      const business = await businessesRepository.findBusiness(context, operation.businessId);
+      const sender =
+        business?.addressLine1 && business.city && business.postalCode
+          ? { businessName: business.displayName, addressLine1: business.addressLine1, city: business.city, country: business.country, postalCode: business.postalCode }
+          : undefined;
+
+      const recipient = await paymentProvider.createTransferRecipient({ name: input.accountName, accountNumber: input.accountNumber, bankCode: input.bankCode, sender });
       const reference = `wd_${randomUUID()}`;
       const transfer = await paymentProvider.initiateTransfer({
         amountMinor: String(input.amountMinor),
         recipientCode: recipient.recipientCode,
         reference,
         reason: "Wallet withdrawal",
+        sourceAccountId: virtualAccount?.providerAccountId,
+        customerEmail: profile.email,
       });
 
       const withdrawal = await repository.createWithdrawal(context, operation.businessId, operation.userId, {
@@ -195,7 +242,7 @@ export class BankingService {
         status: "pending",
         assetCode: ASSET_CODE,
         amountMinor: String(input.amountMinor),
-        provider: "paystack",
+        provider: paymentProvider.name,
         providerReference: reference,
         description: "Wallet withdrawal",
         metadata: { withdrawalId: withdrawal.id },
@@ -216,7 +263,7 @@ export class BankingService {
       const updated = await repository.updateWithdrawal(context, withdrawal.id, { status: transfer.status });
 
       if (transfer.status === "success") {
-        await repository.markWalletTransactionPosted(context, "paystack", withdrawal.providerReference);
+        await repository.markWalletTransactionPosted(context, paymentProvider.name, withdrawal.providerReference);
       } else if (transfer.status === "failed") {
         await repository.postWalletTransaction(context, operation.businessId, {
           type: "reversal",
@@ -224,7 +271,7 @@ export class BankingService {
           status: "posted",
           assetCode: withdrawal.assetCode,
           amountMinor: withdrawal.amountMinor,
-          provider: "paystack",
+          provider: paymentProvider.name,
           providerReference: `${withdrawal.providerReference}:reversal`,
           description: "Withdrawal reversal",
           metadata: { withdrawalId: withdrawal.id },

@@ -14,7 +14,7 @@ import type {
   WithdrawalStatus,
 } from "./banking.types.js";
 
-const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone", "createdAt", "updatedAt"`;
+const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone", "bvn", "createdAt", "updatedAt"`;
 const VIRTUAL_ACCOUNT_COLUMNS = `"id", "businessId", "provider", "providerCustomerCode", "providerAccountId", "accountNumber", "accountName", "bankName", "bankSlug", "assetCode", "status", "assignmentReference", "failureReason", "metadata", "lastRequeryAt", "createdAt", "updatedAt"`;
 const WALLET_TRANSACTION_COLUMNS = `"id", "businessId", "type", "direction", "status", "assetCode", "amountMinor", "grossAmountMinor", "feeAmountMinor", "feeBreakdown", "provider", "providerReference", "description", "metadata", "postedAt", "createdAt"`;
 const WITHDRAWAL_COLUMNS = `"id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "transferRecipientCode", "providerReference", "providerTransferCode", "idempotencyKey", "status", "failureReason", "createdAt", "updatedAt"`;
@@ -39,24 +39,26 @@ export async function upsertProfile(
     firstName?: string;
     lastName?: string;
     phone?: string;
+    bvn?: string;
   },
 ): Promise<BankingProfileRow> {
   const result = await sql<BankingProfileRow>`
-    insert into app.banking_profiles ("businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone")
+    insert into app.banking_profiles ("businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone", "bvn")
     values (
       ${businessId}::uuid, ${fields.kycStatus}, ${fields.kycFailureReason ?? null}, ${fields.kycSubmittedAt ?? null}, ${fields.kycVerifiedAt ?? null},
-      ${fields.providerCustomerCode ?? null}, ${fields.email ?? null}, ${fields.firstName ?? null}, ${fields.lastName ?? null}, ${fields.phone ?? null}
+      ${fields.providerCustomerCode ?? null}, ${fields.email ?? null}, ${fields.firstName ?? null}, ${fields.lastName ?? null}, ${fields.phone ?? null}, ${fields.bvn ?? null}
     )
     on conflict ("businessId") do update set
       "kycStatus" = excluded."kycStatus",
       "kycFailureReason" = excluded."kycFailureReason",
-      "kycSubmittedAt" = excluded."kycSubmittedAt",
+      "kycSubmittedAt" = coalesce(excluded."kycSubmittedAt", app.banking_profiles."kycSubmittedAt"),
       "kycVerifiedAt" = excluded."kycVerifiedAt",
       "providerCustomerCode" = coalesce(excluded."providerCustomerCode", app.banking_profiles."providerCustomerCode"),
       "email" = coalesce(excluded."email", app.banking_profiles."email"),
       "firstName" = coalesce(excluded."firstName", app.banking_profiles."firstName"),
       "lastName" = coalesce(excluded."lastName", app.banking_profiles."lastName"),
       "phone" = coalesce(excluded."phone", app.banking_profiles."phone"),
+      "bvn" = coalesce(excluded."bvn", app.banking_profiles."bvn"),
       "updatedAt" = now()
     returning ${sql.raw(PROFILE_COLUMNS)}
   `.execute(context.transaction);

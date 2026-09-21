@@ -8,6 +8,12 @@ export interface BusinessRow {
   readonly timezone: string;
   readonly primaryVertical: string | null;
   readonly createdBy: string;
+  readonly addressLine1: string | null;
+  readonly addressLine2: string | null;
+  readonly city: string | null;
+  readonly state: string | null;
+  readonly postalCode: string | null;
+  readonly country: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly archivedAt: Date | null;
@@ -44,6 +50,12 @@ export interface BusinessUpdateInput {
   readonly defaultCurrency?: string;
   readonly timezone?: string;
   readonly primaryVertical?: string | null;
+  readonly addressLine1?: string | null;
+  readonly addressLine2?: string | null;
+  readonly city?: string | null;
+  readonly state?: string | null;
+  readonly postalCode?: string | null;
+  readonly country?: string;
 }
 
 export interface BusinessOperation {

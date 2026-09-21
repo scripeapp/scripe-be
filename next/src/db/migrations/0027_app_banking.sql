@@ -34,6 +34,10 @@ create table app.banking_profiles (
   "firstName" text,
   "lastName" text,
   "phone" text,
+  -- Plain column for now, per the same call made for compliance's
+  -- beneficial-owner PII this session — flagged as an encryption follow-up,
+  -- not deferred silently.
+  "bvn" text,
   "createdAt" timestamptz not null default now(),
   "updatedAt" timestamptz not null default now()
 );
