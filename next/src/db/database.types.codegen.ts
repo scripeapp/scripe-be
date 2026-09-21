@@ -720,6 +720,31 @@ export interface InventoryLocations {
   status: Generated<string>;
 }
 
+export interface JobAttempts {
+  attemptNumber: number;
+  error: string | null;
+  finishedAt: Generated<Timestamp>;
+  id: Generated<string>;
+  jobId: string;
+  startedAt: Timestamp;
+  status: string;
+}
+
+export interface Jobs {
+  attempts: Generated<number>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  lastError: string | null;
+  lockedBy: string | null;
+  lockedUntil: Timestamp | null;
+  maxAttempts: Generated<number>;
+  payload: Generated<Json>;
+  runAt: Generated<Timestamp>;
+  status: Generated<string>;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface Locations {
   addressLine1: string | null;
   addressLine2: string | null;
@@ -1556,6 +1581,8 @@ export interface DB {
   goods_receipts: GoodsReceipts;
   inventory_items: InventoryItems;
   inventory_locations: InventoryLocations;
+  job_attempts: JobAttempts;
+  jobs: Jobs;
   locations: Locations;
   membership_roles: MembershipRoles;
   modifier_groups: ModifierGroups;

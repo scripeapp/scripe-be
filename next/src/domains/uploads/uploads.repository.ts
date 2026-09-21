@@ -71,3 +71,16 @@ export async function markDeleted(context: DatabaseContext, uploadId: string): P
   `.execute(context.transaction);
   return result.rows[0]!;
 }
+
+/**
+ * Called from the jobs domain's scheduler, which has no request-scoped
+ * caller identity - goes through the security-definer function
+ * uploads_pending_idx's own comment (0026) flagged as a future need
+ * (rules.md E: "Orphan cleanup runs as the worker role"), rather than a
+ * plain bulk UPDATE gated by ownership/business RLS. Returns how many
+ * uploads were expired, for the job's own attempt/result logging.
+ */
+export async function expireStalePendingUploads(context: DatabaseContext, cutoff: Date): Promise<number> {
+  const result = await sql<{ count: number }>`select app.expire_stale_pending_uploads(${cutoff}) as "count"`.execute(context.transaction);
+  return result.rows[0]?.count ?? 0;
+}

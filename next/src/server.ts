@@ -4,7 +4,10 @@ import {
   closeDatabase,
   configureDatabaseGateway,
   createDatabaseGateway,
+  getDatabase,
 } from "./db/database.js";
+import { registerBuiltinJobHandlers, seedBuiltinJobs } from "./domains/jobs/jobs.handlers.js";
+import { JobScheduler } from "./domains/jobs/jobs.service.js";
 import { loadEnvironment } from "./shared/environment.js";
 
 async function startServer(): Promise<void> {
@@ -13,6 +16,12 @@ async function startServer(): Promise<void> {
   const pool = createDatabasePool();
   configurePoolErrorHandling(pool);
   configureDatabaseGateway(createDatabaseGateway(pool));
+
+  const database = getDatabase();
+  const jobScheduler = new JobScheduler(database);
+  registerBuiltinJobHandlers(jobScheduler, database);
+  await seedBuiltinJobs(database);
+  jobScheduler.start();
 
   const app = createApp();
 
@@ -34,6 +43,7 @@ async function startServer(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[server] ${signal} received; shutting down`);
+    jobScheduler.stop();
 
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));

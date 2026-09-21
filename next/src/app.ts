@@ -37,6 +37,7 @@ import { createPlatformRouter } from "./domains/platform/platform.routes.js";
 import { createCommunicationsRouter } from "./domains/communications/communications.routes.js";
 import { createRiskRouter } from "./domains/risk/risk.routes.js";
 import { createDeliveryRouter } from "./domains/delivery/delivery.routes.js";
+import { createJobsRouter } from "./domains/jobs/jobs.routes.js";
 import { createHealthRouter } from "./routes/health.js";
 
 export function createApp(): Express {
@@ -92,6 +93,7 @@ export function createApp(): Express {
   app.use(createCommunicationsRouter());
   app.use(createRiskRouter());
   app.use(createDeliveryRouter());
+  app.use(createJobsRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);
