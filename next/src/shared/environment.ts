@@ -48,6 +48,9 @@ const EnvironmentSchema = z.object({
   ANCHOR_BASE_URL: z.string().url().default("https://api.sandbox.getanchor.co/api/v1"),
   PAYSTACK_SECRET_KEY: z.string().optional(),
   FLW_SECRET_KEY: z.string().optional(),
+  FLW_WEBHOOK_HASH: z.string().optional(),
+  ANCHOR_WEBHOOK_TOKEN: z.string().optional(),
+  BRAILS_WEBHOOK_SECRET: z.string().optional(),
 }).superRefine((environment, context) => {
   if (environment.NODE_ENV === "production" && !environment.PLUNK_API_KEY) {
     context.addIssue({

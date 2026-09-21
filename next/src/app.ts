@@ -31,6 +31,7 @@ import { createFulfillmentRouter } from "./domains/fulfillment/fulfillment.route
 import { createReceiptsRouter } from "./domains/receipts/receipts.routes.js";
 import { createReturnsRouter } from "./domains/returns/returns.routes.js";
 import { createBankingRouter } from "./domains/banking/banking.routes.js";
+import { createProviderEventsRouter } from "./domains/provider-events/provider-events.routes.js";
 import { createHealthRouter } from "./routes/health.js";
 
 export function createApp(): Express {
@@ -43,6 +44,12 @@ export function createApp(): Express {
   // runs before the generic JSON parser because it owns its request bodies.
   app.use(cors(createCorsOptions()));
   app.all("/api/auth/*", toNodeHandler(getAuth()));
+
+  // Webhooks are unauthenticated (the provider's signature is the only
+  // caller identity) and need the exact raw bytes the provider signed, so
+  // they're mounted with their own raw-body parser before the app-wide
+  // JSON parser — same reasoning as Better Auth above.
+  app.use(createProviderEventsRouter());
 
   app.use(express.json());
 

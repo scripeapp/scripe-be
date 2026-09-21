@@ -25,6 +25,7 @@ interface RequestOptions {
   readonly body?: string;
   readonly cookie?: string;
   readonly origin?: string | null;
+  readonly headers?: Record<string, string>;
 }
 
 export async function startTestServer(): Promise<TestServer> {
@@ -70,6 +71,9 @@ export async function request(
   const origin = options.origin === undefined ? baseUrl : options.origin;
   if (origin) {
     headers.origin = origin;
+  }
+  if (options.headers) {
+    Object.assign(headers, options.headers);
   }
 
   return new Promise<HttpResponse>((resolve, reject) => {
