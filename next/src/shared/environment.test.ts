@@ -62,4 +62,31 @@ describe("loadEnvironment", () => {
       "https://admin.example.com",
     ]);
   });
+
+  it("accepts R2 object storage left entirely unset in development", () => {
+    expect(() => loadEnvironment({ ...MINIMAL_VALID })).not.toThrow();
+  });
+
+  it("rejects a partially configured R2 object storage", () => {
+    expect(() =>
+      loadEnvironment({ ...MINIMAL_VALID, R2_ACCOUNT_ID: "acct", R2_BUCKET_NAME: "bucket" }),
+    ).toThrow(/must be set together/);
+  });
+
+  it("requires R2 object storage in production", () => {
+    expect(() =>
+      loadEnvironment({ ...MINIMAL_VALID, NODE_ENV: "production", PLUNK_API_KEY: "key" }),
+    ).toThrow(/R2 object storage credentials are required in production/);
+  });
+
+  it("accepts a fully configured R2 object storage", () => {
+    const env = loadEnvironment({
+      ...MINIMAL_VALID,
+      R2_ACCOUNT_ID: "acct",
+      R2_ACCESS_KEY_ID: "key-id",
+      R2_SECRET_ACCESS_KEY: "secret",
+      R2_BUCKET_NAME: "bucket",
+    });
+    expect(env.R2_BUCKET_NAME).toBe("bucket");
+  });
 });

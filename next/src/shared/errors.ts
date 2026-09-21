@@ -60,3 +60,7 @@ export function forbiddenError(message = "Forbidden"): AppError {
 export function authRequiredError(message = "Authentication required"): AppError {
   return new AppError("AUTH_REQUIRED", message, 401);
 }
+
+export function serviceUnavailableError(message: string): AppError {
+  return new AppError("SERVICE_UNAVAILABLE", message, 503);
+}

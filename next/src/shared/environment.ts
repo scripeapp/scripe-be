@@ -37,6 +37,10 @@ const EnvironmentSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   PLUNK_API_KEY: z.string().optional(),
   PLUNK_FROM_EMAIL: z.string().email().optional(),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
 }).superRefine((environment, context) => {
   if (environment.NODE_ENV === "production" && !environment.PLUNK_API_KEY) {
     context.addIssue({
@@ -45,14 +49,39 @@ const EnvironmentSchema = z.object({
       message: "PLUNK_API_KEY is required in production.",
     });
   }
+  const r2Fields = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"] as const;
+  const r2Configured = r2Fields.filter((field) => environment[field]).length;
+  if (r2Configured > 0 && r2Configured < r2Fields.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["R2_ACCOUNT_ID"],
+      message: "R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME must be set together or not at all.",
+    });
+  }
+  if (environment.NODE_ENV === "production" && r2Configured === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["R2_ACCOUNT_ID"],
+      message: "R2 object storage credentials are required in production.",
+    });
+  }
 });
 
 export type Environment = z.infer<typeof EnvironmentSchema>;
 
+/** An optional field left blank (e.g. `PLUNK_FROM_EMAIL=` in .env.example) must read as "not set", not "set to an invalid empty string". */
+function withoutEmptyValues(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const normalized: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== "") normalized[key] = value;
+  }
+  return normalized;
+}
+
 export function loadEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): Environment {
-  const parsed = EnvironmentSchema.safeParse(source);
+  const parsed = EnvironmentSchema.safeParse(withoutEmptyValues(source));
   if (!parsed.success) {
     const details = parsed.error.issues
       .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
