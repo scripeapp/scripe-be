@@ -140,7 +140,10 @@ describe("returns domain", () => {
     expect(returned.refundableAmountMinor).toBe("50000");
     expect(returned.lines).toEqual([expect.objectContaining({ restocked: true, amountMinor: "50000" })]);
 
-    expect(await balanceOf(owner.cookies, setup.base, setup.inventoryItemId, setup.inventoryLocationId)).toBe("1");
+    // Stock quantities are numeric(20,6); the balances endpoint returns the
+    // full-precision string here, same as inventory.integration.test.ts's
+    // "available" assertion ("7.000000") — not trimmed to "1".
+    expect(await balanceOf(owner.cookies, setup.base, setup.inventoryItemId, setup.inventoryLocationId)).toBe("1.000000");
 
     const list = await request(server.baseUrl, `${setup.base}/returns?orderId=${setup.orderId}`, { cookie: owner.cookies });
     expect((list.body as { data: { returns: { id: string }[] } }).data.returns).toHaveLength(1);

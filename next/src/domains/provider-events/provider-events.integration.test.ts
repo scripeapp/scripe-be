@@ -59,15 +59,19 @@ function paystackSignature(rawBody: string): string {
 
 describe("provider-events domain", () => {
   it("has no authentication middleware on webhook routes — reachable without a session", async () => {
-    // Not asserting a specific status here since every path touches the
-    // database (even to log a failed-signature attempt), so in this
-    // environment (no live Postgres) it fails the same way every other
-    // integration test in this suite does. The point of this assertion is
-    // that the route exists and isn't gated by requireAuth's 401 — a
-    // missing-DB failure is a 5xx from the error handler, never the 401 a
-    // missing session would produce.
+    // A request with no session cookie AND no provider signature still hits
+    // the controller (it's never turned away by requireAuth) — it just goes
+    // on to fail signature verification, which also happens to answer 401.
+    // So the status code alone can't distinguish "blocked by session auth"
+    // from "reached the handler, signature was invalid" — both are 401.
+    // What does distinguish them is the error message: requireAuth always
+    // throws authRequiredError() with its default "Authentication required"
+    // message, while the webhook controller throws its own
+    // authRequiredError("Invalid webhook signature") for a bad signature.
+    // Asserting the message rules out the session-auth path specifically.
     const response = await request(server.baseUrl, "/api/webhooks/paystack", { method: "POST", body: "{}" });
-    expect(response.status).not.toBe(401);
+    expect(response.status).toBe(401);
+    expect((response.body as { error: { message: string } }).error.message).toBe("Invalid webhook signature");
   });
 
   it("rejects malformed JSON with something other than a silent crash", async () => {

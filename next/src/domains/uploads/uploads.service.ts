@@ -40,23 +40,31 @@ export class UploadsService {
   }
 
   async confirm(operation: UploadsOperation, uploadId: string): Promise<Upload> {
-    return this.run(operation, async (context) => {
+    // Marking the upload failed must survive even though this method then throws:
+    // withDatabaseContext runs `work` inside a single transaction, so a throw from
+    // within it rolls back everything the callback did, including the failure write.
+    // Detect the outcome inside one transaction, then commit the failure separately.
+    const outcome = await this.run(operation, async (context) => {
       const upload = await this.requireAccessible(context, operation, uploadId);
       if (upload.status !== "pending") throw conflictError(`Upload is already ${upload.status}`);
 
       const metadata = await objectStorage.headObject(upload.objectKey);
       if (!metadata.exists) {
-        await repository.markFailed(context, uploadId);
-        throw conflictError("The object was not found in storage. Upload it before confirming.");
+        return { failed: true as const, reason: "The object was not found in storage. Upload it before confirming." };
       }
       const actualSize = metadata.sizeBytes ?? 0;
       if (Math.abs(actualSize - Number(upload.sizeBytes)) > SIZE_MISMATCH_TOLERANCE_BYTES) {
-        await repository.markFailed(context, uploadId);
-        throw conflictError("The uploaded object's size does not match what was declared.");
+        return { failed: true as const, reason: "The uploaded object's size does not match what was declared." };
       }
 
-      return toUpload(await repository.markConfirmed(context, uploadId, actualSize.toString()));
+      return { failed: false as const, upload: toUpload(await repository.markConfirmed(context, uploadId, actualSize.toString())) };
     });
+
+    if (outcome.failed) {
+      await this.run(operation, (context) => repository.markFailed(context, uploadId));
+      throw conflictError(outcome.reason);
+    }
+    return outcome.upload;
   }
 
   async get(operation: UploadsOperation, uploadId: string): Promise<UploadWithDownloadUrl> {
