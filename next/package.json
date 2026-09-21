@@ -23,7 +23,8 @@
     "db:reset": "bun src/db/migrate-cli.ts reset",
     "db:seed": "bun src/db/seed.ts",
     "db:types": "bun src/db/generate-types.ts",
-    "db:check": "bun src/db/check.ts"
+    "db:check": "bun src/db/check.ts",
+    "db:bootstrap-platform-admin": "bun src/db/bootstrap-platform-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",

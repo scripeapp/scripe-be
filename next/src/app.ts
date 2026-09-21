@@ -33,6 +33,7 @@ import { createReturnsRouter } from "./domains/returns/returns.routes.js";
 import { createBankingRouter } from "./domains/banking/banking.routes.js";
 import { createProviderEventsRouter } from "./domains/provider-events/provider-events.routes.js";
 import { createApprovalsRouter } from "./domains/approvals/approvals.routes.js";
+import { createPlatformRouter } from "./domains/platform/platform.routes.js";
 import { createHealthRouter } from "./routes/health.js";
 
 export function createApp(): Express {
@@ -84,6 +85,7 @@ export function createApp(): Express {
   app.use(createReturnsRouter());
   app.use(createBankingRouter());
   app.use(createApprovalsRouter());
+  app.use(createPlatformRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);

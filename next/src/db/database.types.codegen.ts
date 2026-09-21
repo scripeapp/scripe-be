@@ -27,6 +27,161 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface AdminAlerts {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isRead: Generated<boolean>;
+  message: string;
+  metadata: Generated<Json>;
+  readAt: Timestamp | null;
+  severity: string;
+  title: string;
+  type: string;
+}
+
+export interface ApprovalGroupApprovers {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  email: string | null;
+  groupId: string;
+  id: Generated<string>;
+  name: string;
+  role: string | null;
+  userId: string | null;
+}
+
+export interface ApprovalGroups {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  position: Generated<number>;
+  subtitle: string | null;
+  title: string;
+  updatedAt: Generated<Timestamp>;
+  workflowId: string;
+}
+
+export interface ApprovalRequests {
+  amountMinor: Int8;
+  assetCode: Generated<string>;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  pendingApproverIds: Generated<string[]>;
+  pendingPayload: Json | null;
+  requestedBy: string | null;
+  status: Generated<string>;
+  steps: Generated<Json>;
+  subjectId: string;
+  subjectType: string;
+  updatedAt: Generated<Timestamp>;
+  version: Generated<number>;
+  workflowId: string | null;
+  workflowName: string;
+}
+
+export interface ApprovalRuleApprovers {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  email: string | null;
+  id: Generated<string>;
+  name: string;
+  position: Generated<number>;
+  role: string | null;
+  ruleId: string;
+  userId: string | null;
+}
+
+export interface ApprovalRules {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  description: Generated<string>;
+  groupId: string;
+  id: Generated<string>;
+  maxAmountMinor: Int8 | null;
+  minAmountMinor: Int8 | null;
+  rangeLabel: string;
+  requireAll: Generated<boolean>;
+  sequential: Generated<boolean>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ApprovalWorkflows {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  creatorEmail: Generated<string>;
+  creatorName: Generated<string>;
+  creatorRole: Generated<string>;
+  id: Generated<string>;
+  name: string;
+  noSelfApproval: Generated<boolean>;
+  status: Generated<string>;
+  triggerSubtitle: string | null;
+  triggerTitle: string | null;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ApprovalWorkflowSubmitters {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  email: string | null;
+  id: Generated<string>;
+  name: string;
+  role: string | null;
+  userId: string | null;
+  workflowId: string;
+}
+
+export interface AuditEvents {
+  action: string;
+  actorUserId: string | null;
+  businessId: string | null;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  ipAddress: string | null;
+  metadata: Generated<Json>;
+  requestId: string | null;
+  targetId: string | null;
+  targetType: string | null;
+  userAgent: string | null;
+}
+
+export interface BankingProfiles {
+  businessId: string;
+  bvn: string | null;
+  createdAt: Generated<Timestamp>;
+  email: string | null;
+  firstName: string | null;
+  kycFailureReason: string | null;
+  kycStatus: Generated<string>;
+  kycSubmittedAt: Timestamp | null;
+  kycVerifiedAt: Timestamp | null;
+  lastName: string | null;
+  phone: string | null;
+  providerCustomerCode: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface BeneficialOwners {
+  archivedAt: Timestamp | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  fullName: string;
+  id: Generated<string>;
+  /**
+   * Plain text in this slice — flagged for encryption/tokenization before real KYB data is stored (rules.md D).
+   */
+  idNumber: string;
+  idType: string;
+  nationality: Generated<string>;
+  ownershipPercentageBps: number | null;
+  relationship: string;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface BillLines {
   accountCategory: string;
   billId: string;
@@ -76,15 +231,50 @@ export interface Bills {
 }
 
 export interface Businesses {
+  addressLine1: string | null;
+  addressLine2: string | null;
   archivedAt: Timestamp | null;
+  city: string | null;
+  country: Generated<string>;
   createdAt: Generated<Timestamp>;
   createdBy: string;
   defaultCurrency: Generated<string>;
   displayName: string;
   id: Generated<string>;
+  postalCode: string | null;
   primaryVertical: string | null;
+  state: string | null;
   status: Generated<string>;
   timezone: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface BusinessInvitations {
+  acceptedAt: Timestamp | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  email: string;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  invitedBy: string;
+  revokedAt: Timestamp | null;
+  roleId: string;
+  tokenHash: string;
+}
+
+export interface BusinessLegalProfiles {
+  addressLine1: string;
+  addressLine2: string | null;
+  businessId: string;
+  city: string;
+  countryCode: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  postalCode: string | null;
+  registeredName: string;
+  registrationNumber: string;
+  state: string;
+  taxIdentificationNumber: string | null;
   updatedAt: Generated<Timestamp>;
 }
 
@@ -168,6 +358,46 @@ export interface CheckoutSessions {
   status: Generated<string>;
 }
 
+export interface ComplianceCases {
+  businessId: string;
+  closedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  notes: string | null;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ComplianceDocuments {
+  businessId: string;
+  caseId: string;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp | null;
+  id: Generated<string>;
+  mimeType: string;
+  /**
+   * Metadata only in this slice — no R2 upload flow exists yet (uploads domain not built). Values are not validated against real storage.
+   */
+  objectKey: string;
+  retentionUntil: Timestamp | null;
+  sizeBytes: Int8;
+  type: string;
+  uploadedBy: string;
+}
+
+export interface ComplianceSubmissions {
+  businessId: string;
+  caseId: string;
+  createdAt: Generated<Timestamp>;
+  externalReference: string | null;
+  id: Generated<string>;
+  provider: string;
+  responseSnapshot: Generated<Json>;
+  status: Generated<string>;
+  submittedBy: string;
+}
+
 export interface CustomerAccounts {
   acquisitionChannel: string | null;
   businessId: string;
@@ -176,6 +406,71 @@ export interface CustomerAccounts {
   lifecycleState: Generated<string>;
   partyId: string;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface DataPrivacyRequests {
+  businessId: string | null;
+  createdAt: Generated<Timestamp>;
+  description: string | null;
+  dueAt: Timestamp;
+  id: Generated<string>;
+  status: Generated<string>;
+  type: string;
+  userId: string;
+}
+
+export interface DiscountRedemptions {
+  amountMinor: Int8;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  customerPartyId: string | null;
+  discountId: string;
+  id: Generated<string>;
+  orderId: string;
+}
+
+export interface Discounts {
+  allowCodeOnTop: Generated<boolean>;
+  appliesTo: Generated<string>;
+  archivedAt: Timestamp | null;
+  businessId: string;
+  code: string | null;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  expiresAt: Timestamp | null;
+  fixedAmountMinor: Int8 | null;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  kind: string;
+  maxUsage: number | null;
+  name: string;
+  oneUsePerCustomer: Generated<boolean>;
+  percentageBps: number | null;
+  productIds: Generated<string[]>;
+  qualificationProductIds: Generated<string[]>;
+  showOnStorefront: Generated<boolean>;
+  startsAt: Timestamp | null;
+  trigger: string | null;
+  triggerQuantity: number | null;
+  triggerSpendMinor: Int8 | null;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+  usageCount: Generated<number>;
+}
+
+export interface FiscalDocuments {
+  businessId: string;
+  createdBy: string | null;
+  currency: string;
+  id: Generated<string>;
+  issuedAt: Generated<Timestamp>;
+  kind: Generated<string>;
+  number: string;
+  orderId: string;
+  sequence: Int8;
+  subtotalMinor: Int8;
+  taxMinor: Generated<Int8>;
+  totalMinor: Int8;
 }
 
 export interface FulfillmentLines {
@@ -297,6 +592,27 @@ export interface ModifierOptions {
   priceAdjustmentMinor: Generated<Int8>;
   sortOrder: Generated<number>;
   status: Generated<string>;
+}
+
+export interface NotificationPreferences {
+  channel: string;
+  enabled: Generated<boolean>;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+}
+
+export interface Notifications {
+  archivedAt: Timestamp | null;
+  body: Generated<string>;
+  businessId: string | null;
+  createdAt: Generated<Timestamp>;
+  data: Generated<Json>;
+  id: Generated<string>;
+  readAt: Timestamp | null;
+  title: string;
+  type: string;
+  userId: string;
 }
 
 export interface OrderLines {
@@ -425,6 +741,20 @@ export interface Permissions {
   id: Generated<string>;
 }
 
+export interface PlatformAdministrators {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  email: string;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  lastLoginAt: Timestamp | null;
+  name: string;
+  permissions: Generated<Json>;
+  role: string;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+}
+
 export interface PosDevices {
   businessId: string;
   createdAt: Generated<Timestamp>;
@@ -528,6 +858,19 @@ export interface ProductVariants {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface ProviderEvents {
+  errorMessage: string | null;
+  eventType: string;
+  id: Generated<string>;
+  payload: Json;
+  processedAt: Timestamp | null;
+  provider: string;
+  providerReference: string | null;
+  receivedAt: Generated<Timestamp>;
+  signatureValid: boolean;
+  status: Generated<string>;
+}
+
 export interface PurchaseOrderLines {
   businessId: string;
   createdAt: Generated<Timestamp>;
@@ -584,6 +927,29 @@ export interface RegisterShifts {
   storeId: string;
   updatedAt: Generated<Timestamp>;
   varianceMinor: Int8 | null;
+}
+
+export interface ReturnLines {
+  amountMinor: Int8;
+  businessId: string;
+  condition: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  orderLineId: string;
+  quantity: number;
+  restocked: Generated<boolean>;
+  returnId: string;
+}
+
+export interface Returns {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  inventoryLocationId: string | null;
+  orderId: string;
+  reason: string;
+  refundableAmountMinor: Generated<Int8>;
 }
 
 export interface RolePermissions {
@@ -731,6 +1097,22 @@ export interface SupportTickets {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface SystemAnnouncements {
+  audience: string;
+  body: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  endsAt: Timestamp | null;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  startsAt: Timestamp | null;
+  title: string;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface TaxRates {
   businessId: string;
   code: string;
@@ -764,6 +1146,32 @@ export interface Units {
   symbol: string;
 }
 
+export interface UploadProcessingJobs {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  resultSummary: Generated<Json>;
+  status: Generated<string>;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+  uploadId: string;
+}
+
+export interface Uploads {
+  businessId: string | null;
+  checksum: string | null;
+  confirmedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  deletedAt: Timestamp | null;
+  id: Generated<string>;
+  mimeType: string;
+  objectKey: string;
+  purpose: string;
+  retentionUntil: Timestamp | null;
+  sizeBytes: Int8;
+  status: Generated<string>;
+  userId: string;
+}
+
 export interface UserAddresses {
   addressLine1: string;
   addressLine2: string | null;
@@ -779,6 +1187,15 @@ export interface UserAddresses {
   state: string;
   updatedAt: Generated<Timestamp>;
   userId: string;
+}
+
+export interface UserConsents {
+  consentType: string;
+  grantedAt: Generated<Timestamp>;
+  id: Generated<string>;
+  revokedAt: Timestamp | null;
+  userId: string;
+  version: string;
 }
 
 export interface UserProfiles {
@@ -808,10 +1225,81 @@ export interface UserProfiles {
   website: Generated<string>;
 }
 
+export interface VirtualAccounts {
+  accountName: string | null;
+  accountNumber: string | null;
+  assetCode: Generated<string>;
+  assignmentReference: string | null;
+  bankName: string | null;
+  bankSlug: string | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  failureReason: string | null;
+  id: Generated<string>;
+  lastRequeryAt: Timestamp | null;
+  metadata: Generated<Json>;
+  provider: Generated<string>;
+  providerAccountId: string | null;
+  providerCustomerCode: string | null;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface WalletTransactions {
+  amountMinor: Int8;
+  assetCode: Generated<string>;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  description: string;
+  direction: string;
+  feeAmountMinor: Generated<Int8>;
+  feeBreakdown: Generated<Json>;
+  grossAmountMinor: Int8 | null;
+  id: Generated<string>;
+  metadata: Generated<Json>;
+  postedAt: Timestamp | null;
+  provider: Generated<string>;
+  providerReference: string;
+  status: Generated<string>;
+  type: string;
+}
+
+export interface Withdrawals {
+  accountName: string;
+  accountNumber: string;
+  amountMinor: Int8;
+  assetCode: Generated<string>;
+  bankCode: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  failureReason: string | null;
+  id: Generated<string>;
+  idempotencyKey: string | null;
+  providerReference: string;
+  providerTransferCode: string | null;
+  requestedBy: string | null;
+  status: Generated<string>;
+  transferRecipientCode: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface DB {
+  admin_alerts: AdminAlerts;
+  approval_group_approvers: ApprovalGroupApprovers;
+  approval_groups: ApprovalGroups;
+  approval_requests: ApprovalRequests;
+  approval_rule_approvers: ApprovalRuleApprovers;
+  approval_rules: ApprovalRules;
+  approval_workflow_submitters: ApprovalWorkflowSubmitters;
+  approval_workflows: ApprovalWorkflows;
+  audit_events: AuditEvents;
+  banking_profiles: BankingProfiles;
+  beneficial_owners: BeneficialOwners;
   bill_lines: BillLines;
   bill_payment_allocations: BillPaymentAllocations;
   bills: Bills;
+  business_invitations: BusinessInvitations;
+  business_legal_profiles: BusinessLegalProfiles;
   business_memberships: BusinessMemberships;
   businesses: Businesses;
   cart_lines: CartLines;
@@ -819,7 +1307,14 @@ export interface DB {
   cash_movements: CashMovements;
   categories: Categories;
   checkout_sessions: CheckoutSessions;
+  compliance_cases: ComplianceCases;
+  compliance_documents: ComplianceDocuments;
+  compliance_submissions: ComplianceSubmissions;
   customer_accounts: CustomerAccounts;
+  data_privacy_requests: DataPrivacyRequests;
+  discount_redemptions: DiscountRedemptions;
+  discounts: Discounts;
+  fiscal_documents: FiscalDocuments;
   fulfillment_lines: FulfillmentLines;
   fulfillments: Fulfillments;
   goods_receipt_lines: GoodsReceiptLines;
@@ -830,6 +1325,8 @@ export interface DB {
   membership_roles: MembershipRoles;
   modifier_groups: ModifierGroups;
   modifier_options: ModifierOptions;
+  notification_preferences: NotificationPreferences;
+  notifications: Notifications;
   order_lines: OrderLines;
   orders: Orders;
   parties: Parties;
@@ -839,6 +1336,7 @@ export interface DB {
   payment_attempts: PaymentAttempts;
   payments: Payments;
   permissions: Permissions;
+  platform_administrators: PlatformAdministrators;
   pos_devices: PosDevices;
   product_barcodes: ProductBarcodes;
   product_categories: ProductCategories;
@@ -847,10 +1345,13 @@ export interface DB {
   product_prices: ProductPrices;
   product_variants: ProductVariants;
   products: Products;
+  provider_events: ProviderEvents;
   purchase_order_lines: PurchaseOrderLines;
   purchase_orders: PurchaseOrders;
   register_shifts: RegisterShifts;
   registers: Registers;
+  return_lines: ReturnLines;
+  returns: Returns;
   role_permissions: RolePermissions;
   roles: Roles;
   sales_channels: SalesChannels;
@@ -863,9 +1364,16 @@ export interface DB {
   supplier_products: SupplierProducts;
   support_ticket_replies: SupportTicketReplies;
   support_tickets: SupportTickets;
+  system_announcements: SystemAnnouncements;
   tax_rates: TaxRates;
   unit_conversions: UnitConversions;
   units: Units;
+  upload_processing_jobs: UploadProcessingJobs;
+  uploads: Uploads;
   user_addresses: UserAddresses;
+  user_consents: UserConsents;
   user_profiles: UserProfiles;
+  virtual_accounts: VirtualAccounts;
+  wallet_transactions: WalletTransactions;
+  withdrawals: Withdrawals;
 }
