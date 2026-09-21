@@ -258,7 +258,7 @@ export interface BusinessInvitations {
   id: Generated<string>;
   invitedBy: string;
   revokedAt: Timestamp | null;
-  roleId: string;
+  roleId: string | null;
   tokenHash: string;
 }
 

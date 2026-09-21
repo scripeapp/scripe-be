@@ -225,7 +225,14 @@ export async function setRolePermissions(context: DatabaseContext, roleId: strin
 }
 
 export async function roleInUse(context: DatabaseContext, roleId: string): Promise<boolean> {
-  const result = await sql<{ exists: boolean }>`select exists(select 1 from app.membership_roles where "roleId" = ${roleId}::uuid) as "exists"`.execute(context.transaction);
+  const result = await sql<{ exists: boolean }>`
+    select exists(
+      select 1 from app.membership_roles where "roleId" = ${roleId}::uuid
+      union all
+      select 1 from app.business_invitations
+      where "roleId" = ${roleId}::uuid and "acceptedAt" is null and "revokedAt" is null
+    ) as "exists"
+  `.execute(context.transaction);
   return result.rows[0]?.exists === true;
 }
 
