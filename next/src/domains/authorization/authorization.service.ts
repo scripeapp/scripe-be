@@ -15,6 +15,7 @@ import {
 import * as auditRepository from "../audit/audit.repository.js";
 import * as businessesRepository from "../businesses/businesses.repository.js";
 import * as notificationsRepository from "../notifications/notifications.repository.js";
+import { checkLimit } from "../subscriptions/subscriptions.service.js";
 import * as repository from "./authorization.repository.js";
 import type {
   AcceptInvitationOperation,
@@ -127,6 +128,14 @@ export class AuthorizationService {
   async inviteMembers(operation: AuthorizationOperation, input: InviteMembersInput): Promise<InviteResult[]> {
     const setup = await this.run(operation, operation.businessId, async (context) => {
       await requirePermission(context, operation.businessId, "team.invite");
+
+      // The one plan-entitlement enforcement this rewrite actually wires in
+      // (see subscriptions.service.ts's header comment) - checked against
+      // the count this invite batch would produce, not just the count
+      // today, so a business can't invite past its limit in one request.
+      const activeMembers = (await repository.listMembers(context, operation.businessId)).filter((member) => member.status === "active").length;
+      await checkLimit(context, operation.businessId, "team_members", activeMembers + input.emails.length - 1);
+
       const resolvedRoles = await repository.resolveAssignableRoles(context, operation.businessId, [input.roleId]);
       const role = resolvedRoles[0];
       if (!role) throw validationError("Role does not exist for this business");

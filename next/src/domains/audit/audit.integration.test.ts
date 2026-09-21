@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Pool } from "pg";
 
 let verificationMessages: { to: string; code: string }[];
 let invitationEmails: { to: string; acceptUrl: string }[];
@@ -12,18 +13,30 @@ jest.mock("@/shared/email.js", () => ({
   },
 }));
 
+import { loadEnvironment } from "@/shared/environment.js";
 import { request, startTestServer, type TestServer } from "@/test-support/http.js";
 
 const PASSWORD = "Sup3rSecret!pass";
 let server: TestServer;
+let migratorPool: Pool;
 
 beforeAll(async () => {
   verificationMessages = [];
   invitationEmails = [];
   server = await startTestServer();
+  const environment = loadEnvironment();
+  migratorPool = new Pool({ connectionString: environment.DATABASE_MIGRATE_URL ?? environment.DATABASE_URL });
 });
 
-afterAll(async () => server.close());
+afterAll(async () => {
+  await migratorPool.end();
+  await server.close();
+});
+
+/** The starter plan (the default for a fresh business) only allows 1 team member - inviting a second requires at least the plus plan. */
+async function grantPlusPlan(businessId: string): Promise<void> {
+  await migratorPool.query(`insert into app.business_subscriptions ("businessId", "planCode", "status") values ($1, 'plus', 'active')`, [businessId]);
+}
 
 async function authenticate(label: string): Promise<{ cookies: string; userId: string }> {
   const email = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${randomUUID()}@example.com`;
@@ -64,6 +77,7 @@ describe("audit domain", () => {
     });
     const businessId = (businessResponse.body as { data: { business: { id: string } } }).data.business.id;
     const base = `/api/businesses/${businessId}`;
+    await grantPlusPlan(businessId);
 
     const roleCreated = await request(server.baseUrl, `${base}/team/roles`, {
       method: "POST",

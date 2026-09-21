@@ -288,6 +288,22 @@ export interface BusinessMemberships {
   userId: string;
 }
 
+export interface BusinessSubscriptions {
+  businessId: string;
+  cancelledAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  currentPeriodEndsAt: Timestamp | null;
+  endedAt: Timestamp | null;
+  id: Generated<string>;
+  planCode: string;
+  providerCustomerCode: string | null;
+  providerEmailToken: string | null;
+  providerSubscriptionCode: string | null;
+  startedAt: Generated<Timestamp>;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface CartLines {
   assetCode: string;
   businessId: string;
@@ -960,6 +976,29 @@ export interface PlatformAdministrators {
   userId: string;
 }
 
+export interface PlatformPlanEntitlements {
+  createdAt: Generated<Timestamp>;
+  featureEnabled: boolean | null;
+  id: Generated<string>;
+  key: string;
+  kind: string;
+  limitValue: Int8 | null;
+  planCode: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface PlatformPlans {
+  assetCode: Generated<string>;
+  code: string;
+  createdAt: Generated<Timestamp>;
+  isActive: Generated<boolean>;
+  name: string;
+  paystackPlanCode: string | null;
+  priceMonthlyMinor: Generated<Int8>;
+  sortOrder: Generated<number>;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface PosDevices {
   businessId: string;
   createdAt: Generated<Timestamp>;
@@ -1277,6 +1316,39 @@ export interface Stores {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface SubscriptionDunningEvents {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  metadata: Generated<Json>;
+  subscriptionId: string;
+}
+
+export interface SubscriptionInvoices {
+  amountMinor: Int8;
+  assetCode: Generated<string>;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  paidAt: Timestamp | null;
+  periodEnd: Timestamp | null;
+  periodStart: Timestamp | null;
+  providerReference: string | null;
+  status: Generated<string>;
+  subscriptionId: string;
+}
+
+export interface SubscriptionPaymentAttempts {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  failureReason: string | null;
+  id: Generated<string>;
+  invoiceId: string;
+  providerReference: string | null;
+  status: string;
+}
+
 export interface SupplierAccounts {
   businessId: string;
   code: string | null;
@@ -1547,6 +1619,7 @@ export interface DB {
   business_invitations: BusinessInvitations;
   business_legal_profiles: BusinessLegalProfiles;
   business_memberships: BusinessMemberships;
+  business_subscriptions: BusinessSubscriptions;
   businesses: Businesses;
   cart_lines: CartLines;
   carts: Carts;
@@ -1599,6 +1672,8 @@ export interface DB {
   payments: Payments;
   permissions: Permissions;
   platform_administrators: PlatformAdministrators;
+  platform_plan_entitlements: PlatformPlanEntitlements;
+  platform_plans: PlatformPlans;
   pos_devices: PosDevices;
   product_barcodes: ProductBarcodes;
   product_categories: ProductCategories;
@@ -1624,6 +1699,9 @@ export interface DB {
   stock_reservations: StockReservations;
   stock_transactions: StockTransactions;
   stores: Stores;
+  subscription_dunning_events: SubscriptionDunningEvents;
+  subscription_invoices: SubscriptionInvoices;
+  subscription_payment_attempts: SubscriptionPaymentAttempts;
   supplier_accounts: SupplierAccounts;
   supplier_products: SupplierProducts;
   support_ticket_replies: SupportTicketReplies;

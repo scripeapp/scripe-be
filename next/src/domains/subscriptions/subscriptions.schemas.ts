@@ -1,5 +1,8 @@
-/**
- * Zod request and response contracts for the Surge plan, entitlement, invoice, payment,
- * and dunning domain belong here.
- */
-export {};
+import { z } from "zod";
+
+export const businessParamsSchema = z.object({ businessId: z.string().uuid() });
+
+export const initiateSubscriptionSchema = z.object({
+  plan: z.enum(["plus", "pro"]),
+  callbackUrl: z.string().url().optional(),
+});

@@ -3,6 +3,7 @@ import { withDatabaseContext, type DatabaseContext } from "../../db/database-con
 import { anonymousPrincipal } from "../../db/principal.js";
 import * as communicationsRepository from "../communications/communications.repository.js";
 import * as deliveryRepository from "../delivery/delivery.repository.js";
+import { handleSubscriptionWebhook } from "../subscriptions/subscriptions.service.js";
 import * as repository from "./provider-events.repository.js";
 import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature, verifyShipbubbleSignature } from "./provider-events.signatures.js";
 import type { ProviderName } from "./provider-events.types.js";
@@ -39,6 +40,17 @@ export class ProviderEventsService {
     const reference = asString(data.reference);
 
     await this.ingest("paystack", eventType, reference, signatureValid, body, requestId, async (context) => {
+      // Subscription lifecycle events (subscription.create/enable/disable/
+      // not_renew, invoice.payment_failed) are keyed by subscription_code,
+      // not a reference - some carry no reference at all, so this must be
+      // checked before the reference-based branches below, mirroring
+      // legacy's classifyPaystackEvent (metadata.transaction_type, a
+      // subscription_code, or a "subscription."-prefixed event type).
+      const metadata = asRecord(data.metadata);
+      const isSubscriptionEvent =
+        asString(metadata.transaction_type) === "business_subscription" || Boolean(asString(data.subscription_code)) || eventType.startsWith("subscription.") || eventType === "invoice.payment_failed";
+      if (isSubscriptionEvent) return this.handleSubscriptionPaystackEvent(context, eventType, data, metadata);
+
       if (!reference) return "ignored";
       if (reference.startsWith("comm_credit_")) return this.handleCommunicationTopupReference(context, eventType === "charge.success", reference);
       if (eventType !== "charge.success") return "ignored";
@@ -49,6 +61,28 @@ export class ProviderEventsService {
       return result.found ? "processed" : "ignored";
     });
     return signatureValid;
+  }
+
+  private async handleSubscriptionPaystackEvent(context: DatabaseContext, eventType: string, data: JsonRecord, metadata: JsonRecord): Promise<"processed" | "ignored"> {
+    const businessId = asString(metadata.business_id);
+    if (!businessId) return "ignored";
+    const plan = asString(metadata.plan);
+    const planCode = plan === "plus" || plan === "pro" ? plan : null;
+    const customer = asRecord(data.customer);
+    const planData = asRecord(data.plan);
+    const periodEndRaw = asString(data.next_payment_date) ?? asString(metadata.next_payment_date);
+
+    return handleSubscriptionWebhook(context, {
+      type: eventType,
+      businessId,
+      planCode: planCode ?? (asString(planData.plan_code) ? planCode : null),
+      subscriptionCode: asString(data.subscription_code),
+      customerCode: asString(customer.customer_code),
+      emailToken: asString(data.email_token),
+      periodEnd: periodEndRaw ? new Date(periodEndRaw) : null,
+      amountMinor: typeof data.amount === "number" ? data.amount : null,
+      providerReference: asString(data.reference),
+    });
   }
 
   /** Both checkout gateways route a communication-credit top-up here by its "comm_credit_" reference prefix rather than through the order/payment capture path above, which owns a structurally different concern (allocating against an order's total, issuing a receipt). */
