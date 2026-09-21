@@ -3,7 +3,7 @@ export type VirtualAccountStatus = "pending" | "active" | "failed";
 export type WalletTransactionType = "deposit" | "withdrawal" | "reversal" | "adjustment" | "bill_payment";
 export type WalletTransactionDirection = "credit" | "debit";
 export type WalletTransactionStatus = "pending" | "posted";
-export type WithdrawalStatus = "pending" | "processing" | "success" | "failed";
+export type WithdrawalStatus = "pending" | "awaitingApproval" | "processing" | "success" | "failed" | "rejected";
 
 export interface BankingProfileRow {
   readonly businessId: string;

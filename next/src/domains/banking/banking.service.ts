@@ -5,7 +5,9 @@ import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
 import { paymentProvider } from "../../integrations/payment-provider.js";
 import { AppError, conflictError, forbiddenError, notFoundError, validationError } from "../../shared/errors.js";
+import type { ApprovalsService } from "../approvals/approvals.service.js";
 import * as auditRepository from "../audit/audit.repository.js";
+import * as authorizationRepository from "../authorization/authorization.repository.js";
 import { requirePermission } from "../authorization/authorization.service.js";
 import * as businessesRepository from "../businesses/businesses.repository.js";
 import * as repository from "./banking.repository.js";
@@ -27,7 +29,10 @@ const REQUERY_COOLDOWN_MS = 10 * 60 * 1000;
 const ASSET_CODE = "NGN";
 
 export class BankingService {
-  constructor(private readonly database: Database) {}
+  constructor(
+    private readonly database: Database,
+    private readonly approvals: ApprovalsService,
+  ) {}
 
   async getStatus(operation: BankingOperation): Promise<BankingStatus> {
     return this.run(operation, async (context) => {
@@ -197,31 +202,60 @@ export class BankingService {
       const balance = await repository.getAvailableBalance(context, operation.businessId);
       if (BigInt(input.amountMinor) > BigInt(balance)) throw validationError("Insufficient wallet balance");
 
-      // Some providers (e.g. Anchor) debit a specific deposit account rather
-      // than a platform-wide balance (e.g. Paystack), so the business's own
-      // current virtual account has to be resolved and passed through.
-      const virtualAccount = await repository.findCurrentVirtualAccount(context, operation.businessId);
-      // Some providers (e.g. Brails) require the sender's registered
-      // business address as compliance data when adding a payout
-      // beneficiary — resolved here rather than assumed present.
-      const business = await businessesRepository.findBusiness(context, operation.businessId);
-      const sender =
-        business?.addressLine1 && business.city && business.postalCode
-          ? { businessName: business.displayName, addressLine1: business.addressLine1, city: business.city, country: business.country, postalCode: business.postalCode }
-          : undefined;
+      const membership = await authorizationRepository.findMembershipByUserId(context, operation.businessId, operation.userId);
+      const isOwner = membership?.roles.some((role) => role.code === "owner") ?? false;
 
-      const recipient = await paymentProvider.createTransferRecipient({ name: input.accountName, accountNumber: input.accountNumber, bankCode: input.bankCode, sender });
-      const reference = `wd_${randomUUID()}`;
-      const transfer = await paymentProvider.initiateTransfer({
+      // Gated FIRST, before anything is written — a blocked submission
+      // (ineligible submitter, a step with zero eligible approvers) throws
+      // with nothing created, so there's nothing to compensate/reverse.
+      const withdrawalId = randomUUID();
+      const gate = await this.approvals.gateSubmission(context, operation.businessId, "withdrawal", {
+        subjectType: "withdrawal",
+        subjectId: withdrawalId,
         amountMinor: String(input.amountMinor),
-        recipientCode: recipient.recipientCode,
-        reference,
-        reason: "Wallet withdrawal",
-        sourceAccountId: virtualAccount?.providerAccountId,
-        customerEmail: profile.email,
+        assetCode: ASSET_CODE,
+        requestedBy: operation.userId,
+        requestedByEmail: profile.email ?? "",
+        requestedByIsOwner: isOwner,
       });
 
+      const reference = `wd_${randomUUID()}`;
+
+      if (gate.gated) {
+        // The debit is posted now, at gate time, not deferred until
+        // approval — the whole point is closing the double-spend window a
+        // pending-for-hours approval would otherwise open: a second
+        // concurrent withdrawal request must see this amount already
+        // reserved, which the "pending" status already achieves since
+        // getAvailableBalance sums pending+posted.
+        const withdrawal = await repository.createWithdrawal(context, operation.businessId, operation.userId, {
+          id: withdrawalId,
+          amountMinor: String(input.amountMinor),
+          assetCode: ASSET_CODE,
+          bankCode: input.bankCode,
+          accountNumber: input.accountNumber,
+          accountName: input.accountName,
+          providerReference: reference,
+          idempotencyKey: input.idempotencyKey,
+          status: "awaitingApproval",
+        });
+        await repository.postWalletTransaction(context, operation.businessId, {
+          type: "withdrawal",
+          direction: "debit",
+          status: "pending",
+          assetCode: ASSET_CODE,
+          amountMinor: String(input.amountMinor),
+          provider: paymentProvider.name,
+          providerReference: reference,
+          description: "Wallet withdrawal",
+          metadata: { withdrawalId: withdrawal.id, approvalRequestId: gate.requestId },
+        });
+        await this.logAction(context, operation, "banking.withdrawal_awaiting_approval", "withdrawal", withdrawal.id, { amountMinor: input.amountMinor, approvalRequestId: gate.requestId });
+        return withdrawal;
+      }
+
       const withdrawal = await repository.createWithdrawal(context, operation.businessId, operation.userId, {
+        id: withdrawalId,
         amountMinor: String(input.amountMinor),
         assetCode: ASSET_CODE,
         bankCode: input.bankCode,
@@ -230,12 +264,6 @@ export class BankingService {
         providerReference: reference,
         idempotencyKey: input.idempotencyKey,
       });
-      const finalized = await repository.updateWithdrawal(context, withdrawal.id, {
-        status: transfer.status,
-        transferRecipientCode: recipient.recipientCode,
-        providerTransferCode: transfer.transferCode,
-      });
-
       await repository.postWalletTransaction(context, operation.businessId, {
         type: "withdrawal",
         direction: "debit",
@@ -248,9 +276,90 @@ export class BankingService {
         metadata: { withdrawalId: withdrawal.id },
       });
 
+      const finalized = await this.callProviderAndFinalize(context, operation.businessId, withdrawal.id, reference, input.accountName, input.accountNumber, input.bankCode, String(input.amountMinor), profile.email);
       await this.logAction(context, operation, "banking.withdrawal_requested", "withdrawal", withdrawal.id, { amountMinor: input.amountMinor });
-      return finalized!;
+      return finalized;
     });
+  }
+
+  /**
+   * Called once a gated withdrawal's approval_requests row reaches a
+   * terminal state — see approvals.controller.ts, which dispatches here
+   * after ApprovalsService.decideApproval() returns (kept out of
+   * approvals.service.ts itself to avoid a circular import: banking needs
+   * to call approvals to gate, approvals would need to call banking to
+   * finalize).
+   */
+  async finalizeGatedWithdrawal(operation: BankingOperation, withdrawalId: string, outcome: "approved" | "rejected"): Promise<void> {
+    return this.run(operation, async (context) => {
+      const withdrawal = await repository.findWithdrawalById(context, operation.businessId, withdrawalId);
+      if (!withdrawal) throw notFoundError("Withdrawal not found");
+
+      if (outcome === "rejected") {
+        if (withdrawal.status !== "awaitingApproval") return; // already resolved by a prior call
+        await repository.updateWithdrawal(context, withdrawal.id, { status: "rejected", failureReason: "Rejected by approver" });
+        await repository.postWalletTransaction(context, operation.businessId, {
+          type: "reversal",
+          direction: "credit",
+          status: "posted",
+          assetCode: withdrawal.assetCode,
+          amountMinor: withdrawal.amountMinor,
+          provider: paymentProvider.name,
+          providerReference: `${withdrawal.providerReference}:reversal`,
+          description: "Withdrawal reversal — rejected by approver",
+          metadata: { withdrawalId: withdrawal.id },
+        });
+        await this.logAction(context, operation, "banking.withdrawal_rejected", "withdrawal", withdrawal.id, {});
+        return;
+      }
+
+      // Conditional claim — re-entrancy safety independent of the approval
+      // engine's own version CAS, in case this is ever invoked more than
+      // once for the same withdrawal.
+      const claimed = await repository.claimWithdrawalForProcessing(context, withdrawal.id);
+      if (!claimed) return;
+
+      const profile = await repository.findProfile(context, operation.businessId);
+      await this.callProviderAndFinalize(context, operation.businessId, withdrawal.id, withdrawal.providerReference, withdrawal.accountName, withdrawal.accountNumber, withdrawal.bankCode, withdrawal.amountMinor, profile?.email ?? null);
+      await this.logAction(context, operation, "banking.withdrawal_approved", "withdrawal", withdrawal.id, {});
+    });
+  }
+
+  private async callProviderAndFinalize(
+    context: DatabaseContext,
+    businessId: string,
+    withdrawalId: string,
+    reference: string,
+    accountName: string,
+    accountNumber: string,
+    bankCode: string,
+    amountMinor: string,
+    customerEmail: string | null,
+  ): Promise<WithdrawalRow> {
+    const virtualAccount = await repository.findCurrentVirtualAccount(context, businessId);
+    // Some providers (e.g. Brails) require the sender's registered
+    // business address as compliance data when adding a payout
+    // beneficiary — resolved here rather than assumed present.
+    const business = await businessesRepository.findBusiness(context, businessId);
+    const sender =
+      business?.addressLine1 && business.city && business.postalCode
+        ? { businessName: business.displayName, addressLine1: business.addressLine1, city: business.city, country: business.country, postalCode: business.postalCode }
+        : undefined;
+    const recipient = await paymentProvider.createTransferRecipient({ name: accountName, accountNumber, bankCode, sender });
+    const transfer = await paymentProvider.initiateTransfer({
+      amountMinor,
+      recipientCode: recipient.recipientCode,
+      reference,
+      reason: "Wallet withdrawal",
+      sourceAccountId: virtualAccount?.providerAccountId,
+      customerEmail,
+    });
+    const finalized = await repository.updateWithdrawal(context, withdrawalId, {
+      status: transfer.status,
+      transferRecipientCode: recipient.recipientCode,
+      providerTransferCode: transfer.transferCode,
+    });
+    return finalized!;
   }
 
   async finalizeWithdrawal(operation: BankingOperation, input: FinalizeWithdrawalInput): Promise<WithdrawalRow> {

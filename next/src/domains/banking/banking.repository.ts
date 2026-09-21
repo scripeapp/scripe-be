@@ -228,6 +228,7 @@ export async function createWithdrawal(
   businessId: string,
   requestedBy: string,
   fields: {
+    id?: string;
     amountMinor: string;
     assetCode: string;
     bankCode: string;
@@ -235,14 +236,15 @@ export async function createWithdrawal(
     accountName: string;
     providerReference: string;
     idempotencyKey: string;
+    status?: "pending" | "awaitingApproval";
   },
 ): Promise<WithdrawalRow> {
   const result = await sql<WithdrawalRow>`
     insert into app.withdrawals (
-      "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "providerReference", "idempotencyKey"
+      "id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "providerReference", "idempotencyKey", "status"
     ) values (
-      ${businessId}::uuid, ${requestedBy}::uuid, ${fields.amountMinor}::bigint, ${fields.assetCode}, ${fields.bankCode},
-      ${fields.accountNumber}, ${fields.accountName}, ${fields.providerReference}, ${fields.idempotencyKey}
+      coalesce(${fields.id ?? null}::uuid, gen_random_uuid()), ${businessId}::uuid, ${requestedBy}::uuid, ${fields.amountMinor}::bigint, ${fields.assetCode}, ${fields.bankCode},
+      ${fields.accountNumber}, ${fields.accountName}, ${fields.providerReference}, ${fields.idempotencyKey}, ${fields.status ?? "pending"}
     )
     returning ${sql.raw(WITHDRAWAL_COLUMNS)}
   `.execute(context.transaction);
@@ -265,4 +267,25 @@ export async function updateWithdrawal(
     returning ${sql.raw(WITHDRAWAL_COLUMNS)}
   `.execute(context.transaction);
   return result.rows[0];
+}
+
+export async function findWithdrawalById(context: DatabaseContext, businessId: string, id: string): Promise<WithdrawalRow | undefined> {
+  const result = await sql<WithdrawalRow>`select ${sql.raw(WITHDRAWAL_COLUMNS)} from app.withdrawals where "id" = ${id}::uuid and "businessId" = ${businessId}::uuid`.execute(context.transaction);
+  return result.rows[0];
+}
+
+/**
+ * Conditional claim for re-entrancy safety: only the caller that actually
+ * transitions the row (0 rows back means someone else already claimed it)
+ * may proceed to call the payment provider — mirrors legacy's
+ * `UPDATE ... WHERE status = 'awaiting_approval'` claim in
+ * executeBillTransfer, applied here to an approved withdrawal.
+ */
+export async function claimWithdrawalForProcessing(context: DatabaseContext, id: string): Promise<boolean> {
+  const result = await sql<{ id: string }>`
+    update app.withdrawals set "status" = 'processing', "updatedAt" = now()
+    where "id" = ${id}::uuid and "status" = 'awaitingApproval'
+    returning "id"
+  `.execute(context.transaction);
+  return result.rows.length > 0;
 }
