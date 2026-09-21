@@ -251,6 +251,12 @@ export async function findUserName(context: DatabaseContext, userId: string): Pr
   return result.rows[0]?.name;
 }
 
+/** Undefined when no account exists yet for this email — an invitee doesn't need one to be invited. */
+export async function findUserIdByEmail(context: DatabaseContext, email: string): Promise<string | undefined> {
+  const result = await sql<{ id: string }>`select "id" from auth.user where lower("email") = ${email} limit 1`.execute(context.transaction);
+  return result.rows[0]?.id;
+}
+
 export async function findPendingInvitationByEmail(context: DatabaseContext, businessId: string, email: string): Promise<boolean> {
   const result = await sql<{ id: string }>`
     select "id" from app.business_invitations

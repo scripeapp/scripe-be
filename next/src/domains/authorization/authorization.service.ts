@@ -14,6 +14,7 @@ import {
 } from "../../shared/errors.js";
 import * as auditRepository from "../audit/audit.repository.js";
 import * as businessesRepository from "../businesses/businesses.repository.js";
+import * as notificationsRepository from "../notifications/notifications.repository.js";
 import * as repository from "./authorization.repository.js";
 import type {
   AcceptInvitationOperation,
@@ -180,6 +181,22 @@ export class AuthorizationService {
           requestId: operation.requestId,
         });
 
+        // Only in-app-notifiable if the invitee already has an account — a
+        // brand-new signup has nowhere to receive one yet. The email above
+        // is the invite's actual delivery channel; this just surfaces it in
+        // an existing user's notification feed too.
+        const existingUserId = await repository.findUserIdByEmail(context, email);
+        if (existingUserId) {
+          await notificationsRepository.createNotification(context, {
+            userId: existingUserId,
+            businessId: operation.businessId,
+            type: "team.invited",
+            title: `You've been invited to join ${businessName}`,
+            body: `${inviterName} invited you to join their team.`,
+            data: { businessId: operation.businessId, roleId, invitationId: invitation.id },
+          });
+        }
+
         return { email, success: true, invitationId: invitation.id };
       });
     } catch (error) {
@@ -204,6 +221,18 @@ export class AuthorizationService {
         targetId: accepted.membershipId,
         requestId: operation.requestId,
       });
+
+      const business = await businessesRepository.findBusiness(context, accepted.businessId);
+      const businessName = business?.displayName ?? "the business";
+      await notificationsRepository.createNotification(context, {
+        userId: operation.userId,
+        businessId: accepted.businessId,
+        type: "team.joined",
+        title: `You joined ${businessName}`,
+        body: `You're now a member of ${businessName}.`,
+        data: { membershipId: accepted.membershipId },
+      });
+
       return { businessId: accepted.businessId };
     });
   }
