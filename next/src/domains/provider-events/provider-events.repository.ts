@@ -37,6 +37,11 @@ export interface CaptureResult {
   readonly isFullyPaid: boolean;
   readonly businessId: string | null;
   readonly orderId: string | null;
+  readonly amountMinor: string | null;
+  readonly method: string | null;
+  readonly assetCode: string | null;
+  readonly orderTaxMinor: string | null;
+  readonly orderTotalMinor: string | null;
 }
 
 /** Calls the SECURITY DEFINER function — the RLS bypass a webhook (no authenticated user) needs to update payments/orders. See migration 0029 for the SQL. */

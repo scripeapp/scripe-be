@@ -3,6 +3,8 @@ import { withDatabaseContext, type DatabaseContext } from "../../db/database-con
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
 import { AppError, conflictError, notFoundError, validationError } from "../../shared/errors.js";
+import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js";
+import { postJournalEntry } from "../accounting/accounting.service.js";
 import { requirePermission } from "../authorization/authorization.service.js";
 import * as repository from "./returns.repository.js";
 import type { CreateReturnInput, Return, ReturnLine, ReturnLineRow, ReturnRow, ReturnsOperation } from "./returns.types.js";
@@ -46,6 +48,23 @@ export class ReturnsService {
 
       const refundableAmountMinor = prepared.reduce((sum, line) => sum + line.amountMinor, 0n);
       const created = await repository.createReturn(context, operation.businessId, operation.userId, input.orderId, input.reason, input.inventoryLocationId ?? null, refundableAmountMinor);
+
+      // Recognizes the refund obligation the moment the return is recorded,
+      // not when it's actually paid back - the same "record the event, not
+      // the disbursement" treatment payables' bill creation uses, since
+      // returns has no real refund-execution path either (no gateway
+      // refund call happens anywhere in this domain).
+      if (refundableAmountMinor > 0n) {
+        await postJournalEntry(context, operation.businessId, operation.userId, {
+          description: "Return recorded",
+          sourceType: "return",
+          sourceId: created.id,
+          lines: [
+            { accountCode: LEDGER_ACCOUNT_CODES.SALES_RETURNS, direction: "debit", amountMinor: refundableAmountMinor, assetCode: "NGN" },
+            { accountCode: LEDGER_ACCOUNT_CODES.REFUNDS_PAYABLE, direction: "credit", amountMinor: refundableAmountMinor, assetCode: "NGN" },
+          ],
+        });
+      }
 
       const lines: ReturnLineRow[] = [];
       for (const line of prepared) {

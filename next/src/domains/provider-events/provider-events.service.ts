@@ -1,10 +1,14 @@
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { anonymousPrincipal } from "../../db/principal.js";
+import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js";
+import type { JournalLineInput } from "../accounting/accounting.types.js";
+import { postJournalEntry } from "../accounting/accounting.service.js";
 import * as communicationsRepository from "../communications/communications.repository.js";
 import * as deliveryRepository from "../delivery/delivery.repository.js";
 import { handleSubscriptionWebhook } from "../subscriptions/subscriptions.service.js";
 import * as repository from "./provider-events.repository.js";
+import type { CaptureResult } from "./provider-events.repository.js";
 import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature, verifyShipbubbleSignature } from "./provider-events.signatures.js";
 import type { ProviderName } from "./provider-events.types.js";
 
@@ -55,12 +59,44 @@ export class ProviderEventsService {
       if (reference.startsWith("comm_credit_")) return this.handleCommunicationTopupReference(context, eventType === "charge.success", reference);
       if (eventType !== "charge.success") return "ignored";
       const result = await repository.captureCheckoutPaymentByReference(context, reference);
+      if (result.captured) await this.postCaptureJournal(context, reference, result);
       if (result.captured && result.isFullyPaid && result.businessId && result.orderId) {
         await repository.issueReceiptFromWebhook(context, result.businessId, result.orderId);
       }
       return result.found ? "processed" : "ignored";
     });
     return signatureValid;
+  }
+
+  /**
+   * Mirrors payments.service.ts's own (authenticated-path) capture
+   * journal, since this is the same real event — a payment reaching
+   * "captured" — just reached through a webhook instead of verifyCheckout.
+   * Cash-method payments never arrive by webhook (a card terminal/manual
+   * cash sale has no gateway to call back), so this always debits gateway
+   * clearing rather than switching on method the way payments.service.ts
+   * does. Tax is prorated against the order's own subtotal/tax split, the
+   * remainder (rounding) folding into revenue so the entry always balances
+   * exactly to amountMinor.
+   */
+  private async postCaptureJournal(context: DatabaseContext, reference: string, result: CaptureResult): Promise<void> {
+    if (!result.businessId || !result.amountMinor || !result.assetCode) return;
+    const amountMinor = BigInt(result.amountMinor);
+    const totalMinor = BigInt(result.orderTotalMinor ?? "0");
+    const taxMinor = BigInt(result.orderTaxMinor ?? "0");
+    const taxPortion = totalMinor > 0n ? (amountMinor * taxMinor) / totalMinor : 0n;
+    const revenuePortion = amountMinor - taxPortion;
+
+    const lines: JournalLineInput[] = [{ accountCode: LEDGER_ACCOUNT_CODES.GATEWAY_CLEARING, direction: "debit", amountMinor, assetCode: result.assetCode }];
+    if (revenuePortion > 0n) lines.push({ accountCode: LEDGER_ACCOUNT_CODES.REVENUE, direction: "credit" as const, amountMinor: revenuePortion, assetCode: result.assetCode });
+    if (taxPortion > 0n) lines.push({ accountCode: LEDGER_ACCOUNT_CODES.TAX_PAYABLE, direction: "credit" as const, amountMinor: taxPortion, assetCode: result.assetCode });
+
+    await postJournalEntry(context, result.businessId, null, {
+      description: "Payment captured via webhook",
+      sourceType: "payment_capture",
+      sourceId: reference,
+      lines,
+    });
   }
 
   private async handleSubscriptionPaystackEvent(context: DatabaseContext, eventType: string, data: JsonRecord, metadata: JsonRecord): Promise<"processed" | "ignored"> {
@@ -108,6 +144,7 @@ export class ProviderEventsService {
       if (reference.startsWith("comm_credit_")) return this.handleCommunicationTopupReference(context, status === "successful", reference);
       if (status === "successful") {
         const result = await repository.captureCheckoutPaymentByReference(context, reference);
+        if (result.captured) await this.postCaptureJournal(context, reference, result);
         if (result.captured && result.isFullyPaid && result.businessId && result.orderId) {
           await repository.issueReceiptFromWebhook(context, result.businessId, result.orderId);
         }

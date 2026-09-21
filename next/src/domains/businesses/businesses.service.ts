@@ -4,6 +4,7 @@ import { withDatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
 import { AppError, notFoundError } from "../../shared/errors.js";
+import { seedDefaultChartOfAccounts } from "../accounting/accounting.service.js";
 import * as authorization from "../authorization/authorization.service.js";
 import * as repository from "./businesses.repository.js";
 import type { Business, BusinessCreateInput, BusinessListRow, BusinessOperation, BusinessUpdateInput } from "./businesses.types.js";
@@ -30,6 +31,7 @@ export class BusinessesService {
       const storeSlug = `${slugify(input.displayName)}-${randomUUID().slice(0, 8)}`;
       const created = await repository.createBusiness(context, input, storeSlug);
       await repository.setBusinessContext(context, created.id);
+      await seedDefaultChartOfAccounts(context, created.id);
       const row = await repository.findBusiness(context, created.id);
       if (!row) throw new Error("Created business could not be read in its transaction");
       return toBusiness(row);
