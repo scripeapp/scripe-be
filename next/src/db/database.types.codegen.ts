@@ -27,6 +27,17 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface AccountingPeriods {
+  businessId: string;
+  closedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  periodEnd: Timestamp;
+  periodStart: Timestamp;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface AdminAlerts {
   createdAt: Generated<Timestamp>;
   id: Generated<string>;
@@ -756,6 +767,41 @@ export interface Jobs {
   maxAttempts: Generated<number>;
   payload: Generated<Json>;
   runAt: Generated<Timestamp>;
+  status: Generated<string>;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface JournalEntries {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  description: string;
+  entryDate: Timestamp;
+  id: Generated<string>;
+  reversalOfId: string | null;
+  sourceId: string;
+  sourceType: string;
+}
+
+export interface JournalLines {
+  amountMinor: Int8;
+  assetCode: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  direction: string;
+  id: Generated<string>;
+  journalEntryId: string;
+  ledgerAccountId: string;
+}
+
+export interface LedgerAccounts {
+  businessId: string;
+  code: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  isSystem: Generated<boolean>;
+  name: string;
   status: Generated<string>;
   type: string;
   updatedAt: Generated<Timestamp>;
@@ -1602,6 +1648,7 @@ export interface Withdrawals {
 }
 
 export interface DB {
+  accounting_periods: AccountingPeriods;
   admin_alerts: AdminAlerts;
   approval_group_approvers: ApprovalGroupApprovers;
   approval_groups: ApprovalGroups;
@@ -1656,6 +1703,9 @@ export interface DB {
   inventory_locations: InventoryLocations;
   job_attempts: JobAttempts;
   jobs: Jobs;
+  journal_entries: JournalEntries;
+  journal_lines: JournalLines;
+  ledger_accounts: LedgerAccounts;
   locations: Locations;
   membership_roles: MembershipRoles;
   modifier_groups: ModifierGroups;
