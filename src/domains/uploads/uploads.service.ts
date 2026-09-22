@@ -20,6 +20,26 @@ const EXTENSION_BY_MIME_TYPE: Record<string, string> = {
 /** A confirmed object's actual size differing this much from the declared size fails confirmation — accounts for encoding/metadata slack, not a spoofed file. */
 const SIZE_MISMATCH_TOLERANCE_BYTES = 16;
 
+/**
+ * Cross-domain entry point (matching accounting.postJournalEntry's standalone-
+ * exported-function pattern) for a domain that wants to link one of the
+ * caller's own confirmed personal uploads as its own reference (e.g.
+ * profiles linking an avatar) — verifies ownership, purpose, and confirmed
+ * status without going through the full UploadsService/Operation surface.
+ */
+export async function requireOwnConfirmedUpload(
+  context: DatabaseContext,
+  userId: string,
+  uploadId: string,
+  purpose: CreateUploadInput["purpose"],
+): Promise<UploadRow> {
+  const upload = await repository.findAccessible(context, userId, uploadId);
+  if (!upload || upload.businessId || upload.userId !== userId) throw notFoundError("Upload not found");
+  if (upload.purpose !== purpose) throw conflictError(`Upload is not a confirmed ${purpose}`);
+  if (upload.status !== "confirmed") throw conflictError("Upload has not been confirmed yet");
+  return upload;
+}
+
 export class UploadsService {
   constructor(private readonly database: Database) {}
 

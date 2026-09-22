@@ -11,6 +11,17 @@ jest.mock("@/shared/email.js", () => ({
   },
 }));
 
+// Never hit real object storage from a test — mocked the same way uploads.integration.test.ts does.
+const headResults = new Map<string, { exists: boolean; sizeBytes?: number }>();
+jest.mock("@/integrations/r2.js", () => ({
+  objectStorage: {
+    createPresignedUploadUrl: (key: string) => Promise.resolve({ uploadUrl: `https://mock-r2.test/${key}`, expiresAt: new Date(Date.now() + 600_000) }),
+    createPresignedDownloadUrl: (key: string) => Promise.resolve(`https://mock-r2.test/${key}?download`),
+    headObject: (key: string) => Promise.resolve(headResults.get(key) ?? { exists: false }),
+    deleteObject: () => Promise.resolve(),
+  },
+}));
+
 import { request, startTestServer, type TestServer } from "@/test-support/http.js";
 
 const PASSWORD = "Sup3rSecret!pass";
@@ -218,5 +229,102 @@ describe("profiles domain", () => {
       body: JSON.stringify({ username: takenUsername }),
     });
     expect(conflict.status).toBe(409);
+  });
+
+  async function createConfirmedUpload(cookies: string, purpose: string): Promise<string> {
+    const created = await request(server.baseUrl, "/api/uploads", {
+      method: "POST",
+      cookie: cookies,
+      body: JSON.stringify({ purpose, mimeType: "image/png", sizeBytes: "1024" }),
+    });
+    expect(created.status).toBe(201);
+    const upload = (created.body as { data: { upload: { id: string; objectKey: string } } }).data.upload;
+    headResults.set(upload.objectKey, { exists: true, sizeBytes: 1024 });
+
+    const confirmed = await request(server.baseUrl, `/api/uploads/${upload.id}/confirm`, {
+      method: "POST",
+      cookie: cookies,
+    });
+    expect(confirmed.status).toBe(200);
+    return upload.id;
+  }
+
+  it("has no avatar until one is set", async () => {
+    const email = `me-avatar-none-${randomUUID()}@example.com`;
+    const cookies = await signUpAndAuthenticate(email, "No Avatar");
+
+    const profile = await request(server.baseUrl, "/api/me", { cookie: cookies });
+    const user = (profile.body as { data: { user: { id: string; avatarUrl: string | null } } }).data.user;
+    expect(user.avatarUrl).toBeNull();
+
+    const missing = await request(server.baseUrl, `/api/users/${user.id}/avatar`);
+    expect(missing.status).toBe(404);
+  });
+
+  it("sets an avatar from a confirmed upload and serves it publicly, unauthenticated", async () => {
+    const email = `me-avatar-${randomUUID()}@example.com`;
+    const cookies = await signUpAndAuthenticate(email, "Avatar User");
+    const uploadId = await createConfirmedUpload(cookies, "avatar");
+
+    const set = await request(server.baseUrl, "/api/me/avatar", {
+      method: "PATCH",
+      cookie: cookies,
+      body: JSON.stringify({ uploadId }),
+    });
+    expect(set.status).toBe(200);
+    const setUser = (set.body as { data: { user: { id: string; avatarUrl: string | null } } }).data.user;
+    expect(setUser.avatarUrl).toBe(`/api/users/${setUser.id}/avatar`);
+
+    // Anonymous — no cookie — because a confirmed avatar is public.
+    const served = await request(server.baseUrl, `/api/users/${setUser.id}/avatar`);
+    expect(served.status).toBe(302);
+  });
+
+  it("rejects setting an avatar from an unconfirmed upload", async () => {
+    const email = `me-avatar-unconfirmed-${randomUUID()}@example.com`;
+    const cookies = await signUpAndAuthenticate(email, "Unconfirmed Avatar");
+
+    const created = await request(server.baseUrl, "/api/uploads", {
+      method: "POST",
+      cookie: cookies,
+      body: JSON.stringify({ purpose: "avatar", mimeType: "image/png", sizeBytes: "1024" }),
+    });
+    const uploadId = (created.body as { data: { upload: { id: string } } }).data.upload.id;
+
+    const set = await request(server.baseUrl, "/api/me/avatar", {
+      method: "PATCH",
+      cookie: cookies,
+      body: JSON.stringify({ uploadId }),
+    });
+    expect(set.status).toBe(409);
+  });
+
+  it("rejects setting an avatar from a wrong-purpose upload", async () => {
+    const email = `me-avatar-wrong-purpose-${randomUUID()}@example.com`;
+    const cookies = await signUpAndAuthenticate(email, "Wrong Purpose");
+    const uploadId = await createConfirmedUpload(cookies, "other");
+
+    const set = await request(server.baseUrl, "/api/me/avatar", {
+      method: "PATCH",
+      cookie: cookies,
+      body: JSON.stringify({ uploadId }),
+    });
+    expect(set.status).toBe(409);
+  });
+
+  it("rejects setting an avatar from another user's upload", async () => {
+    const ownerEmail = `me-avatar-owner-${randomUUID()}@example.com`;
+    const ownerCookies = await signUpAndAuthenticate(ownerEmail, "Upload Owner");
+    const uploadId = await createConfirmedUpload(ownerCookies, "avatar");
+
+    const otherEmail = `me-avatar-other-${randomUUID()}@example.com`;
+    const otherCookies = await signUpAndAuthenticate(otherEmail, "Other User");
+
+    const set = await request(server.baseUrl, "/api/me/avatar", {
+      method: "PATCH",
+      cookie: otherCookies,
+      body: JSON.stringify({ uploadId }),
+    });
+    expect(set.status).toBe(404);
   });
 });

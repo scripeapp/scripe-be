@@ -11,6 +11,8 @@ export function createProfilesRouter(): Router {
 
   router.get("/api/me", requireAuth, profilesController.getCurrentUser);
   router.patch("/api/me", requireAuth, profilesController.updateCurrentUser);
+  router.patch("/api/me/avatar", requireAuth, profilesController.setAvatar);
+  router.get("/api/users/:userId/avatar", profilesController.getAvatar);
 
   return router;
 }

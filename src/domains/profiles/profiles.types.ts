@@ -8,6 +8,7 @@ export interface CurrentUser {
   readonly email: string;
   readonly name: string;
   readonly image: string | null;
+  readonly avatarUrl: string | null;
   readonly emailVerified: boolean;
   readonly firstName: string;
   readonly lastName: string;

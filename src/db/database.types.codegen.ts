@@ -1646,6 +1646,7 @@ export interface UserConsents {
 export interface UserProfiles {
   accountStatus: Generated<string>;
   accountType: Generated<string>;
+  avatarUploadId: string | null;
   bio: Generated<string>;
   createdAt: Generated<Timestamp>;
   email: string;

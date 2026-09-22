@@ -21,3 +21,11 @@ export const updateCurrentUserSchema = z
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, "At least one field is required");
+
+export const setAvatarSchema = z.object({
+  uploadId: z.string().uuid(),
+});
+
+export const avatarParamsSchema = z.object({
+  userId: z.string().uuid(),
+});
