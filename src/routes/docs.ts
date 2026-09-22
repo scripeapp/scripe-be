@@ -35,8 +35,12 @@ const PAGE = `<!doctype html>
 
 export function createDocsRouter(): Router {
   const router = Router();
-  router.get("/openapi.json", (_request, response) => {
-    response.json(buildOpenApiDocument());
+  let cached: ReturnType<typeof buildOpenApiDocument> | undefined;
+  router.get("/openapi.json", (request, response) => {
+    // Built once from the fully-mounted router on first request (the app isn't
+    // finished mounting when this router factory runs).
+    cached ??= buildOpenApiDocument(request.app);
+    response.json(cached);
   });
   router.get("/docs", (_request, response) => {
     response.type("html").send(PAGE);
