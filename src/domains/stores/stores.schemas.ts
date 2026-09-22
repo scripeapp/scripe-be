@@ -12,6 +12,14 @@ export const childParamsSchema = storeParamsSchema.extend({ childId: uuid });
 export const registerParamsSchema = storeParamsSchema.extend({ registerId: uuid });
 export const shiftParamsSchema = storeParamsSchema.extend({ shiftId: uuid });
 
+export const publicStoreParamsSchema = z.object({ slug: z.string().min(1) });
+export const publicProductIdsQuerySchema = z.object({
+  ids: z
+    .string()
+    .min(1)
+    .transform((value) => value.split(",").map((id) => id.trim()).filter(Boolean)),
+}).transform((value) => value.ids).pipe(z.array(uuid).min(1).max(100));
+
 export const createStoreSchema = z.object({
   name: z.string().trim().min(1).max(160),
   slug: z.string().trim().min(2).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),

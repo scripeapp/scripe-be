@@ -282,4 +282,149 @@ describe("stores domain", () => {
     );
     expect(result.rows).toEqual([]);
   });
+
+  describe("public storefront browsing", () => {
+    async function activateDefaultStore(
+      owner: Actor,
+      business: CreatedBusiness,
+      slug: string,
+    ): Promise<void> {
+      const response = await request(
+        server.baseUrl,
+        `/api/businesses/${business.id}/stores/${business.defaultStore.id}`,
+        {
+          method: "PATCH",
+          cookie: owner.cookies,
+          body: JSON.stringify({ status: "active", slug }),
+        },
+      );
+      expect(response.status).toBe(200);
+    }
+
+    it("404s for a draft store, a nonexistent slug, and rejects malformed product ids", async () => {
+      const owner = await authenticate("Draft Owner");
+      const business = await createBusiness(owner, "Still Drafting");
+      const slug = `draft-store-${randomUUID().slice(0, 8)}`;
+      await request(
+        server.baseUrl,
+        `/api/businesses/${business.id}/stores/${business.defaultStore.id}`,
+        { method: "PATCH", cookie: owner.cookies, body: JSON.stringify({ slug }) },
+      );
+
+      const draftLookup = await request(server.baseUrl, `/api/store/public/${slug}`);
+      expect(draftLookup.status).toBe(404);
+
+      const missingLookup = await request(server.baseUrl, `/api/store/public/${randomUUID()}`);
+      expect(missingLookup.status).toBe(404);
+
+      const badIds = await request(server.baseUrl, `/api/store/public/products?ids=not-a-uuid`);
+      expect(badIds.status).toBe(400);
+    });
+
+    it("serves an active store's public profile, products (with resolved price), and categories, anonymously", async () => {
+      const owner = await authenticate("Public Store Owner");
+      const business = await createBusiness(owner, "Lagos Corner Shop");
+      const slug = `corner-shop-${randomUUID().slice(0, 8)}`;
+      await activateDefaultStore(owner, business, slug);
+
+      const category = entity<{ id: string }>(
+        await request(server.baseUrl, `/api/businesses/${business.id}/categories`, {
+          method: "POST",
+          cookie: owner.cookies,
+          body: JSON.stringify({ name: "Drinks" }),
+        }),
+        "category",
+      );
+
+      const activeProduct = entity<{ id: string; variants: { id: string; isDefault: boolean }[] }>(
+        await request(server.baseUrl, `/api/businesses/${business.id}/products`, {
+          method: "POST",
+          cookie: owner.cookies,
+          body: JSON.stringify({
+            storeId: business.defaultStore.id,
+            name: "Chilled Zobo",
+            status: "active",
+            categoryIds: [category.id],
+          }),
+        }),
+        "product",
+      );
+      const defaultVariant = activeProduct.variants.find((v) => v.isDefault)!;
+
+      await request(server.baseUrl, `/api/businesses/${business.id}/prices`, {
+        method: "POST",
+        cookie: owner.cookies,
+        body: JSON.stringify({
+          productVariantId: defaultVariant.id,
+          assetCode: "NGN",
+          amountMinor: 150000,
+          compareAtMinor: 200000,
+        }),
+      });
+
+      // A draft product in the same active store must stay invisible.
+      await request(server.baseUrl, `/api/businesses/${business.id}/products`, {
+        method: "POST",
+        cookie: owner.cookies,
+        body: JSON.stringify({ storeId: business.defaultStore.id, name: "Unreleased Snack" }),
+      });
+
+      const storeLookup = await request(server.baseUrl, `/api/store/public/${slug}`);
+      expect(storeLookup.status).toBe(200);
+      const publicStore = entity<{ id: string; name: string; slug: string; status?: string }>(
+        storeLookup,
+        "store",
+      );
+      expect(publicStore.id).toBe(business.defaultStore.id);
+      expect(publicStore.name).toBe("Lagos Corner Shop");
+      expect(publicStore.status).toBeUndefined(); // internal field, not part of the public DTO
+
+      const productsResponse = await request(server.baseUrl, `/api/store/public/${slug}/products`);
+      expect(productsResponse.status).toBe(200);
+      const products = entity<
+        { id: string; name: string; variants: { priceMinor: string | null; compareAtMinor: string | null; assetCode: string | null }[] }[]
+      >(productsResponse, "products");
+      expect(products).toHaveLength(1); // the draft product is excluded
+      expect(products[0]!.id).toBe(activeProduct.id);
+      expect(products[0]!.variants[0]).toMatchObject({
+        priceMinor: "150000",
+        compareAtMinor: "200000",
+        assetCode: "NGN",
+      });
+
+      const categoriesResponse = await request(server.baseUrl, `/api/store/public/${slug}/categories`);
+      expect(categoriesResponse.status).toBe(200);
+      expect(entity<{ id: string }[]>(categoriesResponse, "categories")).toEqual([
+        expect.objectContaining({ id: category.id }),
+      ]);
+
+      const byIds = await request(
+        server.baseUrl,
+        `/api/store/public/products?ids=${activeProduct.id}`,
+      );
+      expect(byIds.status).toBe(200);
+      expect(entity<{ id: string }[]>(byIds, "products")).toEqual([
+        expect.objectContaining({ id: activeProduct.id }),
+      ]);
+    });
+
+    it("never exposes another business's rows through the public endpoints, even to an authenticated outsider", async () => {
+      const owner = await authenticate("Private Store Owner");
+      const business = await createBusiness(owner, "Members Only");
+      const outsider = await authenticate("Curious Outsider");
+
+      // Store stays in "draft" — never activated.
+      const slug = `members-only-${randomUUID().slice(0, 8)}`;
+      await request(
+        server.baseUrl,
+        `/api/businesses/${business.id}/stores/${business.defaultStore.id}`,
+        { method: "PATCH", cookie: owner.cookies, body: JSON.stringify({ slug }) },
+      );
+
+      const asOutsider = await request(server.baseUrl, `/api/store/public/${slug}`, {
+        cookie: outsider.cookies,
+      });
+      expect(asOutsider.status).toBe(404);
+    });
+  });
 });

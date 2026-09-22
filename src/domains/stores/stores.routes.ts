@@ -8,6 +8,14 @@ export function createStoresRouter(): Router {
   const router = Router();
   const controller = new StoresController(new StoresService(getDatabase()));
   const base = "/api/businesses/:businessId/stores";
+  const publicBase = "/api/store/public";
+
+  // Public storefront browsing — no requireAuth. RLS's *_public_read
+  // policies (migration 0046) are the real enforcement, not this router.
+  router.get(`${publicBase}/products`, controller.listPublicProductsByIds);
+  router.get(`${publicBase}/:slug`, controller.getPublicStore);
+  router.get(`${publicBase}/:slug/products`, controller.listPublicProducts);
+  router.get(`${publicBase}/:slug/categories`, controller.listPublicCategories);
 
   router.use(base, requireAuth);
   router.get(base, controller.listStores);

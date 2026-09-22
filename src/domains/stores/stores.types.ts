@@ -22,6 +22,19 @@ export interface StoreRow {
   readonly archivedAt: Date | null;
 }
 
+/** What an anonymous storefront visitor may see — no createdBy/timezone/isDefault, and only ever an "active" row (migration 0046's RLS policy is what actually enforces that). */
+export interface PublicStore {
+  readonly id: string;
+  readonly businessId: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly description: string;
+  readonly sellsOnline: boolean;
+  readonly sellsInPerson: boolean;
+  readonly contactEmail: string | null;
+  readonly contactPhone: string | null;
+}
+
 export interface Store {
   readonly id: string;
   readonly businessId: string;

@@ -12,6 +12,11 @@ export async function listProducts(c: DatabaseContext, businessId: string, filte
 export async function findProduct(c: DatabaseContext, businessId: string, productId: string): Promise<ProductRow | undefined> {
   return (await sql<ProductRow>`select * from app.products where "businessId"=${businessId}::uuid and "id"=${productId}::uuid limit 1`.execute(c.transaction)).rows[0];
 }
+/** No businessId filter — products_public_read (migration 0046) already scopes this to "active" products regardless of owner, and the caller (an order confirmation) legitimately doesn't know the business id up front. */
+export async function findActiveProductsByIds(c: DatabaseContext, ids: readonly string[]): Promise<ProductRow[]> {
+  if (ids.length === 0) return [];
+  return (await sql<ProductRow>`select * from app.products where "id" = any(${ids}::uuid[]) and "status" = 'active'`.execute(c.transaction)).rows;
+}
 export async function listVariants(c: DatabaseContext, businessId: string, productId: string): Promise<VariantRow[]> {
   return (await sql<VariantRow>`select * from app.product_variants where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "status" <> 'archived' order by "isDefault" desc, "createdAt"`.execute(c.transaction)).rows;
 }

@@ -63,6 +63,19 @@ export async function findStore(
   return result.rows[0];
 }
 
+/** Public lookup by slug, not scoped to a businessId — the caller doesn't know it yet, that's the point of resolving by slug. Relies entirely on stores_public_read (migration 0046) to keep this to "active" stores only. */
+export async function findActiveStoreBySlug(
+  context: DatabaseContext,
+  slug: string,
+): Promise<StoreRow | undefined> {
+  const result = await sql<StoreRow>`
+    select * from app.stores
+    where "slug" = ${slug} and "status" = 'active'
+    limit 1
+  `.execute(context.transaction);
+  return result.rows[0];
+}
+
 export async function createStore(
   context: DatabaseContext,
   businessId: string,

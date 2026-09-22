@@ -1,13 +1,15 @@
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
-import { withIdentity } from "../../db/principal.js";
+import { anonymousPrincipal, withIdentity } from "../../db/principal.js";
 import {
   AppError,
   conflictError,
   notFoundError,
 } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
+import { listPublicCategories, listPublicProducts, listPublicProductsByIds } from "../products/products.service.js";
+import type { Category, PublicProduct } from "../products/products.types.js";
 import * as repository from "./stores.repository.js";
 import type {
   CashMovementRow,
@@ -17,6 +19,7 @@ import type {
   LocationInput,
   LocationRow,
   OperationContext,
+  PublicStore,
   RegisterInput,
   RegisterRow,
   RegisterShiftRow,
@@ -37,6 +40,42 @@ export class StoresService {
         toStore,
       );
     });
+  }
+
+  /**
+   * Public storefront browsing surface — no requireAuth, no business
+   * permission check. RLS's *_public_read policies (migration 0046) are
+   * the actual enforcement; this only ever sees "active" rows regardless
+   * of what this code does or doesn't check. Scope: browsing only — cart,
+   * checkout, payment, and order lookup are a separate, later pass.
+   */
+  async getPublicStore(requestId: string, slug: string): Promise<PublicStore> {
+    return this.runAnonymous(requestId, async (context) => {
+      const store = await repository.findActiveStoreBySlug(context, slug);
+      if (!store) throw notFoundError("Store not found");
+      return toPublicStore(store);
+    });
+  }
+
+  async listPublicProducts(requestId: string, slug: string): Promise<PublicProduct[]> {
+    return this.runAnonymous(requestId, async (context) => {
+      const store = await repository.findActiveStoreBySlug(context, slug);
+      if (!store) throw notFoundError("Store not found");
+      return listPublicProducts(context, store.businessId, store.id);
+    });
+  }
+
+  async listPublicCategories(requestId: string, slug: string): Promise<Category[]> {
+    return this.runAnonymous(requestId, async (context) => {
+      const store = await repository.findActiveStoreBySlug(context, slug);
+      if (!store) throw notFoundError("Store not found");
+      return listPublicCategories(context, store.businessId);
+    });
+  }
+
+  /** For order-confirmation display — not scoped to a single store's slug. */
+  async listPublicProductsByIds(requestId: string, ids: readonly string[]): Promise<PublicProduct[]> {
+    return this.runAnonymous(requestId, (context) => listPublicProductsByIds(context, ids));
   }
 
   async getStore(operation: OperationContext, storeId: string): Promise<Store> {
@@ -512,6 +551,19 @@ export class StoresService {
     return store;
   }
 
+  private async runAnonymous<T>(
+    requestId: string,
+    work: Parameters<typeof withDatabaseContext<T>>[2],
+  ): Promise<T> {
+    try {
+      return await withDatabaseContext(this.database, anonymousPrincipal(requestId), work);
+    } catch (error) {
+      if (error instanceof AppError || error instanceof DatabaseError)
+        throw error;
+      throw normalizeDatabaseError(error);
+    }
+  }
+
   private async run<T>(
     operation: OperationContext,
     work: Parameters<typeof withDatabaseContext<T>>[2],
@@ -532,6 +584,20 @@ export class StoresService {
       throw normalizeDatabaseError(error);
     }
   }
+}
+
+function toPublicStore(row: StoreRow): PublicStore {
+  return {
+    id: row.id,
+    businessId: row.businessId,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    sellsOnline: row.sellsOnline,
+    sellsInPerson: row.sellsInPerson,
+    contactEmail: row.contactEmail,
+    contactPhone: row.contactPhone,
+  };
 }
 
 function toStore(row: StoreRow): Store {

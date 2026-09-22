@@ -8,6 +8,27 @@ import type { OperationContext } from "./stores.types.js";
 export class StoresController {
   constructor(private readonly service: StoresService) {}
 
+  // Public storefront browsing — no requireAuthContext, request.requestId only.
+  readonly getPublicStore = this.handle(async (request) => {
+    const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
+    return { store: await this.service.getPublicStore(request.requestId, slug) };
+  });
+
+  readonly listPublicProducts = this.handle(async (request) => {
+    const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
+    return { products: await this.service.listPublicProducts(request.requestId, slug) };
+  });
+
+  readonly listPublicCategories = this.handle(async (request) => {
+    const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
+    return { categories: await this.service.listPublicCategories(request.requestId, slug) };
+  });
+
+  readonly listPublicProductsByIds = this.handle(async (request) => {
+    const ids = schemas.publicProductIdsQuerySchema.parse(request.query);
+    return { products: await this.service.listPublicProductsByIds(request.requestId, ids) };
+  });
+
   readonly listStores = this.handle(async (request) => {
     const { businessId } = schemas.businessParamsSchema.parse(request.params);
     return {
