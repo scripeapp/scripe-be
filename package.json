@@ -27,6 +27,7 @@
     "db:bootstrap-platform-admin": "bun src/db/bootstrap-platform-admin.ts"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^7",
     "@aws-sdk/client-s3": "^3.1136.0",
     "@aws-sdk/s3-request-presigner": "^3.1136.0",
     "@better-auth/passkey": "1.7.5",

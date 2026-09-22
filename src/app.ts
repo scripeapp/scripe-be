@@ -43,6 +43,7 @@ import { createAccountingRouter } from "./domains/accounting/accounting.routes.j
 import { createTransfersRouter } from "./domains/transfers/transfers.routes.js";
 import { createPayrollRouter } from "./domains/payroll/payroll.routes.js";
 import { createHealthRouter } from "./routes/health.js";
+import { createDocsRouter } from "./routes/docs.js";
 
 export function createApp(): Express {
   const app = express();
@@ -67,6 +68,13 @@ export function createApp(): Express {
   app.use(initializeAuthContext);
 
   app.use(createHealthRouter());
+
+  // Interactive API docs (Swagger UI at /docs, spec at /openapi.json) — dev
+  // and other non-production environments only.
+  if (process.env.NODE_ENV !== "production") {
+    app.use(createDocsRouter());
+  }
+
   app.use(createProfilesRouter());
   app.use(createAddressesRouter());
   app.use(createHelpdeskRouter());
