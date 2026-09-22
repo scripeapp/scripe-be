@@ -1,18 +1,14 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { Principal } from "../db/principal.js";
+import type { AuthContext } from "../middleware/auth.js";
 
 declare global {
   namespace Express {
     interface Request {
-      user_id?: string;
-      supabase?: SupabaseClient;
-      userProfile?: { name?: string };
+      auth: AuthContext | null;
+      principal: Principal;
+      requestId: string;
     }
   }
 }
-export type SupabaseRequest = Express.Request & {
-  supabase: SupabaseClient;
-  user_id?: string;
-  userProfile?: { name?: string };
-};
 
-export {}; // ensure this file is treated as a module
+export {};
