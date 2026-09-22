@@ -10,6 +10,7 @@ export function createProfilesRouter(): Router {
   const profilesController = new ProfilesController(profilesService);
 
   router.get("/api/me", requireAuth, profilesController.getCurrentUser);
+  router.patch("/api/me", requireAuth, profilesController.updateCurrentUser);
 
   return router;
 }

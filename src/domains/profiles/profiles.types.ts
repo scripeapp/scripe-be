@@ -28,3 +28,16 @@ export interface CurrentUser {
 export interface CurrentUserResponse {
   readonly user: CurrentUser;
 }
+
+export interface UpdateUserProfileInput {
+  readonly name?: string;
+  readonly firstName?: string;
+  readonly lastName?: string;
+  readonly username?: string;
+  readonly bio?: string;
+  readonly website?: string;
+  readonly location?: string;
+  readonly phoneNumber?: string;
+  readonly gender?: string;
+  readonly socialLinks?: Record<string, unknown>;
+}

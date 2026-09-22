@@ -1,9 +1,11 @@
 import type { Json } from "../../db/database.types.codegen.js";
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext } from "../../db/database-context.js";
+import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import type { Principal } from "../../db/principal.js";
-import { findUserProfile } from "./profiles.repository.js";
-import type { CurrentUser, UserProfileRow } from "./profiles.types.js";
+import { AppError, notFoundError } from "../../shared/errors.js";
+import { findUserProfile, updateUserProfile } from "./profiles.repository.js";
+import type { CurrentUser, UpdateUserProfileInput, UserProfileRow } from "./profiles.types.js";
 
 interface CurrentUserQuery {
   readonly principal: Principal;
@@ -27,6 +29,27 @@ export class ProfilesService {
     if (!profile) return undefined;
 
     return this.toCurrentUser(profile, query.emailVerified);
+  }
+
+  async updateCurrentUser(
+    query: CurrentUserQuery,
+    patch: UpdateUserProfileInput,
+  ): Promise<CurrentUser> {
+    const userId = query.principal.userId;
+    if (!userId) throw notFoundError("Profile not found");
+
+    try {
+      const profile = await withDatabaseContext(
+        this.database,
+        query.principal,
+        (context) => updateUserProfile(context, userId, patch),
+      );
+      if (!profile) throw notFoundError("Profile not found");
+      return this.toCurrentUser(profile, query.emailVerified);
+    } catch (error) {
+      if (error instanceof AppError || error instanceof DatabaseError) throw error;
+      throw normalizeDatabaseError(error);
+    }
   }
 
   private toCurrentUser(
