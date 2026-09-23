@@ -150,15 +150,53 @@ describe("stores domain", () => {
           addressLine1: "1 Admiralty Way",
           city: "Lagos",
           state: "Lagos",
+          operationTypes: ["dine_in", "pickup"],
+          taxRate: 7.5,
+          serviceChargeRates: { dine_in: 10 },
+          manager: "Chidi Okafor",
+          format: "fast-casual",
         }),
       },
     );
     expect(locationResponse.status).toBe(201);
-    const location = entity<{ id: string; isDefault: boolean }>(
-      locationResponse,
+    const location = entity<{
+      id: string;
+      isDefault: boolean;
+      operationTypes: string[];
+      acceptingOrders: boolean;
+      taxRate: string;
+      serviceChargeRates: Record<string, number>;
+      manager: string | null;
+      format: string | null;
+    }>(locationResponse, "location");
+    expect(location.isDefault).toBe(true);
+    expect(location).toMatchObject({
+      operationTypes: ["dine_in", "pickup"],
+      acceptingOrders: true,
+      taxRate: "7.50",
+      serviceChargeRates: { dine_in: 10 },
+      manager: "Chidi Okafor",
+      format: "fast-casual",
+    });
+
+    const locationUpdate = await request(
+      server.baseUrl,
+      `${base}/${business.defaultStore.id}/locations/${location.id}`,
+      {
+        method: "PATCH",
+        cookie: owner.cookies,
+        body: JSON.stringify({ acceptingOrders: false }),
+      },
+    );
+    expect(locationUpdate.status).toBe(200);
+    const updatedLocation = entity<{ acceptingOrders: boolean; manager: string | null; taxRate: string }>(
+      locationUpdate,
       "location",
     );
-    expect(location.isDefault).toBe(true);
+    expect(updatedLocation.acceptingOrders).toBe(false);
+    // Fields not sent in the PATCH stay untouched.
+    expect(updatedLocation.manager).toBe("Chidi Okafor");
+    expect(updatedLocation.taxRate).toBe("7.50");
 
     const channelResponse = await request(
       server.baseUrl,

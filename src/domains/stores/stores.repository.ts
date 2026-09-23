@@ -187,8 +187,8 @@ export async function createLocation(
   isDefault: boolean,
 ): Promise<LocationRow> {
   const result = await sql<LocationRow>`
-    insert into app.locations ("businessId","storeId","name","kind","status","isDefault","addressLine1","addressLine2","city","state","postalCode","countryCode","latitude","longitude","phone","timezone","businessHours","prepTimeMinutes")
-    values (${businessId}::uuid,${storeId}::uuid,${input.name},${input.kind},${input.status},${isDefault},${input.addressLine1 ?? null},${input.addressLine2 ?? null},${input.city ?? null},${input.state ?? null},${input.postalCode ?? null},${input.countryCode},${input.latitude ?? null}::numeric,${input.longitude ?? null}::numeric,${input.phone ?? null},${input.timezone},${JSON.stringify(input.businessHours)}::jsonb,${input.prepTimeMinutes ?? null}) returning *
+    insert into app.locations ("businessId","storeId","name","kind","status","isDefault","addressLine1","addressLine2","city","state","postalCode","countryCode","latitude","longitude","phone","timezone","businessHours","prepTimeMinutes","operationTypes","acceptingOrders","taxRate","serviceChargeRates","manager","format")
+    values (${businessId}::uuid,${storeId}::uuid,${input.name},${input.kind},${input.status},${isDefault},${input.addressLine1 ?? null},${input.addressLine2 ?? null},${input.city ?? null},${input.state ?? null},${input.postalCode ?? null},${input.countryCode},${input.latitude ?? null}::numeric,${input.longitude ?? null}::numeric,${input.phone ?? null},${input.timezone},${JSON.stringify(input.businessHours)}::jsonb,${input.prepTimeMinutes ?? null},${input.operationTypes ?? []},${input.acceptingOrders ?? true},${input.taxRate ?? 0},${JSON.stringify(input.serviceChargeRates ?? {})}::jsonb,${input.manager ?? null},${input.format ?? null}) returning *
   `.execute(context.transaction);
   return result.rows[0]!;
 }
@@ -228,6 +228,11 @@ export async function updateLocation(
     "phone",
     "timezone",
     "prepTimeMinutes",
+    "operationTypes",
+    "acceptingOrders",
+    "taxRate",
+    "manager",
+    "format",
   ] as const) {
     if (values[key] !== undefined)
       fields.push(sql`${sql.ref(key)} = ${values[key]}`);
@@ -235,6 +240,10 @@ export async function updateLocation(
   if (input.businessHours !== undefined)
     fields.push(
       sql`"businessHours" = ${JSON.stringify(input.businessHours)}::jsonb`,
+    );
+  if (input.serviceChargeRates !== undefined)
+    fields.push(
+      sql`"serviceChargeRates" = ${JSON.stringify(input.serviceChargeRates)}::jsonb`,
     );
   const result =
     await sql<LocationRow>`update app.locations set ${sql.join(fields, sql`, `)} where "businessId"=${businessId}::uuid and "storeId"=${storeId}::uuid and "id"=${locationId}::uuid and "status" <> 'archived' returning *`.execute(

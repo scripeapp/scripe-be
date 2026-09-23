@@ -53,6 +53,8 @@ export interface Store {
   readonly archivedAt: string | null;
 }
 
+export type LocationOperationType = "dine_in" | "pickup" | "delivery" | "curbside";
+
 export interface LocationRow {
   readonly id: string;
   readonly businessId: string;
@@ -73,13 +75,20 @@ export interface LocationRow {
   readonly timezone: string;
   readonly businessHours: unknown;
   readonly prepTimeMinutes: number | null;
+  readonly operationTypes: LocationOperationType[];
+  readonly acceptingOrders: boolean;
+  readonly taxRate: string;
+  readonly serviceChargeRates: unknown;
+  readonly manager: string | null;
+  readonly format: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly archivedAt: Date | null;
 }
 
-export interface Location extends Omit<LocationRow, "createdAt" | "updatedAt" | "archivedAt" | "businessHours"> {
+export interface Location extends Omit<LocationRow, "createdAt" | "updatedAt" | "archivedAt" | "businessHours" | "serviceChargeRates"> {
   readonly businessHours: Record<string, unknown>;
+  readonly serviceChargeRates: Partial<Record<LocationOperationType, number>>;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archivedAt: string | null;
@@ -186,6 +195,12 @@ export interface LocationInput {
   readonly timezone: string;
   readonly businessHours: Record<string, unknown>;
   readonly prepTimeMinutes?: number | null;
+  readonly operationTypes?: LocationOperationType[];
+  readonly acceptingOrders?: boolean;
+  readonly taxRate?: number;
+  readonly serviceChargeRates?: Partial<Record<LocationOperationType, number>>;
+  readonly manager?: string | null;
+  readonly format?: string | null;
 }
 
 export interface ChannelInput {

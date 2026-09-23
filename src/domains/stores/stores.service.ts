@@ -616,9 +616,16 @@ function toLocation(row: LocationRow): Location {
     !Array.isArray(row.businessHours)
       ? (row.businessHours as Record<string, unknown>)
       : {};
+  const serviceChargeRates =
+    row.serviceChargeRates &&
+    typeof row.serviceChargeRates === "object" &&
+    !Array.isArray(row.serviceChargeRates)
+      ? (row.serviceChargeRates as Location["serviceChargeRates"])
+      : {};
   return {
     ...row,
     businessHours: hours,
+    serviceChargeRates,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     archivedAt: row.archivedAt?.toISOString() ?? null,

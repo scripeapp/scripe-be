@@ -36,6 +36,9 @@ export const updateStoreSchema = createStoreSchema.partial().extend({
   status: z.enum(["draft", "active"]).optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
+const operationType = z.enum(["dine_in", "pickup", "delivery", "curbside"]);
+const serviceChargeRates = z.record(operationType, z.number().min(0).max(100)).default({});
+
 export const locationSchema = z.object({
   name: z.string().trim().min(1).max(160),
   kind: z.enum(["branch", "warehouse", "kitchen", "pharmacy", "stockroom"]).default("branch"),
@@ -53,6 +56,12 @@ export const locationSchema = z.object({
   timezone: z.string().trim().min(1).max(100).default("Africa/Lagos"),
   businessHours: z.record(z.unknown()).default({}),
   prepTimeMinutes: z.number().int().min(0).max(1440).nullable().optional(),
+  operationTypes: z.array(operationType).max(4).default([]),
+  acceptingOrders: z.boolean().default(true),
+  taxRate: z.number().min(0).max(100).default(0),
+  serviceChargeRates,
+  manager: nullableText,
+  format: nullableText,
 });
 export const updateLocationSchema = locationSchema.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
@@ -128,6 +137,12 @@ const locationResponseSchema = z.object({
   timezone: z.string(),
   businessHours: z.record(z.unknown()),
   prepTimeMinutes: z.number().int().nullable(),
+  operationTypes: z.array(operationType),
+  acceptingOrders: z.boolean(),
+  taxRate: z.string(),
+  serviceChargeRates: z.record(operationType, z.number()),
+  manager: z.string().nullable(),
+  format: z.string().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
   archivedAt: nullableTimestamp,
