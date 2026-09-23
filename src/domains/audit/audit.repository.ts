@@ -40,3 +40,20 @@ export async function listForBusiness(context: DatabaseContext, businessId: stri
   `.execute(context.transaction);
   return result.rows;
 }
+
+export async function listAll(context: DatabaseContext, filter: ListAuditEventsFilter): Promise<AuditEventRow[]> {
+  const clauses: RawBuilder<unknown>[] = [];
+  if (filter.action) clauses.push(sql`"action" = ${filter.action}`);
+  const limit = filter.limit ?? 50;
+
+  const whereClause = clauses.length > 0 ? sql`where ${sql.join(clauses, sql` and `)}` : sql``;
+
+  const result = await sql<AuditEventRow>`
+    select "id", "businessId", "actorUserId", "action", "targetType", "targetId", "metadata", "ipAddress", "userAgent", "requestId", "createdAt"
+    from app.audit_events
+    ${whereClause}
+    order by "createdAt" desc
+    limit ${limit}
+  `.execute(context.transaction);
+  return result.rows;
+}

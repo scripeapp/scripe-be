@@ -13,6 +13,13 @@ export class AuditController {
     return { events: await this.service.list(this.operation(request, businessId), schemas.listQuerySchema.parse(request.query)) };
   });
 
+  readonly listPlatformAudit = this.handle(async (request) => {
+    const userId = requireAuthContext(request).userId;
+    const filter = schemas.listQuerySchema.parse(request.query);
+    const events = await this.service.listAll(userId, request.requestId, filter);
+    return { events, logs: events };
+  });
+
   private operation(request: Request, businessId: string): AuditOperation {
     return {
       userId: requireAuthContext(request).userId,

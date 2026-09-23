@@ -23,5 +23,17 @@ export function createRiskRouter(): Router {
   router.post(`${base}/holds`, controller.createHold);
   router.post(`${base}/holds/:holdId/release`, controller.releaseHold);
 
+  const fraudBase = "/api/platform/fraud";
+  router.use(fraudBase, requireAuth);
+  router.get(`${fraudBase}/signals`, controller.listSignals);
+  router.get(`${fraudBase}/stats`, controller.getStats);
+  router.patch(`${fraudBase}/signals/:signalId/review`, controller.reviewSignal);
+
+  const riskPlatformBase = "/api/platform/risk";
+  router.use(riskPlatformBase, requireAuth);
+  router.get(`${riskPlatformBase}/signals`, controller.listSignals);
+  router.get(`${riskPlatformBase}/stats`, controller.getStats);
+  router.patch(`${riskPlatformBase}/signals/:signalId/review`, controller.reviewSignal);
+
   return router;
 }

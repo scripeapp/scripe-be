@@ -9,6 +9,7 @@ export function createPlatformRouter(): Router {
   const controller = new PlatformController(new PlatformService(getDatabase()));
 
   const administratorsBase = "/api/platform/administrators";
+  const adminsBase = "/api/platform/admins";
   const alertsBase = "/api/platform/alerts";
   const announcementsBase = "/api/platform/announcements";
 
@@ -17,6 +18,12 @@ export function createPlatformRouter(): Router {
   router.post(administratorsBase, controller.createAdministrator);
   router.patch(`${administratorsBase}/:administratorId`, controller.updateAdministrator);
   router.delete(`${administratorsBase}/:administratorId`, controller.deactivateAdministrator);
+
+  router.use(adminsBase, requireAuth);
+  router.get(adminsBase, controller.listAdministrators);
+  router.post(adminsBase, controller.createAdministrator);
+  router.patch(`${adminsBase}/:administratorId`, controller.updateAdministrator);
+  router.delete(`${adminsBase}/:administratorId`, controller.deactivateAdministrator);
 
   router.use(alertsBase, requireAuth);
   router.get(alertsBase, controller.listAlerts);

@@ -4,6 +4,7 @@ import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
 import { AppError } from "../../shared/errors.js";
 import { requirePermission } from "../authorization/authorization.service.js";
+import { requirePlatformAdministrator } from "../platform/platform.service.js";
 import * as repository from "./audit.repository.js";
 import type { AuditEvent, AuditEventRow, AuditOperation, ListAuditEventsFilter } from "./audit.types.js";
 
@@ -14,6 +15,13 @@ export class AuditService {
     return this.run(operation, async (context) => {
       await requirePermission(context, operation.businessId, "audit.read");
       return (await repository.listForBusiness(context, operation.businessId, filter)).map(toAuditEvent);
+    });
+  }
+
+  async listAll(userId: string, requestId: string, filter: ListAuditEventsFilter): Promise<AuditEvent[]> {
+    return this.run({ userId, businessId: "00000000-0000-0000-0000-000000000000", requestId }, async (context) => {
+      await requirePlatformAdministrator(context, userId, "viewer");
+      return (await repository.listAll(context, filter)).map(toAuditEvent);
     });
   }
 

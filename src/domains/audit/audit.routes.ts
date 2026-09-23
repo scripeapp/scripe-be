@@ -12,5 +12,8 @@ export function createAuditRouter(): Router {
   router.use(base, requireAuth);
   router.get(base, controller.list);
 
+  router.get("/api/platform/audit-logs", requireAuth, controller.listPlatformAudit);
+  router.get("/api/platform/audit/logs", requireAuth, controller.listPlatformAudit);
+
   return router;
 }
