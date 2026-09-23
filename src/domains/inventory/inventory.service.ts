@@ -97,10 +97,27 @@ export class InventoryService {
       return updated;
     });
   }
+  /** Cancellable while sent (not just draft) — the sender may cancel before the receiver confirms anything, which reverses the transfer_out and puts the stock back at the source. */
   cancelTransfer(o: InventoryOperation, transferId: string): Promise<void> {
     return this.run(o, async (c) => {
       await this.require(c, o.businessId, "inventory.manage");
-      if (!(await repo.cancelTransfer(c, o.businessId, transferId))) throw validationError("Only a draft transfer can be cancelled");
+      const transfer = await repo.findTransfer(c, o.businessId, transferId);
+      if (!transfer) throw notFoundError("Transfer not found");
+      if (transfer.status !== "draft" && transfer.status !== "sent") throw validationError("Only a draft or sent transfer can be cancelled");
+      if (transfer.status === "sent") {
+        const lines = await repo.listTransferLines(c, o.businessId, transferId);
+        for (const line of lines) {
+          await this.postMovementWithJournal(c, o, {
+            inventoryItemId: line.inventoryItemId,
+            inventoryLocationId: transfer.fromInventoryLocationId,
+            quantity: Math.abs(Number(line.quantity)),
+            type: "transfer_in",
+            reason: `Cancelled transfer ${transfer.reference}`,
+            idempotencyKey: `transfer:${transferId}:cancel:${line.id}`,
+          });
+        }
+      }
+      if (!(await repo.cancelTransfer(c, o.businessId, transferId))) throw validationError("Only a draft or sent transfer can be cancelled");
     });
   }
 

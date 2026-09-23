@@ -122,6 +122,43 @@ describe("inventory domain", () => {
     expect((await request(server.baseUrl, `${base}/transfers/${transfer.id}/send`, { method: "POST", cookie })).status).toBe(400);
   });
 
+  it("cancels a sent transfer, reversing the stock that already left the source", async () => {
+    const cookie = await actor("Transfer Sent Cancel Owner");
+    const b = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie, body: JSON.stringify({ displayName: "Transfer Sent Cancel Market" }) });
+    const business = (b.body as { data: { business: { id: string; defaultStore: { id: string } } } }).data.business;
+    const storesBase = `/api/businesses/${business.id}/stores/${business.defaultStore.id}`;
+    const locA = await request(server.baseUrl, `${storesBase}/locations`, { method: "POST", cookie, body: JSON.stringify({ name: "A", kind: "warehouse", countryCode: "NG", timezone: "Africa/Lagos", businessHours: {} }) });
+    const locB = await request(server.baseUrl, `${storesBase}/locations`, { method: "POST", cookie, body: JSON.stringify({ name: "B", kind: "warehouse", countryCode: "NG", timezone: "Africa/Lagos", businessHours: {} }) });
+    const fromLocationId = (locA.body as { data: { location: { id: string } } }).data.location.id;
+    const base = `/api/businesses/${business.id}/inventory`;
+    const itemResponse = await request(server.baseUrl, `${base}/items`, { method: "POST", cookie, body: JSON.stringify({ name: "Butter", sku: `BUTTER-${randomUUID()}` }) });
+    const item = (itemResponse.body as { data: { item: { id: string } } }).data.item;
+    const fromInvLoc = await request(server.baseUrl, `${base}/locations`, { method: "POST", cookie, body: JSON.stringify({ locationId: fromLocationId, name: "A" }) });
+    const fromInventoryLocationId = (fromInvLoc.body as { data: { location: { id: string } } }).data.location.id;
+    await request(server.baseUrl, `${base}/movements`, { method: "POST", cookie, body: JSON.stringify({ inventoryItemId: item.id, inventoryLocationId: fromInventoryLocationId, quantity: 10, type: "receipt", reason: "Initial stock", idempotencyKey: randomUUID() }) });
+
+    const created = await request(server.baseUrl, `${base}/transfers`, { method: "POST", cookie, body: JSON.stringify({
+      reference: `TRF-${randomUUID().slice(0, 8)}`,
+      fromLocationId,
+      toLocationId: (locB.body as { data: { location: { id: string } } }).data.location.id,
+      lines: [{ inventoryItemId: item.id, quantity: 4 }],
+    }) });
+    const transfer = (created.body as { data: { transfer: { id: string } } }).data.transfer;
+    expect((await request(server.baseUrl, `${base}/transfers/${transfer.id}/send`, { method: "POST", cookie })).status).toBe(200);
+
+    const balanceAfterSend = await request(server.baseUrl, `${base}/balances?inventoryItemId=${item.id}&inventoryLocationId=${fromInventoryLocationId}`, { cookie });
+    expect((balanceAfterSend.body as { data: { balances: { onHand: string }[] } }).data.balances[0]?.onHand).toBe("6.000000");
+
+    const cancelled = await request(server.baseUrl, `${base}/transfers/${transfer.id}/cancel`, { method: "POST", cookie });
+    expect(cancelled.status).toBe(200);
+    expect((cancelled.body as { data: { cancelled: boolean } }).data.cancelled).toBe(true);
+
+    const balanceAfterCancel = await request(server.baseUrl, `${base}/balances?inventoryItemId=${item.id}&inventoryLocationId=${fromInventoryLocationId}`, { cookie });
+    expect((balanceAfterCancel.body as { data: { balances: { onHand: string }[] } }).data.balances[0]?.onHand).toBe("10.000000");
+
+    expect((await request(server.baseUrl, `${base}/transfers/${transfer.id}/receive`, { method: "POST", cookie, body: JSON.stringify({ lines: [] }) })).status).toBe(400);
+  });
+
   it("applies a stock count and posts the variance as an adjustment", async () => {
     const cookie = await actor("Count Owner");
     const b = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie, body: JSON.stringify({ displayName: "Count Market" }) });

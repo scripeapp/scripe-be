@@ -72,7 +72,8 @@ export async function markTransferReceived(c: DatabaseContext, businessId: strin
   }
   return (await sql<StockTransfer>`update app.stock_transfers set "status"='received',"receivedAt"=now() where "businessId"=${businessId}::uuid and "id"=${transferId}::uuid and "status"='sent' returning *`.execute(c.transaction)).rows[0];
 }
-export async function cancelTransfer(c: DatabaseContext, businessId: string, transferId: string): Promise<StockTransfer | undefined> { return (await sql<StockTransfer>`update app.stock_transfers set "status"='cancelled' where "businessId"=${businessId}::uuid and "id"=${transferId}::uuid and "status"='draft' returning *`.execute(c.transaction)).rows[0]; }
+/** Cancellable from draft (nothing posted yet) or sent (stock already left the source — the caller reverses that separately, before this flips the status). */
+export async function cancelTransfer(c: DatabaseContext, businessId: string, transferId: string): Promise<StockTransfer | undefined> { return (await sql<StockTransfer>`update app.stock_transfers set "status"='cancelled' where "businessId"=${businessId}::uuid and "id"=${transferId}::uuid and "status" in ('draft','sent') returning *`.execute(c.transaction)).rows[0]; }
 
 // ---- Stock counts ----
 
