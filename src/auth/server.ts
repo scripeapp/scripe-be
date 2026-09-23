@@ -58,7 +58,7 @@ function createAuth() {
         overrideDefaultEmailVerification: true,
         rateLimit: EMAIL_VERIFICATION_RATE_LIMIT,
         sendVerificationOTP: async ({ email, otp, type }) => {
-          if (type !== "email-verification") return;
+          console.log(`\n========================================\n[AUTH OTP] to=${email} otp=${otp} (type=${type})\n========================================\n`);
           await emailSender.sendVerificationCode(email, otp);
         },
       }),
