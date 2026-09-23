@@ -10,4 +10,4 @@ export const categoryCreateSchema = z.object({ name: z.string().trim().min(1).ma
 export const categoryUpdateSchema = categoryCreateSchema.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
 export const variantSchema = z.object({ name: z.string().trim().min(1).max(160), sku: z.string().trim().max(120).nullable().optional(), optionValues: z.record(z.string(), z.unknown()).optional(), unitId: uuid.nullable().optional(), isDefault: z.boolean().optional() });
 export const categoryParamsSchema = z.object({ businessId: uuid, categoryId: uuid });
-export const variantParamsSchema = z.object({ businessId: uuid, productId: uuid, variantId: uuid });
+export const variantParamsSchema = z.object({ businessId: uuid, productId: uuid, variantId: uuid.optional() });
