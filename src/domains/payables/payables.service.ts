@@ -3,7 +3,7 @@
  * payment allocation domain belong here.
  */
 import { randomUUID } from "node:crypto";
-import type { Database } from "../../db/database.types.js"; import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import type { ApprovalsService } from "../approvals/approvals.service.js"; import * as authorizationRepository from "../authorization/authorization.repository.js"; import * as authorization from "../authorization/authorization.service.js"; import { notFoundError, validationError } from "../../shared/errors.js"; import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js"; import type { JournalLineInput } from "../accounting/accounting.types.js"; import { postJournalEntry, resolveExpenseAccountCode } from "../accounting/accounting.service.js"; import * as repo from "./payables.repository.js"; import type { AllocatePaymentInput, AllocatePaymentResult, BillLineInput, CreateBillInput, PayablesOperation } from "./payables.types.js";
+import type { Database } from "../../db/database.types.js"; import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import type { ApprovalsService } from "../approvals/approvals.service.js"; import * as authorizationRepository from "../authorization/authorization.repository.js"; import * as authorization from "../authorization/authorization.service.js"; import { notFoundError, validationError } from "../../shared/errors.js"; import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js"; import type { JournalLineInput } from "../accounting/accounting.types.js"; import { postJournalEntry, resolveExpenseAccountCode } from "../accounting/accounting.service.js"; import * as repo from "./payables.repository.js"; import type { AllocatePaymentInput, AllocatePaymentResult, BillLineInput, CreateBillInput, ListBillsFilter, PayablesOperation, UpdateBillInput } from "./payables.types.js";
 
 /**
  * Bills go straight from "draft" (createBill's only reachable status - see
@@ -55,12 +55,64 @@ export class PayablesService {
     private readonly approvals: ApprovalsService,
   ) {}
 
+  async listBills(o: PayablesOperation, filters: ListBillsFilter) {
+    return this.run(o, async (c) => {
+      await authorization.requirePermission(c, o.businessId, "payables.read");
+      return repo.listBills(c, o.businessId, filters);
+    });
+  }
+
+  async getMetrics(o: PayablesOperation) {
+    return this.run(o, async (c) => {
+      await authorization.requirePermission(c, o.businessId, "payables.read");
+      return repo.getBillMetrics(c, o.businessId);
+    });
+  }
+
+  async getBill(o: PayablesOperation, billId: string) {
+    return this.run(o, async (c) => {
+      await authorization.requirePermission(c, o.businessId, "payables.read");
+      const bill = await repo.findBillById(c, o.businessId, billId);
+      if (!bill) throw notFoundError("Bill not found");
+      const lines = await repo.listBillLines(c, o.businessId, billId);
+      const allocations = await repo.listBillAllocations(c, o.businessId, billId);
+      return { bill, lines, allocations };
+    });
+  }
+
+  async getBillLines(o: PayablesOperation, billId: string) {
+    return this.run(o, async (c) => {
+      await authorization.requirePermission(c, o.businessId, "payables.read");
+      const bill = await repo.findBillById(c, o.businessId, billId);
+      if (!bill) throw notFoundError("Bill not found");
+      return repo.listBillLines(c, o.businessId, billId);
+    });
+  }
+
   async createBill(o: PayablesOperation, input: CreateBillInput) {
     return this.run(o, async (c) => {
       await authorization.requirePermission(c, o.businessId, "payables.manage");
       const bill = await repo.createBill(c, o.businessId, o.userId, input);
       await postBillCreatedJournal(c, o.businessId, o.userId, bill.id, input.billType ?? "supplier", input.assetCode ?? "NGN", input.lines);
       return bill;
+    });
+  }
+
+  async updateBill(o: PayablesOperation, billId: string, input: UpdateBillInput) {
+    return this.run(o, async (c) => {
+      await authorization.requirePermission(c, o.businessId, "payables.manage");
+      const updated = await repo.updateBill(c, o.businessId, billId, input);
+      if (!updated) throw notFoundError("Bill not found");
+      return updated;
+    });
+  }
+
+  async deleteBill(o: PayablesOperation, billId: string) {
+    return this.run(o, async (c) => {
+      await authorization.requirePermission(c, o.businessId, "payables.manage");
+      const deleted = await repo.deleteBill(c, o.businessId, billId);
+      if (!deleted) throw notFoundError("Bill not found");
+      return { success: true };
     });
   }
 
