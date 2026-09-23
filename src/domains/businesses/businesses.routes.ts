@@ -9,6 +9,7 @@ export function createBusinessesRouter(): Router {
   const controller = new BusinessesController(new BusinessesService(getDatabase()));
 
   router.get("/api/businesses", requireAuth, controller.list);
+  router.get("/api/businesses/categories", controller.listCategories);
   router.post("/api/businesses", requireAuth, controller.create);
   router.get("/api/businesses/:businessId", requireAuth, controller.get);
   router.patch("/api/businesses/:businessId", requireAuth, controller.update);

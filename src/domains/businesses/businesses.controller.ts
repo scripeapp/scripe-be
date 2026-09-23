@@ -8,9 +8,14 @@ import {
 } from "./businesses.schemas.js";
 import type { BusinessesService } from "./businesses.service.js";
 import type { BusinessOperation } from "./businesses.types.js";
+import { DEFAULT_BUSINESS_CATEGORIES } from "./businesses.categories.js";
 
 export class BusinessesController {
   constructor(private readonly service: BusinessesService) {}
+
+  readonly listCategories = this.handle(async () => ({
+    categories: DEFAULT_BUSINESS_CATEGORIES,
+  }));
 
   readonly list = this.handle(async (request) => ({
     businesses: await this.service.list(this.operation(request)),
