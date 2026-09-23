@@ -21,3 +21,16 @@ export interface CategoryUpdateInput { readonly name?: string; readonly slug?: s
 export interface ProductOperation { readonly userId: string; readonly businessId: string; readonly requestId: string; }
 export interface PublicVariant extends Variant { readonly priceMinor: string | null; readonly compareAtMinor: string | null; readonly assetCode: string | null; }
 export interface PublicProduct extends Omit<Product, "variants"> { readonly variants: PublicVariant[]; }
+
+export type ModifierSelectionMode = "single" | "multiple";
+export type ModifierGroupKind = "modifier" | "addon";
+export interface ModifierGroupRow { readonly id: string; readonly businessId: string; readonly storeId: string; readonly name: string; readonly description: string; readonly selectionMode: ModifierSelectionMode; readonly minSelections: number; readonly maxSelections: number | null; readonly kind: ModifierGroupKind; readonly sortOrder: number; readonly branchIds: string[] | null; readonly status: "active" | "archived"; readonly createdAt: Date; readonly updatedAt: Date; }
+export interface ModifierOptionRow { readonly id: string; readonly businessId: string; readonly groupId: string; readonly name: string; readonly priceAdjustmentMinor: string; readonly sortOrder: number; readonly isAvailable: boolean; readonly isDefault: boolean; readonly branchIds: string[] | null; readonly status: "active" | "archived"; readonly createdAt: Date; }
+export interface ModifierGroup extends Omit<ModifierGroupRow, "createdAt" | "updatedAt"> { readonly createdAt: string; readonly updatedAt: string; readonly optionsCount: number; readonly productCount: number; }
+export interface ModifierGroupDetail extends ModifierGroup { readonly options: ModifierOption[]; }
+export interface ModifierOption extends Omit<ModifierOptionRow, "createdAt"> { readonly createdAt: string; }
+export interface ModifierGroupInput { readonly storeId: string; readonly name: string; readonly description?: string; readonly selectionMode?: ModifierSelectionMode; readonly minSelections?: number; readonly maxSelections?: number | null; readonly kind?: ModifierGroupKind; readonly branchIds?: string[] | null; }
+export interface ModifierGroupUpdateInput { readonly name?: string; readonly description?: string; readonly selectionMode?: ModifierSelectionMode; readonly minSelections?: number; readonly maxSelections?: number | null; readonly kind?: ModifierGroupKind; readonly branchIds?: string[] | null; }
+export interface ModifierOptionInput { readonly name: string; readonly priceAdjustmentMinor?: number; readonly isDefault?: boolean; readonly sortOrder?: number; }
+export interface ModifierOptionUpdateInput { readonly name?: string; readonly priceAdjustmentMinor?: number; readonly isAvailable?: boolean; readonly isDefault?: boolean; readonly branchIds?: string[] | null; }
+export interface AttachedModifierGroup { readonly id: string; readonly name: string; readonly kind: ModifierGroupKind; readonly sortOrder: number; }

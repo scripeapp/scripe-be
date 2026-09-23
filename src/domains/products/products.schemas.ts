@@ -11,3 +11,17 @@ export const categoryUpdateSchema = categoryCreateSchema.partial().refine((value
 export const variantSchema = z.object({ name: z.string().trim().min(1).max(160), sku: z.string().trim().max(120).nullable().optional(), optionValues: z.record(z.string(), z.unknown()).optional(), unitId: uuid.nullable().optional(), isDefault: z.boolean().optional() });
 export const categoryParamsSchema = z.object({ businessId: uuid, categoryId: uuid });
 export const variantParamsSchema = z.object({ businessId: uuid, productId: uuid, variantId: uuid.optional() });
+
+const selectionMode = z.enum(["single", "multiple"]);
+const modifierGroupKind = z.enum(["modifier", "addon"]);
+export const modifierGroupListQuerySchema = z.object({ businessId: uuid, storeId: uuid });
+export const modifierGroupParamsSchema = z.object({ businessId: uuid, groupId: uuid });
+export const modifierOptionParamsSchema = z.object({ businessId: uuid, groupId: uuid, optionId: uuid });
+export const modifierGroupCreateSchema = z.object({ storeId: uuid, name: z.string().trim().min(1).max(120), description: z.string().max(2000).optional(), selectionMode: selectionMode.optional(), minSelections: z.number().int().min(0).max(50).optional(), maxSelections: z.number().int().min(1).max(50).nullable().optional(), kind: modifierGroupKind.optional(), branchIds: z.array(uuid).nullable().optional() });
+export const modifierGroupUpdateSchema = modifierGroupCreateSchema.omit({ storeId: true }).partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
+export const modifierGroupReorderSchema = z.object({ storeId: uuid, orderedIds: z.array(uuid).min(1).max(200) });
+export const modifierOptionCreateSchema = z.object({ name: z.string().trim().min(1).max(120), priceAdjustmentMinor: z.number().int().optional(), isDefault: z.boolean().optional(), sortOrder: z.number().int().min(0).optional() });
+export const modifierOptionUpdateSchema = z.object({ name: z.string().trim().min(1).max(120).optional(), priceAdjustmentMinor: z.number().int().optional(), isAvailable: z.boolean().optional(), isDefault: z.boolean().optional(), branchIds: z.array(uuid).nullable().optional() }).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+export const modifierOptionReorderSchema = z.object({ orderedIds: z.array(uuid).min(1).max(200) });
+export const productModifierGroupParamsSchema = z.object({ businessId: uuid, productId: uuid, groupId: uuid });
+export const productModifierGroupAttachSchema = z.object({ groupId: uuid });
