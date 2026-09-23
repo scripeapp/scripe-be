@@ -43,4 +43,24 @@ describe("products/catalog domain", () => {
     expect((await request(server.baseUrl, `/api/businesses/${business.id}/products/${product.id}`, { method: "DELETE", cookie: cookies })).status).toBe(200);
   });
   it("rejects invalid product contracts", async () => { const cookies = await actor("Invalid Catalog"); const businessResponse = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie: cookies, body: JSON.stringify({ displayName: "Invalid Catalog Market" }) }); const id = (businessResponse.body as { data: { business: { id: string } } }).data.business.id; expect((await request(server.baseUrl, `/api/businesses/${id}/products`, { method: "POST", cookie: cookies, body: JSON.stringify({ storeId: "not-a-uuid", name: "" }) })).status).toBe(400); });
+  it("updates and archives a category", async () => {
+    const cookies = await actor("Category Owner");
+    const businessResponse = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie: cookies, body: JSON.stringify({ displayName: "Category Market" }) });
+    const business = (businessResponse.body as { data: { business: { id: string } } }).data.business;
+    const created = await request(server.baseUrl, `/api/businesses/${business.id}/categories`, { method: "POST", cookie: cookies, body: JSON.stringify({ name: "Snacks" }) });
+    const category = (created.body as { data: { category: { id: string } } }).data.category;
+
+    const updated = await request(server.baseUrl, `/api/businesses/${business.id}/categories/${category.id}`, { method: "PATCH", cookie: cookies, body: JSON.stringify({ name: "Salty Snacks", sortOrder: 3 }) });
+    expect(updated.status).toBe(200);
+    expect((updated.body as { data: { category: { name: string; sortOrder: number } } }).data.category).toMatchObject({ name: "Salty Snacks", sortOrder: 3 });
+
+    expect((await request(server.baseUrl, `/api/businesses/${business.id}/categories/${category.id}`, { method: "PATCH", cookie: cookies, body: JSON.stringify({}) })).status).toBe(400);
+
+    const archived = await request(server.baseUrl, `/api/businesses/${business.id}/categories/${category.id}`, { method: "DELETE", cookie: cookies });
+    expect(archived.status).toBe(200);
+    const remaining = await request(server.baseUrl, `/api/businesses/${business.id}/categories`, { cookie: cookies });
+    expect((remaining.body as { data: { categories: { id: string }[] } }).data.categories.map((c) => c.id)).not.toContain(category.id);
+
+    expect((await request(server.baseUrl, `/api/businesses/${business.id}/categories/${randomUUID()}`, { method: "PATCH", cookie: cookies, body: JSON.stringify({ name: "Ghost" }) })).status).toBe(404);
+  });
 });

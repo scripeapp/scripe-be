@@ -1,6 +1,6 @@
 import { sql, type RawBuilder } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
-import type { CategoryInput, CategoryRow, ProductCreateInput, ProductRow, ProductUpdateInput, VariantInput, VariantRow } from "./products.types.js";
+import type { CategoryInput, CategoryRow, CategoryUpdateInput, ProductCreateInput, ProductRow, ProductUpdateInput, VariantInput, VariantRow } from "./products.types.js";
 
 export async function listProducts(c: DatabaseContext, businessId: string, filters: { storeId?: string; status?: string; search?: string }): Promise<ProductRow[]> {
   const clauses: RawBuilder<unknown>[] = [sql`p."businessId" = ${businessId}::uuid`];
@@ -42,4 +42,15 @@ export async function archiveProduct(c: DatabaseContext, businessId: string, pro
 export async function addVariant(c: DatabaseContext, businessId: string, productId: string, input: VariantInput): Promise<VariantRow> { if (input.isDefault) await sql`update app.product_variants set "isDefault"=false where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid`.execute(c.transaction); return (await sql<VariantRow>`insert into app.product_variants ("businessId","productId","name","sku","optionValues","unitId","isDefault") values (${businessId}::uuid,${productId}::uuid,${input.name},${input.sku ?? null},${JSON.stringify(input.optionValues ?? {})}::jsonb,${input.unitId ?? null}::uuid,${input.isDefault ?? false}) returning *`.execute(c.transaction)).rows[0]!; }
 export async function listCategories(c: DatabaseContext, businessId: string): Promise<CategoryRow[]> { return (await sql<CategoryRow>`select * from app.categories where "businessId"=${businessId}::uuid and "status" <> 'archived' order by "sortOrder","name"`.execute(c.transaction)).rows; }
 export async function createCategory(c: DatabaseContext, businessId: string, input: CategoryInput, slugValue: string): Promise<CategoryRow> { return (await sql<CategoryRow>`insert into app.categories ("businessId","parentId","name","slug","description","sortOrder") values (${businessId}::uuid,${input.parentId ?? null}::uuid,${input.name},${slugValue},${input.description ?? ''},${input.sortOrder ?? 0}) returning *`.execute(c.transaction)).rows[0]!; }
+export async function findCategory(c: DatabaseContext, businessId: string, categoryId: string): Promise<CategoryRow | undefined> {
+  return (await sql<CategoryRow>`select * from app.categories where "businessId"=${businessId}::uuid and "id"=${categoryId}::uuid limit 1`.execute(c.transaction)).rows[0];
+}
+export async function updateCategory(c: DatabaseContext, businessId: string, categoryId: string, input: CategoryUpdateInput): Promise<CategoryRow | undefined> {
+  const fields: RawBuilder<unknown>[] = [];
+  if (input.name !== undefined) fields.push(sql`"name"=${input.name}`); if (input.slug !== undefined) fields.push(sql`"slug"=${input.slug}`); if (input.parentId !== undefined) fields.push(sql`"parentId"=${input.parentId}::uuid`); if (input.description !== undefined) fields.push(sql`"description"=${input.description}`); if (input.sortOrder !== undefined) fields.push(sql`"sortOrder"=${input.sortOrder}`);
+  let row = await findCategory(c, businessId, categoryId); if (!row) return undefined;
+  if (fields.length) row = (await sql<CategoryRow>`update app.categories set ${sql.join(fields, sql`, `)} where "businessId"=${businessId}::uuid and "id"=${categoryId}::uuid returning *`.execute(c.transaction)).rows[0]!;
+  return row;
+}
+export async function archiveCategory(c: DatabaseContext, businessId: string, categoryId: string): Promise<boolean> { return (await sql<{ id: string }>`update app.categories set "status"='archived', "archivedAt"=now() where "businessId"=${businessId}::uuid and "id"=${categoryId}::uuid and "status" <> 'archived' returning "id"`.execute(c.transaction)).rows.length > 0; }
 export async function setCategories(c: DatabaseContext, businessId: string, productId: string, ids: string[]): Promise<void> { await sql`delete from app.product_categories where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid`.execute(c.transaction); if (ids.length) await sql`insert into app.product_categories ("businessId","productId","categoryId") select ${businessId}::uuid, ${productId}::uuid, value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) value`.execute(c.transaction); }

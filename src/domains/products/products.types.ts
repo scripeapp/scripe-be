@@ -17,6 +17,7 @@ export interface ProductCreateInput { readonly storeId: string; readonly name: s
 export interface ProductUpdateInput { readonly name?: string; readonly slug?: string; readonly description?: string; readonly productType?: ProductType; readonly status?: Exclude<ProductStatus, "archived">; readonly isSellable?: boolean; readonly trackInventory?: boolean; readonly allowBackorder?: boolean; readonly categoryIds?: string[]; }
 export interface VariantInput { readonly name: string; readonly sku?: string | null; readonly optionValues?: Record<string, unknown>; readonly unitId?: string | null; readonly isDefault?: boolean; }
 export interface CategoryInput { readonly name: string; readonly slug?: string; readonly parentId?: string | null; readonly description?: string; readonly sortOrder?: number; }
+export interface CategoryUpdateInput { readonly name?: string; readonly slug?: string; readonly parentId?: string | null; readonly description?: string; readonly sortOrder?: number; }
 export interface ProductOperation { readonly userId: string; readonly businessId: string; readonly requestId: string; }
 export interface PublicVariant extends Variant { readonly priceMinor: string | null; readonly compareAtMinor: string | null; readonly assetCode: string | null; }
 export interface PublicProduct extends Omit<Product, "variants"> { readonly variants: PublicVariant[]; }

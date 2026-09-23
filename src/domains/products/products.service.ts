@@ -7,7 +7,7 @@ import { notFoundError, type AppError } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
 import { resolvePrice } from "../pricing/pricing.repository.js";
 import * as repository from "./products.repository.js";
-import type { Category, CategoryInput, Product, ProductCreateInput, ProductOperation, ProductRow, ProductUpdateInput, PublicProduct, PublicVariant, Variant, VariantInput } from "./products.types.js";
+import type { Category, CategoryInput, CategoryUpdateInput, Product, ProductCreateInput, ProductOperation, ProductRow, ProductUpdateInput, PublicProduct, PublicVariant, Variant, VariantInput } from "./products.types.js";
 
 export class ProductsService {
   constructor(private readonly database: Database) {}
@@ -19,6 +19,8 @@ export class ProductsService {
   async addVariant(operation: ProductOperation, productId: string, input: VariantInput): Promise<Variant> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "product.update"); if (!(await repository.findProduct(c, operation.businessId, productId))) throw notFoundError("Product not found"); return mapVariant(await repository.addVariant(c, operation.businessId, productId, input)); }); }
   async listCategories(operation: ProductOperation): Promise<Category[]> { return this.run(operation, async (c) => (await repository.listCategories(c, operation.businessId)).map(mapCategory)); }
   async createCategory(operation: ProductOperation, input: CategoryInput): Promise<Category> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "category.manage"); return mapCategory(await repository.createCategory(c, operation.businessId, input, input.slug ?? slugify(input.name))); }); }
+  async updateCategory(operation: ProductOperation, categoryId: string, input: CategoryUpdateInput): Promise<Category> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "category.manage"); const row = await repository.updateCategory(c, operation.businessId, categoryId, input); if (!row) throw notFoundError("Category not found"); return mapCategory(row); }); }
+  async archiveCategory(operation: ProductOperation, categoryId: string): Promise<void> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "category.manage"); if (!(await repository.archiveCategory(c, operation.businessId, categoryId))) throw notFoundError("Category not found"); }); }
   private async require(c: Parameters<typeof repository.findProduct>[0], businessId: string, permission: string): Promise<void> { return authorization.requirePermission(c, businessId, permission); }
   private async run<T>(operation: ProductOperation, work: Parameters<typeof withDatabaseContext<T>>[2]): Promise<T> { try { return await withDatabaseContext(this.database, withIdentity(operation.requestId, operation.userId, operation.businessId), work); } catch (error) { if ((error as AppError).code) throw error; if (error instanceof DatabaseError) throw error; throw normalizeDatabaseError(error); } }
 }
