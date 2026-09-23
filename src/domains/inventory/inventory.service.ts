@@ -11,6 +11,10 @@ import type { InventoryItem, InventoryItemInput, InventoryLocation, InventoryLoc
 export class InventoryService {
   constructor(private readonly database: Database) {}
   listBalances(o: InventoryOperation, f: { inventoryItemId?: string; inventoryLocationId?: string }): Promise<StockBalance[]> { return this.run(o, (c) => repo.listBalances(c, o.businessId, f)); }
+  listItems(o: InventoryOperation, f: { status?: string; search?: string }): Promise<InventoryItem[]> { return this.run(o, (c) => repo.listItems(c, o.businessId, f)); }
+  getItem(o: InventoryOperation, itemId: string): Promise<InventoryItem> { return this.run(o, async (c) => { const row = await repo.findItem(c, o.businessId, itemId); if (!row) throw notFoundError("Inventory item not found"); return row; }); }
+  listLocations(o: InventoryOperation): Promise<InventoryLocation[]> { return this.run(o, (c) => repo.listLocations(c, o.businessId)); }
+  listMovements(o: InventoryOperation, f: { inventoryItemId?: string; inventoryLocationId?: string; limit: number }) { return this.run(o, (c) => repo.listMovements(c, o.businessId, f)); }
   createItem(o: InventoryOperation, input: InventoryItemInput): Promise<InventoryItem> { return this.run(o, async (c) => { await this.require(c, o.businessId, "inventory.manage"); return repo.createItem(c, o.businessId, input); }); }
   createLocation(o: InventoryOperation, input: InventoryLocationInput): Promise<InventoryLocation> { return this.run(o, async (c) => { await this.require(c, o.businessId, "inventory.manage"); return repo.createLocation(c, o.businessId, input); }); }
   postMovement(o: InventoryOperation, input: MovementInput): Promise<StockMovement> {
