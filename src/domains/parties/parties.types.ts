@@ -99,6 +99,14 @@ export interface SupplierAccountRow {
   readonly code: string | null;
   readonly paymentTerms: string;
   readonly taxId: string | null;
+  readonly contactPerson: string | null;
+  readonly category: string | null;
+  readonly website: string | null;
+  readonly bankName: string | null;
+  readonly bankCode: string | null;
+  readonly accountNumber: string | null;
+  readonly accountName: string | null;
+  readonly notes: string;
   readonly status: "active" | "inactive" | "archived";
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -107,6 +115,13 @@ export interface SupplierAccountRow {
 export interface SupplierAccount extends Omit<SupplierAccountRow, "createdAt" | "updatedAt"> {
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly totalSpendMinor: string;
+  readonly outstandingPayableMinor: string;
+}
+
+export interface SupplierSpendSummaryRow {
+  readonly totalSpendMinor: string;
+  readonly outstandingPayableMinor: string;
 }
 
 export interface PartyDetail extends Party {
@@ -161,6 +176,14 @@ export interface SupplierAccountInput {
   readonly code?: string | null;
   readonly paymentTerms?: string;
   readonly taxId?: string | null;
+  readonly contactPerson?: string | null;
+  readonly category?: string | null;
+  readonly website?: string | null;
+  readonly bankName?: string | null;
+  readonly bankCode?: string | null;
+  readonly accountNumber?: string | null;
+  readonly accountName?: string | null;
+  readonly notes?: string;
   readonly status?: SupplierAccountRow["status"];
 }
 export interface CreateSupplierInput extends CreatePartyInput {

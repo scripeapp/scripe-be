@@ -1,0 +1,9 @@
+alter table app.supplier_accounts
+  drop column "contactPerson",
+  drop column "category",
+  drop column "website",
+  drop column "bankName",
+  drop column "bankCode",
+  drop column "accountNumber",
+  drop column "accountName",
+  drop column "notes";

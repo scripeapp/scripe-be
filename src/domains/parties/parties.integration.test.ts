@@ -34,4 +34,36 @@ describe("parties domain", () => {
     expect(listed.status).toBe(200);
     expect((listed.body as { data: { parties: unknown[] } }).data.parties.length).toBe(3);
   });
+
+  it("stores supplier bank details and reports spend/payable rollups from bills", async () => {
+    const owner = await actor("Vendor Owner");
+    const businessResponse = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie: owner.cookies, body: JSON.stringify({ displayName: "Vendor Test Co" }) });
+    const business = (businessResponse.body as { data: { business: { id: string } } }).data.business;
+    const base = `/api/businesses/${business.id}`;
+
+    const created = await request(server.baseUrl, `${base}/suppliers`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({
+      kind: "organization", displayName: "Acme Supplies",
+      supplier: { code: "SUP-2", contactPerson: "Jane Doe", category: "Packaging", bankName: "GTBank", bankCode: "058", accountNumber: "0123456789", accountName: "Acme Supplies Ltd", notes: "Reliable" },
+    }) });
+    expect(created.status).toBe(201);
+    const partyId = (created.body as { data: { supplier: { id: string } } }).data.supplier.id;
+    const withoutBills = (created.body as { data: { supplier: { supplierAccount: { contactPerson: string; bankName: string; totalSpendMinor: string; outstandingPayableMinor: string; id: string } } } }).data.supplier.supplierAccount;
+    expect(withoutBills).toMatchObject({ contactPerson: "Jane Doe", bankName: "GTBank", totalSpendMinor: "0", outstandingPayableMinor: "0" });
+
+    const bill = await request(server.baseUrl, `${base}/payables/bills`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({
+      supplierAccountId: withoutBills.id, billNumber: "BILL-1", subtotalMinor: 10_000, totalMinor: 10_000,
+      lines: [{ description: "Boxes", quantity: 100, unitAmountMinor: 100, lineTotalMinor: 10_000, accountCategory: "supplies" }],
+    }) });
+    expect(bill.status).toBe(201);
+
+    const fetched = await request(server.baseUrl, `${base}/suppliers/${partyId}`, { cookie: owner.cookies });
+    expect(fetched.status).toBe(200);
+    const supplierAccount = (fetched.body as { data: { supplier: { supplierAccount: { totalSpendMinor: string; outstandingPayableMinor: string } } } }).data.supplier.supplierAccount;
+    expect(supplierAccount.totalSpendMinor).toBe("10000");
+    expect(supplierAccount.outstandingPayableMinor).toBe("10000");
+
+    const updated = await request(server.baseUrl, `${base}/suppliers/${partyId}`, { method: "PATCH", cookie: owner.cookies, body: JSON.stringify({ supplier: { accountName: "Acme Supplies Nigeria Ltd" } }) });
+    expect(updated.status).toBe(200);
+    expect((updated.body as { data: { supplier: { supplierAccount: { accountName: string } } } }).data.supplier.supplierAccount.accountName).toBe("Acme Supplies Nigeria Ltd");
+  });
 });

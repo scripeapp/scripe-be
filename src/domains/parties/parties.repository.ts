@@ -14,6 +14,7 @@ import type {
   PartyStatus,
   SupplierAccountInput,
   SupplierAccountRow,
+  SupplierSpendSummaryRow,
   UpdateAddressInput,
   UpdateContactInput,
   UpdatePartyInput,
@@ -153,15 +154,40 @@ export async function findSupplier(context: DatabaseContext, businessId: string,
   return (await sql<SupplierAccountRow>`select * from app.supplier_accounts where "businessId"=${businessId}::uuid and "partyId"=${partyId}::uuid`.execute(context.transaction)).rows[0];
 }
 export async function createSupplier(context: DatabaseContext, businessId: string, partyId: string, input: SupplierAccountInput): Promise<SupplierAccountRow> {
-  return (await sql<SupplierAccountRow>`insert into app.supplier_accounts ("businessId","partyId","code","paymentTerms","taxId","status") values (${businessId}::uuid,${partyId}::uuid,${input.code ?? null},${input.paymentTerms ?? 'Net 30'},${input.taxId ?? null},${input.status ?? 'active'}) returning *`.execute(context.transaction)).rows[0]!;
+  return (await sql<SupplierAccountRow>`insert into app.supplier_accounts ("businessId","partyId","code","paymentTerms","taxId","contactPerson","category","website","bankName","bankCode","accountNumber","accountName","notes","status") values (${businessId}::uuid,${partyId}::uuid,${input.code ?? null},${input.paymentTerms ?? 'Net 30'},${input.taxId ?? null},${input.contactPerson ?? null},${input.category ?? null},${input.website ?? null},${input.bankName ?? null},${input.bankCode ?? null},${input.accountNumber ?? null},${input.accountName ?? null},${input.notes ?? ''},${input.status ?? 'active'}) returning *`.execute(context.transaction)).rows[0]!;
 }
 export async function updateSupplier(context: DatabaseContext, businessId: string, partyId: string, input: SupplierAccountInput): Promise<SupplierAccountRow | undefined> {
   const fields: RawBuilder<unknown>[] = [];
   if (input.code !== undefined) fields.push(sql`"code"=${input.code}`);
   if (input.paymentTerms !== undefined) fields.push(sql`"paymentTerms"=${input.paymentTerms}`);
   if (input.taxId !== undefined) fields.push(sql`"taxId"=${input.taxId}`);
+  if (input.contactPerson !== undefined) fields.push(sql`"contactPerson"=${input.contactPerson}`);
+  if (input.category !== undefined) fields.push(sql`"category"=${input.category}`);
+  if (input.website !== undefined) fields.push(sql`"website"=${input.website}`);
+  if (input.bankName !== undefined) fields.push(sql`"bankName"=${input.bankName}`);
+  if (input.bankCode !== undefined) fields.push(sql`"bankCode"=${input.bankCode}`);
+  if (input.accountNumber !== undefined) fields.push(sql`"accountNumber"=${input.accountNumber}`);
+  if (input.accountName !== undefined) fields.push(sql`"accountName"=${input.accountName}`);
+  if (input.notes !== undefined) fields.push(sql`"notes"=${input.notes}`);
   if (input.status !== undefined) fields.push(sql`"status"=${input.status}`);
   return (await sql<SupplierAccountRow>`update app.supplier_accounts set ${sql.join(fields, sql`, `)} where "businessId"=${businessId}::uuid and "partyId"=${partyId}::uuid returning *`.execute(context.transaction)).rows[0];
+}
+/**
+ * Committed spend excludes only voided bills — payables never moves a bill
+ * through an "approved" state (see payables.service.ts's postJournalEntry
+ * comment), so "draft" is the only reachable state before partially_paid/paid
+ * and is what recognizes the liability. RLS's bills_read policy
+ * (payables.read) is the real access gate — an actor without it sees zero.
+ */
+export async function supplierSpendSummary(context: DatabaseContext, businessId: string, supplierAccountId: string): Promise<SupplierSpendSummaryRow> {
+  const row = (await sql<{ totalSpendMinor: string; outstandingPayableMinor: string }>`
+    select
+      coalesce(sum("totalMinor"), 0)::text as "totalSpendMinor",
+      coalesce(sum("totalMinor" - "amountPaidMinor"), 0)::text as "outstandingPayableMinor"
+    from app.bills
+    where "businessId"=${businessId}::uuid and "supplierAccountId"=${supplierAccountId}::uuid and "status" <> 'voided'
+  `.execute(context.transaction)).rows[0]!;
+  return row;
 }
 
 function normalizeContact(kind: ContactKind, value: string): string {

@@ -49,6 +49,14 @@ export const supplierAccount = z.object({
   code: z.string().trim().max(80).nullable().optional(),
   paymentTerms: z.string().trim().min(1).max(120).default("Net 30"),
   taxId: z.string().trim().max(120).nullable().optional(),
+  contactPerson: z.string().trim().max(200).nullable().optional(),
+  category: z.string().trim().max(120).nullable().optional(),
+  website: z.string().trim().max(300).nullable().optional(),
+  bankName: z.string().trim().max(160).nullable().optional(),
+  bankCode: z.string().trim().max(20).nullable().optional(),
+  accountNumber: z.string().trim().max(40).nullable().optional(),
+  accountName: z.string().trim().max(200).nullable().optional(),
+  notes: z.string().trim().max(2000).default(""),
   status: z.enum(["active", "inactive"]).default("active"),
 });
 export const createCustomer = createParty.extend({ customer: customerAccount.default({}) });
@@ -61,7 +69,7 @@ const party = z.object({ id: uuid, businessId: uuid, kind: z.enum(["person", "or
 const contact = z.object({ id: uuid, businessId: uuid, partyId: uuid, kind: z.enum(["email", "phone"]), value: z.string(), normalizedValue: z.string(), label: z.string().nullable(), isPrimary: z.boolean(), status: z.enum(["active", "archived"]), createdAt: timestamp, updatedAt: timestamp });
 const address = z.object({ id: uuid, businessId: uuid, partyId: uuid, kind: z.enum(["billing", "shipping", "office", "other"]), label: z.string().nullable(), line1: z.string(), line2: z.string().nullable(), city: z.string().nullable(), state: z.string().nullable(), postalCode: z.string().nullable(), countryCode: z.string().length(2), isDefault: z.boolean(), status: z.enum(["active", "archived"]), createdAt: timestamp, updatedAt: timestamp });
 const customer = z.object({ id: uuid, businessId: uuid, partyId: uuid, acquisitionChannel: z.string().nullable(), lifecycleState: z.enum(["lead", "active", "inactive", "blocked"]), createdAt: timestamp, updatedAt: timestamp });
-const supplier = z.object({ id: uuid, businessId: uuid, partyId: uuid, code: z.string().nullable(), paymentTerms: z.string(), taxId: z.string().nullable(), status: z.enum(["active", "inactive", "archived"]), createdAt: timestamp, updatedAt: timestamp });
+const supplier = z.object({ id: uuid, businessId: uuid, partyId: uuid, code: z.string().nullable(), paymentTerms: z.string(), taxId: z.string().nullable(), contactPerson: z.string().nullable(), category: z.string().nullable(), website: z.string().nullable(), bankName: z.string().nullable(), bankCode: z.string().nullable(), accountNumber: z.string().nullable(), accountName: z.string().nullable(), notes: z.string(), status: z.enum(["active", "inactive", "archived"]), createdAt: timestamp, updatedAt: timestamp, totalSpendMinor: z.string(), outstandingPayableMinor: z.string() });
 const detail = party.extend({ contacts: z.array(contact), addresses: z.array(address), customerAccount: customer.nullable(), supplierAccount: supplier.nullable() });
 export const partiesResult = z.object({ parties: z.array(party), nextCursor: z.string().nullable() });
 export const partyResult = z.object({ party: detail });

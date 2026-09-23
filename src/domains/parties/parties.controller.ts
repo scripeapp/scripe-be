@@ -75,8 +75,8 @@ export class PartiesController {
   readonly getCustomer = this.handle(async (request) => this.getRole(request, "customer"), 200, schemas.customerResult);
   readonly updateCustomer = this.handle(async (request) => {
     const { businessId, partyId } = schemas.partyParams.parse(request.params);
-    const input = schemas.updateCustomer.parse(request.body);
-    return { customer: await this.service.updateCustomer(this.operation(request, businessId), partyId, input, input.customer ?? {}) };
+    const { customer, ...partyInput } = schemas.updateCustomer.parse(request.body);
+    return { customer: await this.service.updateCustomer(this.operation(request, businessId), partyId, partyInput, customer ?? {}) };
   }, 200, schemas.customerResult);
   readonly archiveCustomer = this.handle(async (request) => {
     const { businessId, partyId } = schemas.partyParams.parse(request.params);
@@ -92,8 +92,8 @@ export class PartiesController {
   readonly getSupplier = this.handle(async (request) => this.getRole(request, "supplier"), 200, schemas.supplierResult);
   readonly updateSupplier = this.handle(async (request) => {
     const { businessId, partyId } = schemas.partyParams.parse(request.params);
-    const input = schemas.updateSupplier.parse(request.body);
-    return { supplier: await this.service.updateSupplier(this.operation(request, businessId), partyId, input, input.supplier ?? {}) };
+    const { supplier, ...partyInput } = schemas.updateSupplier.parse(request.body);
+    return { supplier: await this.service.updateSupplier(this.operation(request, businessId), partyId, partyInput, supplier ?? {}) };
   }, 200, schemas.supplierResult);
   readonly archiveSupplier = this.handle(async (request) => {
     const { businessId, partyId } = schemas.partyParams.parse(request.params);

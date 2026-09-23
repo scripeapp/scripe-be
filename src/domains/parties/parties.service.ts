@@ -25,6 +25,7 @@ import type {
   SupplierAccountInput,
   SupplierAccount,
   SupplierAccountRow,
+  SupplierSpendSummaryRow,
   UpdateAddressInput,
   UpdateContactInput,
   UpdatePartyInput,
@@ -199,13 +200,14 @@ export class PartiesService {
       repository.findCustomer(context, businessId, partyId),
       repository.findSupplier(context, businessId, partyId),
     ]);
+    const spend = supplierAccount ? await repository.supplierSpendSummary(context, businessId, supplierAccount.id) : null;
     return {
       ...toPartyBase(row),
       roles: [...(customerAccount ? ["customer" as const] : []), ...(supplierAccount ? ["supplier" as const] : [])],
       contacts: contacts.map(toContact),
       addresses: addresses.map(toAddress),
       customerAccount: customerAccount ? toCustomer(customerAccount) : null,
-      supplierAccount: supplierAccount ? toSupplier(supplierAccount) : null,
+      supplierAccount: supplierAccount ? toSupplier(supplierAccount, spend!) : null,
     };
   }
   private async toParty(context: Parameters<typeof repository.findParty>[0], row: PartyRow): Promise<Party> {
@@ -227,4 +229,4 @@ function toPartyBase(row: PartyRow): Party {
 function toContact(row: PartyContactRow): PartyContact { return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }; }
 function toAddress(row: PartyAddressRow): PartyAddress { return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }; }
 function toCustomer(row: CustomerAccountRow): CustomerAccount { return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }; }
-function toSupplier(row: SupplierAccountRow): SupplierAccount { return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }; }
+function toSupplier(row: SupplierAccountRow, spend: SupplierSpendSummaryRow): SupplierAccount { return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), totalSpendMinor: spend.totalSpendMinor, outstandingPayableMinor: spend.outstandingPayableMinor }; }
