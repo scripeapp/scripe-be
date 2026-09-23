@@ -31,6 +31,9 @@ export function createStoresRouter(): Router {
   router.get(`${publicBusinessBase}/stores/:slug/categories`, controller.listPublicCategories);
   router.get(`${publicBusinessBase}/stores/:slug/product/:productIdOrSlug`, controller.getPublicProduct);
 
+  // Authenticated compatibility route for legacy `/api/store/:storeId` and `/api/store/me`
+  router.get("/api/store/:storeId", requireAuth, controller.getStoreDirect);
+
   router.use(base, requireAuth);
   router.get(base, controller.listStores);
   router.post(base, controller.createStore);

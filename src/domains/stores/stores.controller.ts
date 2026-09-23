@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
-import { validationError } from "../../shared/errors.js";
+import { notFoundError, validationError } from "../../shared/errors.js";
 import * as schemas from "./stores.schemas.js";
 import type { StoresService } from "./stores.service.js";
 import type { OperationContext } from "./stores.types.js";
@@ -91,6 +91,35 @@ export class StoresController {
     const { businessId, storeId } = schemas.storeParamsSchema.parse(
       request.params,
     );
+    return {
+      store: await this.service.getStore(
+        this.operation(request, businessId),
+        storeId,
+      ),
+    };
+  }, 200, schemas.storeResultSchema);
+
+  readonly getStoreDirect = this.handle(async (request) => {
+    const storeIdParam = request.params.storeId;
+    const businessId =
+      (request.query.business_id as string) ||
+      (request.query.businessId as string) ||
+      (request.headers["x-business-id"] as string);
+
+    if (!businessId) {
+      throw validationError("business_id query param is required");
+    }
+
+    if (storeIdParam === "me") {
+      const stores = await this.service.listStores(this.operation(request, businessId));
+      const store = stores.find((s) => s.isDefault) || stores[0];
+      if (!store) throw notFoundError("Store not found");
+      return { store };
+    }
+
+    const { storeId } = schemas.storeParamsSchema.pick({ storeId: true }).parse({
+      storeId: storeIdParam,
+    });
     return {
       store: await this.service.getStore(
         this.operation(request, businessId),
