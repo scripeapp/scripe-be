@@ -57,6 +57,18 @@ export async function listPublicProducts(context: DatabaseContext, businessId: s
   return Promise.all(rows.map((row) => hydratePublicProduct(context, row, assetCode)));
 }
 
+export async function getPublicProduct(
+  context: DatabaseContext,
+  businessId: string,
+  storeId: string,
+  productIdOrSlug: string,
+  assetCode = "NGN",
+): Promise<PublicProduct | undefined> {
+  const row = await repository.findActiveProductByIdOrSlug(context, businessId, storeId, productIdOrSlug);
+  if (!row) return undefined;
+  return hydratePublicProduct(context, row, assetCode);
+}
+
 export async function listPublicCategories(context: DatabaseContext, businessId: string): Promise<Category[]> {
   return (await repository.listCategories(context, businessId)).map(mapCategory);
 }

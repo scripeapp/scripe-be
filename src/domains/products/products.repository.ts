@@ -17,6 +17,23 @@ export async function findActiveProductsByIds(c: DatabaseContext, ids: readonly 
   if (ids.length === 0) return [];
   return (await sql<ProductRow>`select * from app.products where "id" = any(${ids}::uuid[]) and "status" = 'active'`.execute(c.transaction)).rows;
 }
+export async function findActiveProductByIdOrSlug(
+  c: DatabaseContext,
+  businessId: string,
+  storeId: string,
+  idOrSlug: string,
+): Promise<ProductRow | undefined> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+  const result = await sql<ProductRow>`
+    select * from app.products
+    where "businessId"=${businessId}::uuid
+      and "storeId"=${storeId}::uuid
+      and "status"='active'
+      and (${isUuid ? sql`"id"=${idOrSlug}::uuid or ` : sql``}"slug"=${idOrSlug})
+    limit 1
+  `.execute(c.transaction);
+  return result.rows[0];
+}
 export async function listVariants(c: DatabaseContext, businessId: string, productId: string): Promise<VariantRow[]> {
   return (await sql<VariantRow>`select * from app.product_variants where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "status" <> 'archived' order by "isDefault" desc, "createdAt"`.execute(c.transaction)).rows;
 }

@@ -374,7 +374,7 @@ describe("stores domain", () => {
         "category",
       );
 
-      const activeProduct = entity<{ id: string; variants: { id: string; isDefault: boolean }[] }>(
+      const activeProduct = entity<{ id: string; slug?: string; variants: { id: string; isDefault: boolean }[] }>(
         await request(server.baseUrl, `/api/businesses/${business.id}/products`, {
           method: "POST",
           cookie: owner.cookies,
@@ -444,6 +444,36 @@ describe("stores domain", () => {
       expect(entity<{ id: string }[]>(byIds, "products")).toEqual([
         expect.objectContaining({ id: activeProduct.id }),
       ]);
+
+      // Single product lookup by ID
+      const byProductId = await request(
+        server.baseUrl,
+        `/api/store/public/${slug}/product/${activeProduct.id}`,
+      );
+      expect(byProductId.status).toBe(200);
+      expect(entity<{ id: string }>(byProductId, "product").id).toBe(activeProduct.id);
+
+      // Single product lookup by slug
+      const byProductSlug = await request(
+        server.baseUrl,
+        `/api/store/public/${slug}/product/${activeProduct.slug || activeProduct.id}`,
+      );
+      expect(byProductSlug.status).toBe(200);
+      expect(entity<{ id: string }>(byProductSlug, "product").id).toBe(activeProduct.id);
+
+      // Branches lookup
+      const branchesRes = await request(server.baseUrl, `/api/store/public/${slug}/branches`);
+      expect(branchesRes.status).toBe(200);
+
+      // Manifest lookup
+      const manifestRes = await request(server.baseUrl, `/api/store/public/${slug}/manifest.json`);
+      expect(manifestRes.status).toBe(200);
+      expect((manifestRes.body as any).data.name).toBe("Lagos Corner Shop");
+
+      // Business-scoped public store alias
+      const businessPublicStore = await request(server.baseUrl, `/api/businesses/${business.id}/public/stores/${slug}`);
+      expect(businessPublicStore.status).toBe(200);
+      expect(entity<{ id: string }>(businessPublicStore, "store").id).toBe(business.defaultStore.id);
     });
 
     it("never exposes another business's rows through the public endpoints, even to an authenticated outsider", async () => {

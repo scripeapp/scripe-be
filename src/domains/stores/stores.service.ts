@@ -8,8 +8,9 @@ import {
   notFoundError,
 } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
-import { listPublicCategories, listPublicProducts, listPublicProductsByIds } from "../products/products.service.js";
+import { listPublicCategories, listPublicProducts, listPublicProductsByIds, getPublicProduct } from "../products/products.service.js";
 import type { Category, PublicProduct } from "../products/products.types.js";
+import { findPublicOrderByReference } from "../orders/orders.repository.js";
 import * as repository from "./stores.repository.js";
 import type {
   CashMovementRow,
@@ -76,6 +77,80 @@ export class StoresService {
   /** For order-confirmation display — not scoped to a single store's slug. */
   async listPublicProductsByIds(requestId: string, ids: readonly string[]): Promise<PublicProduct[]> {
     return this.runAnonymous(requestId, (context) => listPublicProductsByIds(context, ids));
+  }
+
+  async getPublicProduct(requestId: string, slug: string, productIdOrSlug: string): Promise<{ store: PublicStore; product: PublicProduct }> {
+    return this.runAnonymous(requestId, async (context) => {
+      const store = await repository.findActiveStoreBySlug(context, slug);
+      if (!store) throw notFoundError("Store not found");
+      const product = await getPublicProduct(context, store.businessId, store.id, productIdOrSlug);
+      if (!product) throw notFoundError("Product not found");
+      return { store: toPublicStore(store), product };
+    });
+  }
+
+  async listPublicBranches(requestId: string, slug: string): Promise<any[]> {
+    return this.runAnonymous(requestId, async (context) => {
+      const store = await repository.findActiveStoreBySlug(context, slug);
+      if (!store) throw notFoundError("Store not found");
+      const locations = await repository.listLocations(context, store.businessId, store.id);
+      return locations.map((loc) => {
+        const base = toLocation(loc);
+        return {
+          ...base,
+          is_default: base.isDefault,
+          is_active: base.status === "active",
+          accepting_orders: base.status === "active",
+          operation_types: ["dine_in", "pickup", "delivery", "curbside"],
+        };
+      });
+    });
+  }
+
+  async getPublicOrderByReference(requestId: string, reference: string) {
+    return this.runAnonymous(requestId, async (context) => {
+      const found = await findPublicOrderByReference(context, reference);
+      if (!found) throw notFoundError("Order not found");
+      const { order, lines, customerName, customerEmail, customerPhone } = found;
+      const storeRow = await repository.findStore(context, order.businessId, order.storeId);
+      const publicStore = storeRow ? toPublicStore(storeRow) : null;
+      return {
+        id: order.id,
+        store_id: order.storeId,
+        store: publicStore,
+        order_number: order.orderNumber,
+        customer: {
+          name: customerName ?? "",
+          email: customerEmail ?? "",
+          phone: customerPhone ?? "",
+          address: "",
+        },
+        customer_name: customerName ?? "",
+        customer_email: customerEmail ?? "",
+        customer_phone: customerPhone ?? "",
+        customer_address: "",
+        items: lines.map((l) => ({
+          id: l.id,
+          product_id: l.productVariantId,
+          product_variant_id: l.productVariantId,
+          name: l.description,
+          product_name: l.description,
+          quantity: l.quantity,
+          price: Number(l.unitPriceMinor) / 100,
+          total: Number(l.lineTotalMinor) / 100,
+          image: null,
+        })),
+        subtotal: Number(order.subtotalMinor) / 100,
+        discount: Number(order.discountMinor) / 100,
+        total: Number(order.totalMinor) / 100,
+        currency: order.currency,
+        status: order.paymentStatus === "paid" ? "paid" : order.status,
+        payment_reference: reference,
+        shipping: null,
+        created_at: order.createdAt.toISOString(),
+        updated_at: order.updatedAt.toISOString(),
+      };
+    });
   }
 
   async getStore(operation: OperationContext, storeId: string): Promise<Store> {

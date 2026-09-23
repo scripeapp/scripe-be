@@ -14,8 +14,22 @@ export function createStoresRouter(): Router {
   // policies (migration 0046) are the real enforcement, not this router.
   router.get(`${publicBase}/products`, controller.listPublicProductsByIds);
   router.get(`${publicBase}/:slug`, controller.getPublicStore);
+  router.get(`${publicBase}/:slug/info`, controller.getPublicStore);
+  router.get(`${publicBase}/:slug/manifest.json`, controller.getPublicManifest);
   router.get(`${publicBase}/:slug/products`, controller.listPublicProducts);
   router.get(`${publicBase}/:slug/categories`, controller.listPublicCategories);
+  router.get(`${publicBase}/:slug/branches`, controller.listPublicBranches);
+  router.get(`${publicBase}/:slug/delivery-methods`, controller.listPublicDeliveryMethods);
+  router.get(`${publicBase}/:slug/product/:productIdOrSlug`, controller.getPublicProduct);
+  router.get(`${publicBase}/:slug/products/:productIdOrSlug`, controller.getPublicProduct);
+  router.get(`${publicBase}/order/:reference`, controller.getPublicOrderByReference);
+
+  // Business-scoped public aliases
+  const publicBusinessBase = "/api/businesses/:businessId/public";
+  router.get(`${publicBusinessBase}/stores/:slug`, controller.getPublicStore);
+  router.get(`${publicBusinessBase}/stores/:slug/products`, controller.listPublicProducts);
+  router.get(`${publicBusinessBase}/stores/:slug/categories`, controller.listPublicCategories);
+  router.get(`${publicBusinessBase}/stores/:slug/product/:productIdOrSlug`, controller.getPublicProduct);
 
   router.use(base, requireAuth);
   router.get(base, controller.listStores);

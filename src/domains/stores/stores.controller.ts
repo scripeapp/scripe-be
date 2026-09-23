@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
+import { validationError } from "../../shared/errors.js";
 import * as schemas from "./stores.schemas.js";
 import type { StoresService } from "./stores.service.js";
 import type { OperationContext } from "./stores.types.js";
@@ -11,7 +12,8 @@ export class StoresController {
   // Public storefront browsing — no requireAuthContext, request.requestId only.
   readonly getPublicStore = this.handle(async (request) => {
     const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
-    return { store: await this.service.getPublicStore(request.requestId, slug) };
+    const store = await this.service.getPublicStore(request.requestId, slug);
+    return { store, data: store, ...(typeof store === "object" ? store : {}) };
   });
 
   readonly listPublicProducts = this.handle(async (request) => {
@@ -27,6 +29,43 @@ export class StoresController {
   readonly listPublicProductsByIds = this.handle(async (request) => {
     const ids = schemas.publicProductIdsQuerySchema.parse(request.query);
     return { products: await this.service.listPublicProductsByIds(request.requestId, ids) };
+  });
+
+  readonly getPublicProduct = this.handle(async (request) => {
+    const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
+    const productIdOrSlug = request.params.productIdOrSlug || request.params.productId || request.params.productSlug;
+    if (!productIdOrSlug) throw validationError("Missing product identifier");
+    const { store, product } = await this.service.getPublicProduct(request.requestId, slug, productIdOrSlug);
+    return { store, product, data: { store, product } };
+  });
+
+  readonly listPublicBranches = this.handle(async (request) => {
+    const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
+    return await this.service.listPublicBranches(request.requestId, slug);
+  });
+
+  readonly listPublicDeliveryMethods = this.handle(async () => {
+    return { delivery_methods: [], data: [] };
+  });
+
+  readonly getPublicManifest = this.handle(async (request) => {
+    const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
+    const store = await this.service.getPublicStore(request.requestId, slug);
+    return {
+      name: store.name,
+      short_name: store.name,
+      start_url: `/s/${slug}`,
+      display: "standalone",
+      background_color: "#ffffff",
+      theme_color: "#000000",
+    };
+  });
+
+  readonly getPublicOrderByReference = this.handle(async (request) => {
+    const reference = request.params.reference;
+    if (!reference) throw validationError("Missing reference");
+    const order = await this.service.getPublicOrderByReference(request.requestId, reference);
+    return { order, data: order, ...(typeof order === "object" ? order : {}) };
   });
 
   readonly listStores = this.handle(async (request) => {

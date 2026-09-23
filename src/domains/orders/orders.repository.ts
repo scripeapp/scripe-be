@@ -41,3 +41,52 @@ export async function createOrderFromPricedLines(
   for (const item of priced) { await sql`insert into app.order_lines ("businessId","orderId","productVariantId","sku","description","quantity","unitPriceMinor","lineTotalMinor","assetCode","selectedModifiers") values (${businessId}::uuid,${order.id}::uuid,${item.line.productVariantId}::uuid,${item.sku},${item.description},${item.line.quantity},${item.unitMinor},${item.lineTotalMinor},${item.line.assetCode},${JSON.stringify(item.line.selectedModifiers)}::jsonb)`.execute(c.transaction); }
   return order;
 }
+
+export async function findPublicOrderByReference(
+  c: DatabaseContext,
+  reference: string,
+): Promise<{ order: OrderRow; lines: OrderLineRow[]; customerName?: string; customerEmail?: string; customerPhone?: string } | undefined> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reference);
+
+  const payment = (await sql<{ orderId: string }>`
+    select "orderId" from app.payments
+    where "externalReference"=${reference}
+       or (${isUuid ? sql`"id"=${reference}::uuid` : sql`false`})
+    limit 1
+  `.execute(c.transaction)).rows[0];
+
+  const targetOrderId = payment?.orderId;
+
+  const order = (await sql<OrderRow>`
+    select * from app.orders
+    where (${targetOrderId ? sql`"id"=${targetOrderId}::uuid` : sql`false`})
+       or (${isUuid ? sql`"id"=${reference}::uuid` : sql`false`})
+       or "orderNumber"=${reference}
+    limit 1
+  `.execute(c.transaction)).rows[0];
+
+  if (!order) return undefined;
+
+  const orderLines = (await sql<OrderLineRow>`
+    select * from app.order_lines
+    where "orderId"=${order.id}::uuid
+    order by "createdAt","id"
+  `.execute(c.transaction)).rows;
+
+  let customerName: string | undefined;
+  let customerEmail: string | undefined;
+  let customerPhone: string | undefined;
+
+  if (order.customerPartyId) {
+    const party = (await sql<{ name: string; email: string | null; phone: string | null }>`
+      select "name", "email", "phone" from app.parties where "id"=${order.customerPartyId}::uuid
+    `.execute(c.transaction)).rows[0];
+    if (party) {
+      customerName = party.name;
+      customerEmail = party.email ?? undefined;
+      customerPhone = party.phone ?? undefined;
+    }
+  }
+
+  return { order, lines: orderLines, customerName, customerEmail, customerPhone };
+}
