@@ -50,7 +50,19 @@ export async function createTransfer(c: DatabaseContext, businessId: string, use
   }
   return transfer;
 }
-export async function listTransfers(c: DatabaseContext, businessId: string, f: { status?: string }): Promise<StockTransfer[]> { const clauses: RawBuilder<unknown>[] = [sql`"businessId"=${businessId}::uuid`]; if (f.status) clauses.push(sql`"status"=${f.status}`); return (await sql<StockTransfer>`select * from app.stock_transfers where ${sql.join(clauses, sql` and `)} order by "createdAt" desc`.execute(c.transaction)).rows; }
+export async function listTransfers(c: DatabaseContext, businessId: string, f: { status?: string }): Promise<(StockTransfer & { itemCount: number; totalValueMinor: string })[]> {
+  const clauses: RawBuilder<unknown>[] = [sql`t."businessId"=${businessId}::uuid`]; if (f.status) clauses.push(sql`t."status"=${f.status}`);
+  return (await sql<StockTransfer & { itemCount: number; totalValueMinor: string }>`
+    select t.*, coalesce(l."itemCount", 0)::int as "itemCount", coalesce(l."totalValueMinor", 0)::text as "totalValueMinor"
+    from app.stock_transfers t
+    left join lateral (
+      select count(*) as "itemCount", sum(coalesce("unitCostMinor", 0) * "quantity") as "totalValueMinor"
+      from app.stock_transfer_lines where "transferId" = t."id"
+    ) l on true
+    where ${sql.join(clauses, sql` and `)}
+    order by t."createdAt" desc
+  `.execute(c.transaction)).rows;
+}
 export async function findTransfer(c: DatabaseContext, businessId: string, transferId: string): Promise<StockTransfer | undefined> { return (await sql<StockTransfer>`select * from app.stock_transfers where "businessId"=${businessId}::uuid and "id"=${transferId}::uuid limit 1`.execute(c.transaction)).rows[0]; }
 export async function listTransferLines(c: DatabaseContext, businessId: string, transferId: string): Promise<StockTransferLine[]> { return (await sql<StockTransferLine>`select * from app.stock_transfer_lines where "businessId"=${businessId}::uuid and "transferId"=${transferId}::uuid order by "createdAt"`.execute(c.transaction)).rows; }
 export async function markTransferSent(c: DatabaseContext, businessId: string, transferId: string): Promise<StockTransfer | undefined> { return (await sql<StockTransfer>`update app.stock_transfers set "status"='sent',"sentAt"=now() where "businessId"=${businessId}::uuid and "id"=${transferId}::uuid and "status"='draft' returning *`.execute(c.transaction)).rows[0]; }
@@ -79,7 +91,19 @@ export async function createCount(c: DatabaseContext, businessId: string, userId
   if (input.lines?.length) await setCountLines(c, businessId, count.id, location.id, input.lines);
   return count;
 }
-export async function listCounts(c: DatabaseContext, businessId: string, f: { status?: string }): Promise<StockCount[]> { const clauses: RawBuilder<unknown>[] = [sql`"businessId"=${businessId}::uuid`]; if (f.status) clauses.push(sql`"status"=${f.status}`); return (await sql<StockCount>`select * from app.stock_counts where ${sql.join(clauses, sql` and `)} order by "createdAt" desc`.execute(c.transaction)).rows; }
+export async function listCounts(c: DatabaseContext, businessId: string, f: { status?: string }): Promise<(StockCount & { itemCount: number; totalVariance: string })[]> {
+  const clauses: RawBuilder<unknown>[] = [sql`c2."businessId"=${businessId}::uuid`]; if (f.status) clauses.push(sql`c2."status"=${f.status}`);
+  return (await sql<StockCount & { itemCount: number; totalVariance: string }>`
+    select c2.*, coalesce(l."itemCount", 0)::int as "itemCount", coalesce(l."totalVariance", 0)::text as "totalVariance"
+    from app.stock_counts c2
+    left join lateral (
+      select count(*) as "itemCount", sum("countedQuantity" - "systemQuantity") as "totalVariance"
+      from app.stock_count_lines where "countId" = c2."id"
+    ) l on true
+    where ${sql.join(clauses, sql` and `)}
+    order by c2."createdAt" desc
+  `.execute(c.transaction)).rows;
+}
 export async function findCount(c: DatabaseContext, businessId: string, countId: string): Promise<StockCount | undefined> { return (await sql<StockCount>`select * from app.stock_counts where "businessId"=${businessId}::uuid and "id"=${countId}::uuid limit 1`.execute(c.transaction)).rows[0]; }
 export async function listCountLines(c: DatabaseContext, businessId: string, countId: string): Promise<StockCountLine[]> { return (await sql<StockCountLine>`select * from app.stock_count_lines where "businessId"=${businessId}::uuid and "countId"=${countId}::uuid order by "createdAt"`.execute(c.transaction)).rows; }
 /** Replaces every line — the count's own reviewed set at any point is exactly what was last saved, not an accumulation. systemQuantity is (re-)snapshotted from the live balance whenever a line is (re-)set, same as adding it fresh. */

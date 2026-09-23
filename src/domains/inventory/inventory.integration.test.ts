@@ -66,10 +66,15 @@ describe("inventory domain", () => {
     await request(server.baseUrl, `${base}/movements`, { method: "POST", cookie, body: JSON.stringify({ inventoryItemId: item.id, inventoryLocationId: fromInventoryLocationId, quantity: 20, type: "receipt", reason: "Initial stock", idempotencyKey: randomUUID() }) });
 
     const reference = `TRF-${randomUUID().slice(0, 8)}`;
-    const created = await request(server.baseUrl, `${base}/transfers`, { method: "POST", cookie, body: JSON.stringify({ reference, fromLocationId, toLocationId, lines: [{ inventoryItemId: item.id, quantity: 5 }] }) });
+    const created = await request(server.baseUrl, `${base}/transfers`, { method: "POST", cookie, body: JSON.stringify({ reference, fromLocationId, toLocationId, lines: [{ inventoryItemId: item.id, quantity: 5, unitCostMinor: 200 }] }) });
     expect(created.status).toBe(201);
     const transfer = (created.body as { data: { transfer: { id: string; status: string } } }).data.transfer;
     expect(transfer.status).toBe("draft");
+
+    const transferList = await request(server.baseUrl, `${base}/transfers`, { cookie });
+    expect(transferList.status).toBe(200);
+    const listedTransfer = (transferList.body as { data: { transfers: { id: string; itemCount: number; totalValueMinor: string }[] } }).data.transfers.find((t) => t.id === transfer.id);
+    expect(listedTransfer).toMatchObject({ itemCount: 1, totalValueMinor: "1000.000000" });
 
     expect((await request(server.baseUrl, `${base}/transfers/${transfer.id}/receive`, { method: "POST", cookie, body: JSON.stringify({ lines: [] }) })).status).toBe(400);
 
@@ -140,6 +145,10 @@ describe("inventory domain", () => {
     const detail = await request(server.baseUrl, `${base}/counts/${count.id}`, { cookie });
     const line = (detail.body as { data: { count: { lines: { systemQuantity: string; countedQuantity: string }[] } } }).data.count.lines[0]!;
     expect(line).toMatchObject({ systemQuantity: "10.000000", countedQuantity: "8.000000" });
+
+    const countList = await request(server.baseUrl, `${base}/counts`, { cookie });
+    const listedCount = (countList.body as { data: { counts: { id: string; itemCount: number; totalVariance: string }[] } }).data.counts.find((c) => c.id === count.id);
+    expect(listedCount).toMatchObject({ itemCount: 1, totalVariance: "-2.000000" });
 
     const applied = await request(server.baseUrl, `${base}/counts/${count.id}/apply`, { method: "POST", cookie });
     expect(applied.status).toBe(200);

@@ -28,7 +28,7 @@ export class InventoryService {
   release(o: InventoryOperation, id: string): Promise<Reservation> { return this.run(o, async (c) => { await this.require(c, o.businessId, "inventory.reserve"); const row = await repo.releaseReservation(c, o.businessId, id); if (!row) throw notFoundError("Active reservation not found"); return row; }); }
 
   // ---- Stock transfers ----
-  listTransfers(o: InventoryOperation, f: { status?: string }): Promise<StockTransfer[]> { return this.run(o, (c) => repo.listTransfers(c, o.businessId, f)); }
+  listTransfers(o: InventoryOperation, f: { status?: string }) { return this.run(o, (c) => repo.listTransfers(c, o.businessId, f)); }
   async getTransfer(o: InventoryOperation, transferId: string): Promise<StockTransfer & { lines: StockTransferLine[] }> {
     return this.run(o, async (c) => {
       const transfer = await repo.findTransfer(c, o.businessId, transferId);
@@ -105,7 +105,7 @@ export class InventoryService {
   }
 
   // ---- Stock counts ----
-  listCounts(o: InventoryOperation, f: { status?: string }): Promise<StockCount[]> { return this.run(o, (c) => repo.listCounts(c, o.businessId, f)); }
+  listCounts(o: InventoryOperation, f: { status?: string }) { return this.run(o, (c) => repo.listCounts(c, o.businessId, f)); }
   async getCount(o: InventoryOperation, countId: string): Promise<StockCount & { lines: StockCountLine[] }> {
     return this.run(o, async (c) => {
       const count = await repo.findCount(c, o.businessId, countId);
