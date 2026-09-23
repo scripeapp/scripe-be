@@ -13,3 +13,11 @@ export const initiateCheckout = z.object({
 });
 
 export const checkoutParams = z.object({ businessId: uuid, reference: z.string().trim().min(1).max(200) });
+export const paymentParams = params.extend({ paymentId: uuid });
+export const listPaymentsQuery = z.object({
+  orderId: uuid.optional(),
+  status: z.enum(["pending", "authorized", "captured", "failed", "cancelled", "refunded"]).optional(),
+  method: z.enum(["cash", "card", "bank_transfer", "online"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});

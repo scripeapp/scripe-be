@@ -5,12 +5,54 @@ import * as schemas from "./banking.schemas.js";
 import type { BankingService } from "./banking.service.js";
 import type { BankingOperation } from "./banking.types.js";
 
+export const NIGERIAN_BANKS = [
+  { code: "044", name: "Access Bank" },
+  { code: "023", name: "Citibank Nigeria" },
+  { code: "050", name: "Ecobank Nigeria" },
+  { code: "070", name: "Fidelity Bank" },
+  { code: "011", name: "First Bank of Nigeria" },
+  { code: "214", name: "First City Monument Bank" },
+  { code: "058", name: "Guaranty Trust Bank" },
+  { code: "030", name: "Heritage Bank" },
+  { code: "082", name: "Keystone Bank" },
+  { code: "50211", name: "Kuda Bank" },
+  { code: "50515", name: "Moniepoint MFB" },
+  { code: "999992", name: "OPay" },
+  { code: "999991", name: "PalmPay" },
+  { code: "076", name: "Polaris Bank" },
+  { code: "101", name: "Providus Bank" },
+  { code: "221", name: "Stanbic IBTC Bank" },
+  { code: "068", name: "Standard Chartered Bank" },
+  { code: "232", name: "Sterling Bank" },
+  { code: "100", name: "Suntrust Bank" },
+  { code: "032", name: "Union Bank of Nigeria" },
+  { code: "033", name: "United Bank for Africa" },
+  { code: "215", name: "Unity Bank" },
+  { code: "035", name: "Wema Bank" },
+  { code: "057", name: "Zenith Bank" },
+];
+
 export class BankingController {
   constructor(private readonly service: BankingService) {}
+
+  readonly listBanks = this.handle(async () => NIGERIAN_BANKS);
 
   readonly getStatus = this.handle(async (request) => ({
     status: await this.service.getStatus(this.operation(request)),
   }));
+
+  readonly getSubaccount = this.handle(async (request) => {
+    const status = await this.service.getStatus(this.operation(request));
+    if (!status.virtualAccount) {
+      return null;
+    }
+    return {
+      subaccount_code: status.virtualAccount.providerAccountId || "",
+      business_name: status.virtualAccount.accountName || "",
+      settlement_bank: status.virtualAccount.bankName || "",
+      account_number: status.virtualAccount.accountNumber || "",
+    };
+  });
 
   readonly resolveBankAccount = this.handle(async (request) => ({
     account: await this.service.resolveBankAccount(this.operation(request), schemas.resolveBankAccountQuerySchema.parse(request.query)),

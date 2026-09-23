@@ -40,6 +40,13 @@ export class ApprovalsController {
     return { workflow: await this.service.setWorkflowStatus(this.operation(request), workflowId, status) };
   });
 
+  readonly toggleWorkflowStatus = this.handle(async (request) => {
+    const { workflowId } = schemas.workflowParamsSchema.parse(request.params);
+    const wf = await this.service.getWorkflow(this.operation(request), workflowId);
+    const nextStatus = wf.status === "active" ? "inactive" : "active";
+    return { workflow: await this.service.setWorkflowStatus(this.operation(request), workflowId, nextStatus) };
+  });
+
   readonly duplicateWorkflow = this.handle(async (request) => {
     const { workflowId } = schemas.workflowParamsSchema.parse(request.params);
     return { workflow: await this.service.duplicateWorkflow(this.operation(request), workflowId) };

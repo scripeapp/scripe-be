@@ -1,6 +1,6 @@
 import { sql } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
-import type { RecordPaymentInput } from "./payments.types.js";
+import type { ListPaymentsFilter, PaymentRow, RecordPaymentInput } from "./payments.types.js";
 
 export interface OrderSnapshot {
   readonly currency: string;
@@ -117,4 +117,89 @@ export async function captureCheckoutPayment(c: DatabaseContext, businessId: str
 
 export async function markCheckoutPaymentFailed(c: DatabaseContext, businessId: string, paymentId: string): Promise<void> {
   await sql`update app.payments set "status"='failed' where "id"=${paymentId}::uuid and "businessId"=${businessId}::uuid and "status"='pending'`.execute(c.transaction);
+}
+
+export async function listPayments(
+  c: DatabaseContext,
+  businessId: string,
+  filter: ListPaymentsFilter = {},
+): Promise<{ payments: PaymentRow[]; totalCount: number }> {
+  const limit = Math.max(1, Math.min(100, filter.limit ?? 50));
+  const offset = Math.max(0, filter.offset ?? 0);
+
+  const rows = (await sql<PaymentRow>`
+    select 
+      p."id",
+      p."businessId",
+      p."orderId",
+      p."method",
+      p."status",
+      p."assetCode",
+      p."amountMinor"::text as "amountMinor",
+      p."externalReference",
+      p."idempotencyKey",
+      p."createdBy"::text as "createdBy",
+      p."createdAt"::text as "createdAt",
+      p."updatedAt"::text as "updatedAt",
+      o."orderNumber",
+      o."totalMinor"::text as "orderTotalMinor",
+      coalesce(pt."displayName", '') as "customerName",
+      coalesce(pt."email", '') as "customerEmail"
+    from app.payments p
+    left join app.orders o on o."id" = p."orderId" and o."businessId" = p."businessId"
+    left join app.parties pt on pt."id" = o."customerPartyId" and pt."businessId" = p."businessId"
+    where p."businessId" = ${businessId}::uuid
+      and (${filter.orderId ?? null}::uuid is null or p."orderId" = ${filter.orderId ?? null}::uuid)
+      and (${filter.status ?? null}::text is null or p."status" = ${filter.status ?? null})
+      and (${filter.method ?? null}::text is null or p."method" = ${filter.method ?? null})
+    order by p."createdAt" desc
+    limit ${limit} offset ${offset}
+  `.execute(c.transaction)).rows;
+
+  const countRow = (await sql<{ count: string }>`
+    select count(*)::text as count
+    from app.payments p
+    where p."businessId" = ${businessId}::uuid
+      and (${filter.orderId ?? null}::uuid is null or p."orderId" = ${filter.orderId ?? null}::uuid)
+      and (${filter.status ?? null}::text is null or p."status" = ${filter.status ?? null})
+      and (${filter.method ?? null}::text is null or p."method" = ${filter.method ?? null})
+  `.execute(c.transaction)).rows[0];
+
+  return {
+    payments: rows,
+    totalCount: Number(countRow?.count ?? 0),
+  };
+}
+
+export async function findPaymentById(
+  c: DatabaseContext,
+  businessId: string,
+  paymentId: string,
+): Promise<PaymentRow | undefined> {
+  const row = (await sql<PaymentRow>`
+    select 
+      p."id",
+      p."businessId",
+      p."orderId",
+      p."method",
+      p."status",
+      p."assetCode",
+      p."amountMinor"::text as "amountMinor",
+      p."externalReference",
+      p."idempotencyKey",
+      p."createdBy"::text as "createdBy",
+      p."createdAt"::text as "createdAt",
+      p."updatedAt"::text as "updatedAt",
+      o."orderNumber",
+      o."totalMinor"::text as "orderTotalMinor",
+      coalesce(pt."displayName", '') as "customerName",
+      coalesce(pt."email", '') as "customerEmail"
+    from app.payments p
+    left join app.orders o on o."id" = p."orderId" and o."businessId" = p."businessId"
+    left join app.parties pt on pt."id" = o."customerPartyId" and pt."businessId" = p."businessId"
+    where p."businessId" = ${businessId}::uuid
+      and p."id" = ${paymentId}::uuid
+  `.execute(c.transaction)).rows[0];
+
+  return row;
 }

@@ -10,7 +10,12 @@ export function createBankingRouter(): Router {
   const controller = new BankingController(new BankingService(getDatabase(), new ApprovalsService(getDatabase())));
   const base = "/api/businesses/:businessId/banking";
 
+  router.get("/api/banks", controller.listBanks);
+
   router.use(base, requireAuth);
+  router.get("/api/businesses/:businessId/subaccount", requireAuth, controller.getSubaccount);
+  router.put("/api/businesses/:businessId/subaccount", requireAuth, controller.getSubaccount);
+  router.get(`${base}/banks`, controller.listBanks);
   router.get(`${base}/status`, controller.getStatus);
   router.get(`${base}/resolve-account`, controller.resolveBankAccount);
   router.post(`${base}/kyc`, controller.submitKyc);

@@ -16,6 +16,7 @@ export function createSubscriptionsRouter(): Router {
   router.get(`${base}/usage`, controller.getUsage);
   router.get(`${base}/invoices`, controller.getInvoices);
   router.post(`${base}/initiate`, controller.initiateSubscription);
+  router.post(`${base}/change-plan`, controller.initiateSubscription);
   router.post(`${base}/cancel`, controller.cancelSubscription);
 
   return router;

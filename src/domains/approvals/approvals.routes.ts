@@ -19,6 +19,7 @@ export function createApprovalsRouter(): Router {
   router.post(workflowsBase, controller.createWorkflow);
   router.patch(`${workflowsBase}/:workflowId`, controller.updateWorkflow);
   router.post(`${workflowsBase}/:workflowId/status`, controller.setWorkflowStatus);
+  router.post(`${workflowsBase}/:workflowId/toggle-status`, controller.toggleWorkflowStatus);
   router.post(`${workflowsBase}/:workflowId/duplicate`, controller.duplicateWorkflow);
   router.delete(`${workflowsBase}/:workflowId`, controller.deleteWorkflow);
 

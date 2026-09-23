@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"; import type { Database } from "../../db/database.types.js"; import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import { getCheckoutGateway } from "../../integrations/checkout-gateway.js"; import { notFoundError } from "../../shared/errors.js"; import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js"; import type { JournalLineInput } from "../accounting/accounting.types.js"; import { postJournalEntry } from "../accounting/accounting.service.js"; import * as authorization from "../authorization/authorization.service.js"; import * as receiptsRepo from "../receipts/receipts.repository.js"; import * as repo from "./payments.repository.js"; import type { OrderSnapshot } from "./payments.repository.js"; import type { CheckoutStatus, InitiateCheckoutInput, InitiatedCheckout, PaymentOperation, RecordPaymentInput } from "./payments.types.js";
+import { randomUUID } from "node:crypto"; import type { Database } from "../../db/database.types.js"; import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import { getCheckoutGateway } from "../../integrations/checkout-gateway.js"; import { notFoundError } from "../../shared/errors.js"; import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js"; import type { JournalLineInput } from "../accounting/accounting.types.js"; import { postJournalEntry } from "../accounting/accounting.service.js"; import * as authorization from "../authorization/authorization.service.js"; import * as receiptsRepo from "../receipts/receipts.repository.js"; import * as repo from "./payments.repository.js"; import type { OrderSnapshot } from "./payments.repository.js"; import type { CheckoutStatus, InitiateCheckoutInput, InitiatedCheckout, ListPaymentsFilter, PaymentOperation, PaymentRow, RecordPaymentInput } from "./payments.types.js";
 
 /**
  * Shared by record() (an in-person/manual capture) and verifyCheckout() (an
@@ -97,6 +97,22 @@ export class PaymentsService{constructor(private readonly database:Database){} a
       }
 
       return { status: "pending" };
+    });
+  }
+
+  async listPayments(operation: PaymentOperation, filter: ListPaymentsFilter): Promise<{ payments: PaymentRow[]; totalCount: number }> {
+    return withDatabaseContext(this.database, withIdentity(operation.requestId, operation.userId, operation.businessId), async (context) => {
+      await authorization.requirePermission(context, operation.businessId, "payment.read");
+      return repo.listPayments(context, operation.businessId, filter);
+    });
+  }
+
+  async getPayment(operation: PaymentOperation, paymentId: string): Promise<PaymentRow> {
+    return withDatabaseContext(this.database, withIdentity(operation.requestId, operation.userId, operation.businessId), async (context) => {
+      await authorization.requirePermission(context, operation.businessId, "payment.read");
+      const payment = await repo.findPaymentById(context, operation.businessId, paymentId);
+      if (!payment) throw notFoundError("Payment not found");
+      return payment;
     });
   }
 }
