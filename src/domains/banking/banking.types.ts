@@ -5,6 +5,17 @@ export type WalletTransactionDirection = "credit" | "debit";
 export type WalletTransactionStatus = "pending" | "posted";
 export type WithdrawalStatus = "pending" | "awaitingApproval" | "processing" | "success" | "failed" | "rejected";
 
+export type BusinessType = "sole_proprietorship" | "limited_liability" | "ngo_cooperative";
+
+export interface BusinessAddressInput {
+  readonly streetAddress: string;
+  readonly apartment?: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode?: string | null;
+  readonly countryCode?: string;
+}
+
 export interface BankingProfileRow {
   readonly businessId: string;
   readonly kycStatus: KycStatus;
@@ -17,6 +28,25 @@ export interface BankingProfileRow {
   readonly lastName: string | null;
   readonly phone: string | null;
   readonly bvn: string | null;
+  readonly businessType: BusinessType | null;
+  readonly registeredBusinessName: string | null;
+  readonly registrationNumber: string | null;
+  readonly taxIdentificationNumber: string | null;
+  readonly website: string | null;
+  readonly description: string | null;
+  readonly businessCategory: string | null;
+  readonly annualRevenue: string | null;
+  readonly businessAddress: BusinessAddressInput | null;
+  readonly directorNin: string | null;
+  readonly directorDob: string | null;
+  readonly directorIdType: string | null;
+  readonly directorIdDocumentUrl: string | null;
+  readonly certificateOfIncorporationUrl: string | null;
+  readonly statusReportUrl: string | null;
+  readonly proofOfAddressUrl: string | null;
+  readonly settlementBankCode: string | null;
+  readonly settlementAccountNumber: string | null;
+  readonly settlementAccountName: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -104,6 +134,33 @@ export interface SubmitKycInput {
   /** Required by some providers' identity verification (e.g. Anchor); unused by others. */
   readonly dateOfBirth?: string;
   readonly gender?: "male" | "female" | "other";
+}
+
+export interface SubmitKybInput {
+  readonly businessType?: BusinessType;
+  readonly registeredBusinessName: string;
+  readonly registrationNumber?: string;
+  readonly taxIdentificationNumber?: string;
+  readonly website?: string;
+  readonly description?: string;
+  readonly businessCategory?: string;
+  readonly annualRevenue?: string;
+  readonly address: BusinessAddressInput;
+  readonly directorFullName: string;
+  readonly directorEmail: string;
+  readonly directorPhone: string;
+  readonly directorBvn: string;
+  readonly directorNin?: string;
+  readonly directorDob?: string;
+  readonly directorGender?: "male" | "female" | "other";
+  readonly directorIdType?: string;
+  readonly directorIdDocumentUrl?: string;
+  readonly certificateOfIncorporationUrl?: string;
+  readonly statusReportUrl?: string;
+  readonly proofOfAddressUrl?: string;
+  readonly settlementBankCode: string;
+  readonly settlementAccountNumber: string;
+  readonly settlementAccountName?: string;
 }
 
 export interface RequestVirtualAccountInput {

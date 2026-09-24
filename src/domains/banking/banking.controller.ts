@@ -58,8 +58,25 @@ export class BankingController {
     account: await this.service.resolveBankAccount(this.operation(request), schemas.resolveBankAccountQuerySchema.parse(request.query)),
   }));
 
-  readonly submitKyc = this.handle(async (request) => ({
-    kyc: await this.service.submitKyc(this.operation(request), schemas.submitKycSchema.parse(request.body)),
+  readonly submitKyc = this.handle(async (request) => {
+    const isCorporate = !!(
+      request.body?.registeredBusinessName ||
+      request.body?.registered_business_name ||
+      request.body?.businessType ||
+      request.body?.business_type ||
+      request.body?.directorFullName ||
+      request.body?.director_full_name ||
+      request.body?.registrationNumber ||
+      request.body?.rcNumber
+    );
+    if (isCorporate) {
+      return { kyc: await this.service.submitKyb(this.operation(request), schemas.submitKybSchema.parse(request.body)) };
+    }
+    return { kyc: await this.service.submitKyc(this.operation(request), schemas.submitKycSchema.parse(request.body)) };
+  });
+
+  readonly submitKyb = this.handle(async (request) => ({
+    kyc: await this.service.submitKyb(this.operation(request), schemas.submitKybSchema.parse(request.body)),
   }));
 
   readonly requestVirtualAccount = this.handle(

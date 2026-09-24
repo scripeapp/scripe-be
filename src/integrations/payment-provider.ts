@@ -47,7 +47,15 @@ export interface TransferResult {
 export interface PaymentProviderGateway {
   readonly name: "brails" | "anchor" | "unconfigured";
   resolveBankAccount(accountNumber: string, bankCode: string): Promise<BankAccountResolution>;
-  createCustomer(input: { email: string; firstName: string; lastName: string; phone: string }): Promise<{ customerCode: string }>;
+  createCustomer(input: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    businessName?: string;
+    rcNumber?: string;
+    businessType?: string;
+  }): Promise<{ customerCode: string }>;
   validateCustomerBvn(input: {
     customerCode: string;
     firstName: string;
@@ -68,6 +76,10 @@ export interface PaymentProviderGateway {
     preferredBank?: string;
     /** Required by providers that validate identity as part of account creation itself (e.g. Brails); already-validated for others (e.g. Paystack, via a prior validateCustomerBvn call). */
     bvn?: string;
+    accountType?: "INDIVIDUAL" | "CORPORATE";
+    businessName?: string;
+    rcNumber?: string;
+    tin?: string;
   }): Promise<DedicatedAccountResult>;
   /** providerAccountId is the account's id at the provider (e.g. Brails' UUID, Anchor's account id) — some providers requery by id rather than by account number/bank slug, and an account still provisioning asynchronously may not have an accountNumber yet. */
   requeryDedicatedAccount(input: { accountNumber: string | null; bankSlug: string | null; providerAccountId: string | null }): Promise<DedicatedAccountResult>;

@@ -19,6 +19,7 @@ export function createBankingRouter(): Router {
   router.get(`${base}/status`, controller.getStatus);
   router.get(`${base}/resolve-account`, controller.resolveBankAccount);
   router.post(`${base}/kyc`, controller.submitKyc);
+  router.post(`${base}/kyb`, controller.submitKyb);
   router.post(`${base}/virtual-account`, controller.requestVirtualAccount);
   router.post(`${base}/virtual-account/requery`, controller.requeryVirtualAccount);
   router.get(`${base}/transactions`, controller.listWalletTransactions);

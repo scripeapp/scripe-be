@@ -93,17 +93,26 @@ export class BrailsPaymentProviderGateway implements PaymentProviderGateway {
     phone: string;
     preferredBank?: string;
     bvn?: string;
+    accountType?: "INDIVIDUAL" | "CORPORATE";
+    businessName?: string;
+    rcNumber?: string;
+    tin?: string;
   }): Promise<DedicatedAccountResult> {
     void input.customerCode;
     if (!input.bvn) throw new Error("Brails requires the customer's BVN to create a virtual account.");
     const bank = input.preferredBank === "providus" ? "providus" : "safehaven";
+    const isCorporate = input.accountType === "CORPORATE" || !!input.businessName;
     const account = await this.request<BrailsVirtualAccount>("POST", "/virtual-accounts", {
       firstName: input.firstName,
       lastName: input.lastName,
       customerEmail: input.email,
       phoneNumber: input.phone,
       bank,
-      type: "INDIVIDUAL",
+      type: isCorporate ? "CORPORATE" : "INDIVIDUAL",
+      companyName: isCorporate ? input.businessName : undefined,
+      businessName: isCorporate ? input.businessName : undefined,
+      rcNumber: isCorporate ? input.rcNumber : undefined,
+      tin: isCorporate ? input.tin : undefined,
       reference: `surge_${randomUUID()}`,
       bvn: input.bvn,
     });

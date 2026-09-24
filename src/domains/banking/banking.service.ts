@@ -11,6 +11,7 @@ import * as authorizationRepository from "../authorization/authorization.reposit
 import { requirePermission } from "../authorization/authorization.service.js";
 import * as businessesRepository from "../businesses/businesses.repository.js";
 import { hasActiveHold, recordSignal } from "../risk/risk.service.js";
+import * as complianceRepository from "../compliance/compliance.repository.js";
 import * as repository from "./banking.repository.js";
 import type {
   BankingOperation,
@@ -21,6 +22,7 @@ import type {
   RequestWithdrawalInput,
   ResolveBankAccountInput,
   SubmitKycInput,
+  SubmitKybInput,
   VirtualAccountRow,
   WalletTransactionRow,
   WithdrawalRow,
@@ -101,6 +103,104 @@ export class BankingService {
     });
   }
 
+  async submitKyb(operation: BankingOperation, input: SubmitKybInput): Promise<{ status: "verified" | "pending" }> {
+    return this.run(operation, async (context) => {
+      await requirePermission(context, operation.businessId, "banking.manage");
+      const profile = await repository.findProfile(context, operation.businessId);
+      if (profile?.kycStatus === "verified") throw conflictError("Banking KYC is already verified");
+      if (profile?.kycStatus === "pending") throw conflictError("Banking KYC is already pending review");
+
+      const nameParts = input.directorFullName.trim().split(/\s+/);
+      const firstName = nameParts[0] || "Director";
+      const lastName = nameParts.slice(1).join(" ") || "Signatory";
+
+      const customerCode = profile?.providerCustomerCode ?? (await paymentProvider.createCustomer({
+        email: input.directorEmail,
+        firstName,
+        lastName,
+        phone: input.directorPhone,
+        businessName: input.registeredBusinessName,
+        rcNumber: input.registrationNumber,
+        businessType: input.businessType,
+      })).customerCode;
+
+      const validation = await paymentProvider.validateCustomerBvn({
+        customerCode,
+        firstName,
+        lastName,
+        bvn: input.directorBvn,
+        bankCode: input.settlementBankCode,
+        accountNumber: input.settlementAccountNumber,
+        dateOfBirth: input.directorDob,
+        gender: input.directorGender,
+      });
+
+      // Synchronize legal profile and beneficial owner into compliance domain
+      if (input.registrationNumber) {
+        try {
+          await complianceRepository.upsertLegalProfile(context, operation.businessId, operation.userId, {
+            registeredName: input.registeredBusinessName,
+            registrationNumber: input.registrationNumber,
+            taxIdentificationNumber: input.taxIdentificationNumber ?? null,
+            countryCode: input.address.countryCode ?? "NG",
+            addressLine1: input.address.streetAddress,
+            addressLine2: input.address.apartment ?? null,
+            city: input.address.city,
+            state: input.address.state,
+            postalCode: input.address.postalCode ?? null,
+          });
+          await complianceRepository.createBeneficialOwner(context, operation.businessId, operation.userId, {
+            fullName: input.directorFullName,
+            relationship: "director",
+            ownershipPercentageBps: 10000,
+            idType: (input.directorIdType as any) || "nin",
+            idNumber: input.directorNin || input.directorBvn,
+            nationality: "Nigerian",
+          });
+        } catch (compErr) {
+          // Non-fatal if compliance sync encounters permission or duplicate constraint
+          console.warn("Compliance sync non-fatal error:", compErr);
+        }
+      }
+
+      const now = new Date();
+      await repository.upsertProfile(context, operation.businessId, {
+        kycStatus: validation.status,
+        kycFailureReason: null,
+        kycSubmittedAt: now,
+        kycVerifiedAt: validation.status === "verified" ? now : null,
+        providerCustomerCode: customerCode,
+        email: input.directorEmail,
+        firstName,
+        lastName,
+        phone: input.directorPhone,
+        bvn: input.directorBvn,
+        businessType: input.businessType,
+        registeredBusinessName: input.registeredBusinessName,
+        registrationNumber: input.registrationNumber,
+        taxIdentificationNumber: input.taxIdentificationNumber,
+        website: input.website,
+        description: input.description,
+        businessCategory: input.businessCategory,
+        annualRevenue: input.annualRevenue,
+        businessAddress: input.address,
+        directorNin: input.directorNin,
+        directorDob: input.directorDob,
+        directorIdType: input.directorIdType,
+        directorIdDocumentUrl: input.directorIdDocumentUrl,
+        certificateOfIncorporationUrl: input.certificateOfIncorporationUrl,
+        statusReportUrl: input.statusReportUrl,
+        proofOfAddressUrl: input.proofOfAddressUrl,
+        settlementBankCode: input.settlementBankCode,
+        settlementAccountNumber: input.settlementAccountNumber,
+        settlementAccountName: input.settlementAccountName,
+      });
+
+      await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, { status: validation.status, type: "corporate" });
+      return { status: validation.status };
+    });
+  }
+
   async requestVirtualAccount(operation: BankingOperation, input: RequestVirtualAccountInput): Promise<VirtualAccountRow> {
     return this.run(operation, async (context) => {
       await requirePermission(context, operation.businessId, "banking.manage");
@@ -120,6 +220,7 @@ export class BankingService {
         throw conflictError("Banking provider customer is not ready for this business");
       }
 
+      const isCorporate = !!profile.registeredBusinessName || profile.businessType === "limited_liability" || profile.businessType === "sole_proprietorship";
       const account = await paymentProvider.createDedicatedAccount({
         customerCode: profile.providerCustomerCode,
         email: profile.email,
@@ -128,6 +229,10 @@ export class BankingService {
         phone: profile.phone,
         preferredBank: input.preferredBank,
         bvn: profile.bvn ?? undefined,
+        accountType: isCorporate ? "CORPORATE" : "INDIVIDUAL",
+        businessName: profile.registeredBusinessName ?? undefined,
+        rcNumber: profile.registrationNumber ?? undefined,
+        tin: profile.taxIdentificationNumber ?? undefined,
       });
 
       const status = account.status;
@@ -135,7 +240,7 @@ export class BankingService {
         providerCustomerCode: profile.providerCustomerCode,
         providerAccountId: account.providerAccountId,
         accountNumber: account.accountNumber,
-        accountName: account.accountName,
+        accountName: account.accountName || profile.registeredBusinessName || `${profile.firstName} ${profile.lastName}`,
         bankName: account.bankName,
         bankSlug: account.bankSlug,
         status,

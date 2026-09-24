@@ -14,7 +14,7 @@ import type {
   WithdrawalStatus,
 } from "./banking.types.js";
 
-const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone", "bvn", "createdAt", "updatedAt"`;
+const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone", "bvn", "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber", "website", "description", "businessCategory", "annualRevenue", "businessAddress", "directorNin", "directorDob", "directorIdType", "directorIdDocumentUrl", "certificateOfIncorporationUrl", "statusReportUrl", "proofOfAddressUrl", "settlementBankCode", "settlementAccountNumber", "settlementAccountName", "createdAt", "updatedAt"`;
 const VIRTUAL_ACCOUNT_COLUMNS = `"id", "businessId", "provider", "providerCustomerCode", "providerAccountId", "accountNumber", "accountName", "bankName", "bankSlug", "assetCode", "status", "assignmentReference", "failureReason", "metadata", "lastRequeryAt", "createdAt", "updatedAt"`;
 const WALLET_TRANSACTION_COLUMNS = `"id", "businessId", "type", "direction", "status", "assetCode", "amountMinor", "grossAmountMinor", "feeAmountMinor", "feeBreakdown", "provider", "providerReference", "description", "metadata", "postedAt", "createdAt"`;
 const WITHDRAWAL_COLUMNS = `"id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "transferRecipientCode", "providerReference", "providerTransferCode", "idempotencyKey", "status", "failureReason", "createdAt", "updatedAt"`;
@@ -40,13 +40,46 @@ export async function upsertProfile(
     lastName?: string;
     phone?: string;
     bvn?: string;
+    businessType?: string | null;
+    registeredBusinessName?: string | null;
+    registrationNumber?: string | null;
+    taxIdentificationNumber?: string | null;
+    website?: string | null;
+    description?: string | null;
+    businessCategory?: string | null;
+    annualRevenue?: string | null;
+    businessAddress?: any | null;
+    directorNin?: string | null;
+    directorDob?: string | null;
+    directorIdType?: string | null;
+    directorIdDocumentUrl?: string | null;
+    certificateOfIncorporationUrl?: string | null;
+    statusReportUrl?: string | null;
+    proofOfAddressUrl?: string | null;
+    settlementBankCode?: string | null;
+    settlementAccountNumber?: string | null;
+    settlementAccountName?: string | null;
   },
 ): Promise<BankingProfileRow> {
+  const addressJson = fields.businessAddress ? JSON.stringify(fields.businessAddress) : null;
   const result = await sql<BankingProfileRow>`
-    insert into app.banking_profiles ("businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone", "bvn")
+    insert into app.banking_profiles (
+      "businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode",
+      "email", "firstName", "lastName", "phone", "bvn",
+      "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber",
+      "website", "description", "businessCategory", "annualRevenue", "businessAddress",
+      "directorNin", "directorDob", "directorIdType", "directorIdDocumentUrl",
+      "certificateOfIncorporationUrl", "statusReportUrl", "proofOfAddressUrl",
+      "settlementBankCode", "settlementAccountNumber", "settlementAccountName"
+    )
     values (
       ${businessId}::uuid, ${fields.kycStatus}, ${fields.kycFailureReason ?? null}, ${fields.kycSubmittedAt ?? null}, ${fields.kycVerifiedAt ?? null},
-      ${fields.providerCustomerCode ?? null}, ${fields.email ?? null}, ${fields.firstName ?? null}, ${fields.lastName ?? null}, ${fields.phone ?? null}, ${fields.bvn ?? null}
+      ${fields.providerCustomerCode ?? null}, ${fields.email ?? null}, ${fields.firstName ?? null}, ${fields.lastName ?? null}, ${fields.phone ?? null}, ${fields.bvn ?? null},
+      ${fields.businessType ?? null}, ${fields.registeredBusinessName ?? null}, ${fields.registrationNumber ?? null}, ${fields.taxIdentificationNumber ?? null},
+      ${fields.website ?? null}, ${fields.description ?? null}, ${fields.businessCategory ?? null}, ${fields.annualRevenue ?? null}, ${addressJson ? sql`${addressJson}::jsonb` : null},
+      ${fields.directorNin ?? null}, ${fields.directorDob ?? null}, ${fields.directorIdType ?? null}, ${fields.directorIdDocumentUrl ?? null},
+      ${fields.certificateOfIncorporationUrl ?? null}, ${fields.statusReportUrl ?? null}, ${fields.proofOfAddressUrl ?? null},
+      ${fields.settlementBankCode ?? null}, ${fields.settlementAccountNumber ?? null}, ${fields.settlementAccountName ?? null}
     )
     on conflict ("businessId") do update set
       "kycStatus" = excluded."kycStatus",
@@ -59,6 +92,25 @@ export async function upsertProfile(
       "lastName" = coalesce(excluded."lastName", app.banking_profiles."lastName"),
       "phone" = coalesce(excluded."phone", app.banking_profiles."phone"),
       "bvn" = coalesce(excluded."bvn", app.banking_profiles."bvn"),
+      "businessType" = coalesce(excluded."businessType", app.banking_profiles."businessType"),
+      "registeredBusinessName" = coalesce(excluded."registeredBusinessName", app.banking_profiles."registeredBusinessName"),
+      "registrationNumber" = coalesce(excluded."registrationNumber", app.banking_profiles."registrationNumber"),
+      "taxIdentificationNumber" = coalesce(excluded."taxIdentificationNumber", app.banking_profiles."taxIdentificationNumber"),
+      "website" = coalesce(excluded."website", app.banking_profiles."website"),
+      "description" = coalesce(excluded."description", app.banking_profiles."description"),
+      "businessCategory" = coalesce(excluded."businessCategory", app.banking_profiles."businessCategory"),
+      "annualRevenue" = coalesce(excluded."annualRevenue", app.banking_profiles."annualRevenue"),
+      "businessAddress" = coalesce(excluded."businessAddress", app.banking_profiles."businessAddress"),
+      "directorNin" = coalesce(excluded."directorNin", app.banking_profiles."directorNin"),
+      "directorDob" = coalesce(excluded."directorDob", app.banking_profiles."directorDob"),
+      "directorIdType" = coalesce(excluded."directorIdType", app.banking_profiles."directorIdType"),
+      "directorIdDocumentUrl" = coalesce(excluded."directorIdDocumentUrl", app.banking_profiles."directorIdDocumentUrl"),
+      "certificateOfIncorporationUrl" = coalesce(excluded."certificateOfIncorporationUrl", app.banking_profiles."certificateOfIncorporationUrl"),
+      "statusReportUrl" = coalesce(excluded."statusReportUrl", app.banking_profiles."statusReportUrl"),
+      "proofOfAddressUrl" = coalesce(excluded."proofOfAddressUrl", app.banking_profiles."proofOfAddressUrl"),
+      "settlementBankCode" = coalesce(excluded."settlementBankCode", app.banking_profiles."settlementBankCode"),
+      "settlementAccountNumber" = coalesce(excluded."settlementAccountNumber", app.banking_profiles."settlementAccountNumber"),
+      "settlementAccountName" = coalesce(excluded."settlementAccountName", app.banking_profiles."settlementAccountName"),
       "updatedAt" = now()
     returning ${sql.raw(PROFILE_COLUMNS)}
   `.execute(context.transaction);

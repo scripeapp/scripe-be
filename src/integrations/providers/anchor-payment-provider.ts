@@ -79,7 +79,31 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
     return (await response.json()) as AnchorJsonApiDocument<T>;
   }
 
-  async createCustomer(input: { email: string; firstName: string; lastName: string; phone: string }): Promise<{ customerCode: string }> {
+  async createCustomer(input: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    businessName?: string;
+    rcNumber?: string;
+    businessType?: string;
+  }): Promise<{ customerCode: string }> {
+    if (input.businessName) {
+      const document = await this.request<AnchorCustomerAttributes>("POST", "/customers", {
+        data: {
+          type: "BusinessCustomer",
+          attributes: {
+            organizationName: input.businessName,
+            registrationNumber: input.rcNumber,
+            registrationType: input.businessType === "sole_proprietorship" ? "BN" : "RC",
+            email: input.email,
+            phoneNumber: input.phone,
+            address: { country: "NG" },
+          },
+        },
+      });
+      return { customerCode: document.data.id };
+    }
     const document = await this.request<AnchorCustomerAttributes>("POST", "/customers", {
       data: {
         type: "IndividualCustomer",
@@ -114,12 +138,17 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
     return { status: "pending" };
   }
 
-  async createDedicatedAccount(input: { customerCode: string }): Promise<DedicatedAccountResult> {
+  async createDedicatedAccount(input: {
+    customerCode: string;
+    accountType?: "INDIVIDUAL" | "CORPORATE";
+    businessName?: string;
+  }): Promise<DedicatedAccountResult> {
+    const isCorporate = input.accountType === "CORPORATE" || !!input.businessName;
     const document = await this.request<AnchorAccountAttributes>("POST", "/accounts", {
       data: {
         type: "DepositAccount",
-        attributes: { productType: "SAVINGS" },
-        relationships: { customer: { data: { id: input.customerCode, type: "IndividualCustomer" } } },
+        attributes: { productType: isCorporate ? "CURRENT" : "SAVINGS" },
+        relationships: { customer: { data: { id: input.customerCode, type: isCorporate ? "BusinessCustomer" : "IndividualCustomer" } } },
       },
     });
     return toResult(document.data.id, document.data.attributes);
