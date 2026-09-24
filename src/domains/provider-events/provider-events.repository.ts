@@ -55,11 +55,37 @@ export async function failCheckoutPaymentByReference(context: DatabaseContext, e
   return result.rows[0]?.fail_checkout_payment_from_webhook ?? false;
 }
 
-export async function markBankingKycStatus(context: DatabaseContext, providerCustomerCode: string, status: "verified" | "failed", failureReason: string | null): Promise<boolean> {
-  const result = await sql<{ mark_banking_kyc_status_from_webhook: boolean }>`
-    select app.mark_banking_kyc_status_from_webhook(${providerCustomerCode}, ${status}, ${failureReason})
+export interface BankingKycReconcileResult {
+  readonly found: boolean;
+  readonly businessId: string | null;
+  readonly email: string | null;
+  readonly firstName: string | null;
+  readonly businessName: string | null;
+}
+
+export interface VirtualAccountReconcileResult {
+  readonly found: boolean;
+  readonly businessId: string | null;
+  readonly email: string | null;
+  readonly accountNumber: string | null;
+  readonly accountName: string | null;
+  readonly bankName: string | null;
+}
+
+export interface WalletDepositReconcileResult {
+  readonly found: boolean;
+  readonly businessId: string | null;
+  readonly email: string | null;
+  readonly accountNumber: string | null;
+  readonly bankName: string | null;
+  readonly businessName: string | null;
+}
+
+export async function markBankingKycStatus(context: DatabaseContext, providerCustomerCode: string, status: "verified" | "failed", failureReason: string | null): Promise<BankingKycReconcileResult> {
+  const result = await sql<BankingKycReconcileResult>`
+    select * from app.mark_banking_kyc_status_from_webhook(${providerCustomerCode}, ${status}, ${failureReason})
   `.execute(context.transaction);
-  return result.rows[0]?.mark_banking_kyc_status_from_webhook ?? false;
+  return result.rows[0] ?? { found: false, businessId: null, email: null, firstName: null, businessName: null };
 }
 
 export async function markVirtualAccountStatus(
@@ -67,11 +93,11 @@ export async function markVirtualAccountStatus(
   providerAccountId: string,
   status: "active" | "failed",
   fields: { accountNumber: string | null; accountName: string | null; bankName: string | null },
-): Promise<boolean> {
-  const result = await sql<{ mark_virtual_account_status_from_webhook: boolean }>`
-    select app.mark_virtual_account_status_from_webhook(${providerAccountId}, ${status}, ${fields.accountNumber}, ${fields.accountName}, ${fields.bankName})
+): Promise<VirtualAccountReconcileResult> {
+  const result = await sql<VirtualAccountReconcileResult>`
+    select * from app.mark_virtual_account_status_from_webhook(${providerAccountId}, ${status}, ${fields.accountNumber}, ${fields.accountName}, ${fields.bankName})
   `.execute(context.transaction);
-  return result.rows[0]?.mark_virtual_account_status_from_webhook ?? false;
+  return result.rows[0] ?? { found: false, businessId: null, email: null, accountNumber: null, accountName: null, bankName: null };
 }
 
 /** Returns the new receipt's id, or null if the order wasn't found or a receipt was already issued for it (idempotent via fiscal_documents' unique-per-order index). */
@@ -98,9 +124,9 @@ export async function markWithdrawalStatus(context: DatabaseContext, providerTra
 export async function recordWalletDeposit(
   context: DatabaseContext,
   input: { provider: string; providerAccountId: string; providerReference: string; amountMinor: string; assetCode: string; description: string },
-): Promise<WebhookReconcileResult> {
-  const result = await sql<WebhookReconcileResult>`
+): Promise<WalletDepositReconcileResult> {
+  const result = await sql<WalletDepositReconcileResult>`
     select * from app.record_wallet_deposit_from_webhook(${input.provider}, ${input.providerAccountId}, ${input.providerReference}, ${input.amountMinor}::bigint, ${input.assetCode}, ${input.description})
   `.execute(context.transaction);
-  return result.rows[0]!;
+  return result.rows[0] ?? { found: false, businessId: null, email: null, accountNumber: null, bankName: null, businessName: null };
 }

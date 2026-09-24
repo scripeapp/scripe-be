@@ -1,6 +1,16 @@
 import { createHmac, randomUUID } from "node:crypto";
 let verificationMessages: { to: string; code: string }[];
-jest.mock("@/shared/email.js", () => ({ emailSender: { sendVerificationCode: (to: string, code: string) => verificationMessages.push({ to, code }), sendPasswordResetEmail: () => {} } }));
+jest.mock("@/shared/email.js", () => ({
+  emailSender: {
+    sendVerificationCode: (to: string, code: string) => verificationMessages.push({ to, code }),
+    sendPasswordResetEmail: () => {},
+    sendBankingKybSubmitted: () => {},
+    sendBankingKybApproved: () => {},
+    sendBankingKybFailed: () => {},
+    sendVirtualAccountIssued: () => {},
+    sendVirtualAccountDeposit: () => {},
+  },
+}));
 import { getDatabase } from "@/db/database.js";
 import { withDatabaseContext } from "@/db/database-context.js";
 import { withIdentity } from "@/db/principal.js";

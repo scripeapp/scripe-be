@@ -11,6 +11,8 @@ import * as repository from "./provider-events.repository.js";
 import type { CaptureResult } from "./provider-events.repository.js";
 import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature, verifyShipbubbleSignature } from "./provider-events.signatures.js";
 import type { ProviderName } from "./provider-events.types.js";
+import { emailSender } from "../../shared/email.js";
+import { loadEnvironment } from "../../shared/environment.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -175,13 +177,30 @@ export class ProviderEventsService {
       if (eventType.startsWith("customer.identification.")) {
         if (!resourceId) return "ignored";
         if (eventType === "customer.identification.approved") {
-          const found = await repository.markBankingKycStatus(context, resourceId, "verified", null);
-          return found ? "processed" : "ignored";
+          const result = await repository.markBankingKycStatus(context, resourceId, "verified", null);
+          if (result.found && result.email) {
+            const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+            void emailSender.sendBankingKybApproved(result.email, {
+              businessName: result.businessName || "your business",
+              directorName: result.firstName || "Director",
+              dashboardUrl: `${frontendUrl}/dashboard/banking`,
+            }).catch((err) => console.warn("Failed to dispatch KYC approved email:", err));
+          }
+          return result.found ? "processed" : "ignored";
         }
         if (eventType === "customer.identification.rejected" || eventType === "customer.identification.error") {
           const reason = asString(attributes.reason) ?? asString(attributes.message) ?? "KYC rejected by provider";
-          const found = await repository.markBankingKycStatus(context, resourceId, "failed", reason);
-          return found ? "processed" : "ignored";
+          const result = await repository.markBankingKycStatus(context, resourceId, "failed", reason);
+          if (result.found && result.email) {
+            const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+            void emailSender.sendBankingKybFailed(result.email, {
+              businessName: result.businessName || "your business",
+              directorName: result.firstName || "Director",
+              reason,
+              retryUrl: `${frontendUrl}/dashboard/banking`,
+            }).catch((err) => console.warn("Failed to dispatch KYC rejected email:", err));
+          }
+          return result.found ? "processed" : "ignored";
         }
         return "ignored";
       }
@@ -189,18 +208,28 @@ export class ProviderEventsService {
       if (eventType === "account.opened" || eventType === "accountNumber.created") {
         if (!resourceId) return "ignored";
         const virtualNuban = asRecord(attributes.virtualNuban);
-        const found = await repository.markVirtualAccountStatus(context, resourceId, "active", {
+        const result = await repository.markVirtualAccountStatus(context, resourceId, "active", {
           accountNumber: asString(virtualNuban.accountNumber) ?? asString(attributes.accountNumber),
           accountName: asString(attributes.accountName),
           bankName: asString(virtualNuban.bankName) ?? asString(asRecord(attributes.bank).name),
         });
-        return found ? "processed" : "ignored";
+        if (result.found && result.email && result.accountNumber && result.bankName) {
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          void emailSender.sendVirtualAccountIssued(result.email, {
+            businessName: result.accountName || "your business",
+            accountNumber: result.accountNumber,
+            accountName: result.accountName || "your business",
+            bankName: result.bankName,
+            dashboardUrl: `${frontendUrl}/dashboard/banking`,
+          }).catch((err) => console.warn("Failed to dispatch virtual account issued email:", err));
+        }
+        return result.found ? "processed" : "ignored";
       }
 
       if (eventType === "account.frozen" || eventType === "account.closed") {
         if (!resourceId) return "ignored";
-        const found = await repository.markVirtualAccountStatus(context, resourceId, "failed", { accountNumber: null, accountName: null, bankName: null });
-        return found ? "processed" : "ignored";
+        const result = await repository.markVirtualAccountStatus(context, resourceId, "failed", { accountNumber: null, accountName: null, bankName: null });
+        return result.found ? "processed" : "ignored";
       }
 
       if (eventType.startsWith("nip.transfer.")) {
@@ -232,6 +261,17 @@ export class ProviderEventsService {
           assetCode: asString(attributes.currency) ?? "NGN",
           description: "Virtual account deposit",
         });
+        if (result.found && result.email && result.accountNumber && result.bankName) {
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          const amountFormatted = `₦${(Number(amountMinor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
+          void emailSender.sendVirtualAccountDeposit(result.email, {
+            businessName: result.businessName || "your business",
+            amountFormatted,
+            accountNumber: result.accountNumber,
+            bankName: result.bankName,
+            dashboardUrl: `${frontendUrl}/dashboard/banking`,
+          }).catch((err) => console.warn("Failed to dispatch deposit received email:", err));
+        }
         return result.found ? "processed" : "ignored";
       }
 
@@ -274,6 +314,17 @@ export class ProviderEventsService {
           assetCode: asString(data.currency) ?? "NGN",
           description: "Virtual account deposit",
         });
+        if (result.found && result.email && result.accountNumber && result.bankName) {
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          const amountFormatted = `₦${(Number(amountMinor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
+          void emailSender.sendVirtualAccountDeposit(result.email, {
+            businessName: result.businessName || "your business",
+            amountFormatted,
+            accountNumber: result.accountNumber,
+            bankName: result.bankName,
+            dashboardUrl: `${frontendUrl}/dashboard/banking`,
+          }).catch((err) => console.warn("Failed to dispatch deposit received email:", err));
+        }
         return result.found ? "processed" : "ignored";
       }
 

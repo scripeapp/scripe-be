@@ -2,7 +2,15 @@ import { randomUUID } from "node:crypto";
 
 const verificationMessages: { to: string; code: string }[] = [];
 jest.mock("@/shared/email.js", () => ({
-  emailSender: { sendVerificationCode: (to: string, code: string) => verificationMessages.push({ to, code }), sendPasswordResetEmail: () => {} },
+  emailSender: {
+    sendVerificationCode: (to: string, code: string) => verificationMessages.push({ to, code }),
+    sendPasswordResetEmail: () => {},
+    sendBankingKybSubmitted: () => {},
+    sendBankingKybApproved: () => {},
+    sendBankingKybFailed: () => {},
+    sendVirtualAccountIssued: () => {},
+    sendVirtualAccountDeposit: () => {},
+  },
 }));
 
 import { request, startTestServer, type TestServer } from "@/test-support/http.js";

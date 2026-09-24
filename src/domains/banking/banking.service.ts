@@ -13,6 +13,8 @@ import * as businessesRepository from "../businesses/businesses.repository.js";
 import { hasActiveHold, recordSignal } from "../risk/risk.service.js";
 import * as complianceRepository from "../compliance/compliance.repository.js";
 import * as repository from "./banking.repository.js";
+import { emailSender } from "../../shared/email.js";
+import { loadEnvironment } from "../../shared/environment.js";
 import type {
   BankingOperation,
   BankingStatus,
@@ -99,6 +101,24 @@ export class BankingService {
       });
 
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, { status: validation.status });
+
+      const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+      if (input.email) {
+        void emailSender.sendBankingKybSubmitted?.(input.email, {
+          businessName: `${input.firstName} ${input.lastName}`,
+          directorName: input.firstName,
+          dashboardUrl: `${frontendUrl}/dashboard/banking`,
+        })?.catch?.((err) => console.warn("Failed to dispatch KYC submitted email:", err));
+
+        if (validation.status === "verified") {
+          void emailSender.sendBankingKybApproved?.(input.email, {
+            businessName: `${input.firstName} ${input.lastName}`,
+            directorName: input.firstName,
+            dashboardUrl: `${frontendUrl}/dashboard/banking`,
+          })?.catch?.((err) => console.warn("Failed to dispatch KYC approved email:", err));
+        }
+      }
+
       return { status: validation.status };
     });
   }
@@ -197,6 +217,24 @@ export class BankingService {
       });
 
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, { status: validation.status, type: "corporate" });
+
+      const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+      if (input.directorEmail) {
+        void emailSender.sendBankingKybSubmitted?.(input.directorEmail, {
+          businessName: input.registeredBusinessName || "your business",
+          directorName: firstName,
+          dashboardUrl: `${frontendUrl}/dashboard/banking`,
+        })?.catch?.((err) => console.warn("Failed to dispatch KYB submitted email:", err));
+
+        if (validation.status === "verified") {
+          void emailSender.sendBankingKybApproved?.(input.directorEmail, {
+            businessName: input.registeredBusinessName || "your business",
+            directorName: firstName,
+            dashboardUrl: `${frontendUrl}/dashboard/banking`,
+          })?.catch?.((err) => console.warn("Failed to dispatch KYB approved email:", err));
+        }
+      }
+
       return { status: validation.status };
     });
   }
@@ -256,6 +294,19 @@ export class BankingService {
       }
 
       await this.logAction(context, operation, "banking.virtual_account_requested", "virtual_account", created.id, {});
+
+      if (profile.email && created.accountNumber && created.bankName) {
+        const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+        const accountDisplayName = created.accountName || profile.registeredBusinessName || "your business";
+        void emailSender.sendVirtualAccountIssued?.(profile.email, {
+          businessName: accountDisplayName,
+          accountNumber: created.accountNumber,
+          accountName: accountDisplayName,
+          bankName: created.bankName,
+          dashboardUrl: `${frontendUrl}/dashboard/banking`,
+        })?.catch?.((err) => console.warn("Failed to dispatch virtual account issued email:", err));
+      }
+
       return created;
     });
   }
@@ -284,6 +335,17 @@ export class BankingService {
         const profile = await repository.findProfile(context, operation.businessId);
         if (profile && profile.kycStatus !== "verified") {
           await repository.upsertProfile(context, operation.businessId, { kycStatus: "verified", kycVerifiedAt: new Date() });
+        }
+        if (account.status !== "active" && profile?.email && (account.accountNumber || updated?.accountNumber) && (account.bankName || updated?.bankName)) {
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          const accountDisplayName = updated?.accountName || account.accountName || profile.registeredBusinessName || "your business";
+          void emailSender.sendVirtualAccountIssued?.(profile.email, {
+            businessName: accountDisplayName,
+            accountNumber: (updated?.accountNumber || account.accountNumber)!,
+            accountName: accountDisplayName,
+            bankName: (updated?.bankName || account.bankName)!,
+            dashboardUrl: `${frontendUrl}/dashboard/banking`,
+          })?.catch?.((err) => console.warn("Failed to dispatch virtual account issued email:", err));
         }
       }
 
