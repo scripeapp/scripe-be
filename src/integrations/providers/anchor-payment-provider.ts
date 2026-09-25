@@ -138,8 +138,8 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
           basicDetail: {
             businessName: input.businessName,
             // Anchor's example sends a BVN here without defining it; for the
-            // entities we onboard it is the principal director's BVN.
-            businessBvn: input.director.bvn,
+            // entities we onboard it is the primary director's BVN.
+            businessBvn: primaryDirector(input).bvn,
             registrationType: ANCHOR_REGISTRATION_TYPE[input.registrationType],
             industry: input.industry,
             country: input.address.country,
@@ -152,19 +152,17 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
             phoneNumber: toLocalPhone(input.phone),
             address: { main: toAnchorAddress(input.address), registered: toAnchorAddress(input.address) },
           },
-          officers: [
-            {
-              role: "DIRECTOR",
-              fullName: { firstName: input.director.firstName, lastName: input.director.lastName, middleName: input.director.middleName ?? undefined },
-              nationality: input.director.nationality,
-              address: toAnchorAddress(input.director.address),
-              dateOfBirth: input.director.dateOfBirth,
-              email: input.director.email,
-              phoneNumber: toLocalPhone(input.director.phone),
-              bvn: input.director.bvn,
-              title: "Director",
-            },
-          ],
+          officers: input.directors.map((director) => ({
+            role: "DIRECTOR",
+            fullName: { firstName: director.firstName, lastName: director.lastName, middleName: director.middleName ?? undefined },
+            nationality: director.nationality,
+            address: toAnchorAddress(director.address),
+            dateOfBirth: director.dateOfBirth,
+            email: director.email,
+            phoneNumber: toLocalPhone(director.phone),
+            bvn: director.bvn,
+            title: "Director",
+          })),
         },
       },
     });
@@ -288,6 +286,12 @@ function toTransferStatus(status: AnchorTransferAttributes["status"]): TransferR
   if (status === "COMPLETED") return "success";
   if (status === "FAILED" || status === "REVERSED") return "failed";
   return "processing";
+}
+
+function primaryDirector(input: BusinessCustomerInput) {
+  const director = input.directors.find((candidate) => candidate.isPrimary);
+  if (!director) throw new Error("A business customer needs a primary director");
+  return director;
 }
 
 /**

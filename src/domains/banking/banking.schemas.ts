@@ -14,8 +14,6 @@ export const submitKycSchema = z.preprocess((val: any) => {
       lastName: val.lastName ?? val.last_name,
       phone: val.phone,
       bvn: val.bvn,
-      bankCode: val.bankCode ?? val.bank_code,
-      accountNumber: val.accountNumber ?? val.account_number,
       dateOfBirth: val.dateOfBirth ?? val.date_of_birth,
       gender: val.gender,
     };
@@ -27,8 +25,6 @@ export const submitKycSchema = z.preprocess((val: any) => {
   lastName: z.string().trim().min(1).max(80),
   phone: z.string().trim().min(7).max(30),
   bvn,
-  bankCode,
-  accountNumber,
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").optional(),
   gender: z.enum(["male", "female", "other"]).optional(),
 }));
@@ -43,6 +39,43 @@ const uploadId = z.string().uuid("Upload the document before submitting");
  * see one format.
  */
 const REGISTRATION_PREFIX = { limited_liability: "RC", sole_proprietorship: "BN", ngo_cooperative: "IT" } as const;
+
+const MAX_DIRECTORS = 10;
+
+const directorSchema = z.preprocess((val: any) => {
+  if (val && typeof val === "object") {
+    return {
+      fullName: val.fullName ?? val.full_name,
+      email: val.email,
+      phone: val.phone,
+      bvn: val.bvn,
+      dateOfBirth: val.dateOfBirth ?? val.date_of_birth,
+      idType: val.idType ?? val.id_type,
+      idNumber: val.idNumber ?? val.id_number,
+      idDocumentUploadId: val.idDocumentUploadId ?? val.id_document_upload_id,
+      isPrimary: val.isPrimary ?? val.is_primary ?? false,
+    };
+  }
+  return val;
+}, z.object({
+  fullName: z.string().trim().min(3).max(255).refine((value) => value.split(/\s+/).length >= 2, "Enter the director's first and last name"),
+  email: z.string().trim().email().max(255),
+  phone: z.string().trim().regex(/^\+?[0-9]{10,14}$/, "Enter a valid phone number"),
+  bvn,
+  dateOfBirth: pastIsoDate,
+  idType: z.enum(["nin", "passport", "drivers_license", "voters_card"]),
+  idNumber: z.string().trim().min(5).max(30),
+  idDocumentUploadId: uploadId,
+  isPrimary: z.boolean(),
+}).superRefine((director, context) => {
+  if (director.idType === "nin" && !/^\d{11}$/.test(director.idNumber)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["idNumber"], message: "Enter an 11 digit NIN" });
+  }
+}).transform((director) => {
+  const [firstName, ...rest] = director.fullName.split(/\s+/);
+  const lastName = rest.pop()!;
+  return { ...director, firstName: firstName!, lastName, middleName: rest.length > 0 ? rest.join(" ") : null };
+}));
 
 export const submitKybSchema = z.preprocess((val: any) => {
   if (val && typeof val === "object") {
@@ -65,21 +98,10 @@ export const submitKybSchema = z.preprocess((val: any) => {
         postalCode: rawAddress.postalCode ?? rawAddress.postal_code ?? rawAddress.postcode,
         countryCode: rawAddress.countryCode ?? rawAddress.country_code ?? rawAddress.country ?? "NG",
       },
-      directorFullName: val.directorFullName ?? val.director_full_name,
-      directorEmail: val.directorEmail ?? val.director_email,
-      directorPhone: val.directorPhone ?? val.director_phone,
-      directorBvn: val.directorBvn ?? val.director_bvn,
-      directorNin: val.directorNin ?? val.director_nin,
-      directorDob: val.directorDob ?? val.director_dob,
-      directorGender: val.directorGender ?? val.director_gender,
-      directorIdType: val.directorIdType ?? val.director_id_type,
-      directorIdNumber: val.directorIdNumber ?? val.director_id_number,
-      directorIdDocumentUploadId: val.directorIdDocumentUploadId ?? val.director_id_document_upload_id,
+      directors: val.directors,
       certificateOfIncorporationUploadId: val.certificateOfIncorporationUploadId ?? val.certificate_of_incorporation_upload_id,
       statusReportUploadId: val.statusReportUploadId ?? val.status_report_upload_id,
       proofOfAddressUploadId: val.proofOfAddressUploadId ?? val.proof_of_address_upload_id,
-      settlementBankCode: val.settlementBankCode ?? val.settlement_bank_code,
-      settlementAccountNumber: val.settlementAccountNumber ?? val.settlement_account_number,
     };
   }
   return val;
@@ -101,37 +123,34 @@ export const submitKybSchema = z.preprocess((val: any) => {
     postalCode: z.string().trim().min(4, "Enter the postal code").max(20),
     countryCode: z.literal("NG", { errorMap: () => ({ message: "Only Nigerian businesses can be verified" }) }),
   }),
-  directorFullName: z.string().trim().min(3).max(255).refine((value) => value.split(/\s+/).length >= 2, "Enter the director's first and last name"),
-  directorEmail: z.string().trim().email().max(255),
-  directorPhone: z.string().trim().regex(/^\+?[0-9]{10,14}$/, "Enter a valid phone number"),
-  directorBvn: bvn,
-  directorNin: z.string().regex(/^\d{11}$/, "Enter an 11 digit NIN").optional(),
-  directorDob: pastIsoDate,
-  directorGender: z.enum(["male", "female", "other"]).optional(),
-  directorIdType: z.enum(["nin", "passport", "drivers_license", "voters_card"]),
-  directorIdNumber: z.string().trim().min(5).max(30),
-  directorIdDocumentUploadId: uploadId,
+  directors: z.array(directorSchema).min(1, "Add at least one director").max(MAX_DIRECTORS, `Add at most ${MAX_DIRECTORS} directors`),
   certificateOfIncorporationUploadId: uploadId,
   statusReportUploadId: uploadId.optional(),
   proofOfAddressUploadId: uploadId,
-  settlementBankCode: bankCode,
-  settlementAccountNumber: accountNumber,
 }).superRefine((input, context) => {
   if (input.businessType === "limited_liability" && !input.statusReportUploadId) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["statusReportUploadId"], message: "Upload the CAC status report" });
-  }
-  if (input.directorIdType === "nin" && !/^\d{11}$/.test(input.directorIdNumber)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["directorIdNumber"], message: "Enter an 11 digit NIN" });
   }
   const digits = input.registrationNumber.replace(/^(RC|BN|IT)[\s-]*/i, "");
   if (!/^\d{4,10}$/.test(digits)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["registrationNumber"], message: "Enter the CAC registration number, e.g. RC1234567" });
   }
-}).transform((input) => ({
-  ...input,
-  registrationNumber: `${REGISTRATION_PREFIX[input.businessType]}${input.registrationNumber.replace(/^(RC|BN|IT)[\s-]*/i, "")}`,
-  directorNin: input.directorNin ?? (input.directorIdType === "nin" ? input.directorIdNumber : undefined),
-})));
+  // An unmarked list defaults to the first director as primary (see
+  // transform); more than one marked primary is ambiguous.
+  if (input.directors.filter((director) => director.isPrimary).length > 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["directors"], message: "Mark only one director as the primary signatory" });
+  }
+  if (new Set(input.directors.map((director) => director.bvn)).size !== input.directors.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["directors"], message: "Each director must have their own BVN" });
+  }
+}).transform((input) => {
+  const hasPrimary = input.directors.some((director) => director.isPrimary);
+  return {
+    ...input,
+    registrationNumber: `${REGISTRATION_PREFIX[input.businessType]}${input.registrationNumber.replace(/^(RC|BN|IT)[\s-]*/i, "")}`,
+    directors: input.directors.map((director, index) => ({ ...director, isPrimary: hasPrimary ? director.isPrimary : index === 0 })),
+  };
+}));
 
 export const reviewKybParamsSchema = z.object({ businessId: z.string().uuid() });
 

@@ -41,22 +41,10 @@ export interface BankingProfileRow {
   readonly businessCategory: string | null;
   readonly annualRevenue: string | null;
   readonly businessAddress: BusinessAddressInput | null;
-  /** Encrypted at rest (shared/pii-crypto.ts); decrypted by the repository. */
-  readonly directorNin: string | null;
-  /** Encrypted at rest; decrypted by the repository. YYYY-MM-DD. */
-  readonly directorDob: string | null;
-  readonly directorIdType: string | null;
-  /** Encrypted at rest; decrypted by the repository. */
-  readonly directorIdNumber: string | null;
-  readonly directorIdDocumentUploadId: string | null;
   readonly certificateOfIncorporationUploadId: string | null;
   readonly statusReportUploadId: string | null;
   readonly proofOfAddressUploadId: string | null;
   readonly dateOfRegistration: string | null;
-  readonly settlementBankCode: string | null;
-  readonly settlementAccountNumber: string | null;
-  /** As resolved by the provider at submission time — never client-supplied. */
-  readonly settlementAccountName: string | null;
   readonly providerCustomerType: ProviderCustomerType | null;
   /** The submitting user's verified account email — where banking notifications go. */
   readonly notificationEmail: string | null;
@@ -134,6 +122,25 @@ export interface BankingOperation {
   readonly userEmailVerified: boolean;
 }
 
+/** One director of a business KYB submission. bvn, dateOfBirth and idNumber are encrypted at rest; decrypted by the repository. */
+export interface KybDirectorRow {
+  readonly id: string;
+  readonly businessId: string;
+  readonly position: number;
+  readonly isPrimary: boolean;
+  readonly fullName: string;
+  readonly firstName: string;
+  readonly middleName: string | null;
+  readonly lastName: string;
+  readonly email: string;
+  readonly phone: string;
+  readonly bvn: string;
+  readonly dateOfBirth: string;
+  readonly idType: string;
+  readonly idNumber: string;
+  readonly idDocumentUploadId: string;
+}
+
 export interface PlatformBankingOperation {
   readonly userId: string;
   readonly requestId: string;
@@ -148,6 +155,19 @@ export interface KybReviewDocument {
   readonly downloadUrl: string | null;
 }
 
+export interface KybReviewDirector {
+  readonly isPrimary: boolean;
+  readonly fullName: string;
+  readonly email: string;
+  readonly phone: string;
+  /** Masked to the last 4 digits — reviewers never need the full number. */
+  readonly bvnMasked: string;
+  readonly dateOfBirth: string;
+  readonly idType: string;
+  readonly idNumberMasked: string;
+  readonly idDocument: KybReviewDocument | null;
+}
+
 export interface KybReviewSummary {
   readonly businessId: string;
   readonly kycStatus: KycStatus;
@@ -159,16 +179,7 @@ export interface KybReviewSummary {
   readonly businessCategory: string | null;
   readonly website: string | null;
   readonly businessAddress: BusinessAddressInput | null;
-  readonly directorName: string;
-  readonly directorEmail: string | null;
-  readonly directorPhone: string | null;
-  /** Masked to the last 4 digits — reviewers never need the full number. */
-  readonly directorBvnMasked: string | null;
-  readonly directorIdType: string | null;
-  readonly directorIdNumberMasked: string | null;
-  readonly settlementBankCode: string | null;
-  readonly settlementAccountNumber: string | null;
-  readonly settlementAccountName: string | null;
+  readonly directors: readonly KybReviewDirector[];
   readonly provider: string;
   readonly kycSubmittedAt: string | null;
   readonly kybReviewedAt: string | null;
@@ -191,8 +202,6 @@ export interface SubmitKycInput {
   readonly lastName: string;
   readonly phone: string;
   readonly bvn: string;
-  readonly bankCode: string;
-  readonly accountNumber: string;
   /** Required by some providers' identity verification (e.g. Anchor); unused by others. */
   readonly dateOfBirth?: string;
   readonly gender?: "male" | "female" | "other";

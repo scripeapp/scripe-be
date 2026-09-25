@@ -34,11 +34,10 @@ jest.mock("@/integrations/r2.js", () => ({
 
 // Behaves like Brails: no provider-side KYB, so a business is only verified
 // by a platform administrator.
-const mockResolvedAccountName = { value: "ACME VENTURES NIG LTD" };
 const mockProvider = {
   name: "brails" as const,
   verifiesBusinesses: false,
-  resolveBankAccount: jest.fn(() => Promise.resolve({ accountName: mockResolvedAccountName.value })),
+  resolveBankAccount: jest.fn(),
   createCustomer: jest.fn(() => Promise.resolve({ customerCode: `ind_${Math.random().toString(36).slice(2)}` })),
   validateCustomerBvn: jest.fn(() => Promise.resolve({ status: "pending" as const })),
   createBusinessCustomer: jest.fn(() => Promise.resolve({ customerCode: `biz_${Math.random().toString(36).slice(2)}` })),
@@ -79,7 +78,6 @@ afterAll(async () => {
 });
 beforeEach(() => {
   jest.clearAllMocks();
-  mockResolvedAccountName.value = "ACME VENTURES NIG LTD";
 });
 
 interface TestUser {
@@ -125,6 +123,20 @@ async function confirmedUpload(cookies: string, businessId: string): Promise<str
   return upload.id;
 }
 
+async function director(cookies: string, businessId: string, overrides: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  return {
+    fullName: "Adaeze Grace Okafor",
+    email: "someone-else@unverified.example",
+    phone: "+2348031234567",
+    bvn: "22222222226",
+    dateOfBirth: "1988-02-01",
+    idType: "nin",
+    idNumber: "12345678901",
+    idDocumentUploadId: await confirmedUpload(cookies, businessId),
+    ...overrides,
+  };
+}
+
 async function kybPayload(cookies: string, businessId: string): Promise<Record<string, unknown>> {
   return {
     businessType: "limited_liability",
@@ -133,19 +145,10 @@ async function kybPayload(cookies: string, businessId: string): Promise<Record<s
     dateOfRegistration: "2019-04-12",
     businessCategory: "Retail",
     address: { streetAddress: "1 Marina Road", city: "Lagos Island", state: "Lagos", postalCode: "101001", countryCode: "NG" },
-    directorFullName: "Adaeze Grace Okafor",
-    directorEmail: "someone-else@unverified.example",
-    directorPhone: "+2348031234567",
-    directorBvn: "22222222226",
-    directorDob: "1988-02-01",
-    directorIdType: "nin",
-    directorIdNumber: "12345678901",
+    directors: [await director(cookies, businessId)],
     certificateOfIncorporationUploadId: await confirmedUpload(cookies, businessId),
     statusReportUploadId: await confirmedUpload(cookies, businessId),
     proofOfAddressUploadId: await confirmedUpload(cookies, businessId),
-    directorIdDocumentUploadId: await confirmedUpload(cookies, businessId),
-    settlementBankCode: "058",
-    settlementAccountNumber: "0123456789",
   };
 }
 
@@ -164,7 +167,6 @@ describe("corporate KYB", () => {
 
     const { registrationNumber: _rc, dateOfRegistration: _date, ...missing } = payload;
     expect((await submitKyb(owner.cookies, businessId, missing)).status).toBe(400);
-    expect(mockProvider.resolveBankAccount).not.toHaveBeenCalled();
     expect(mockProvider.createBusinessCustomer).not.toHaveBeenCalled();
   });
 
@@ -182,14 +184,56 @@ describe("corporate KYB", () => {
     expect(mockProvider.createBusinessCustomer).not.toHaveBeenCalled();
   });
 
-  it("rejects a settlement account that isn't held in the business's name", async () => {
-    const owner = await authenticate("KYB Mismatch Owner");
-    const businessId = await createBusiness(owner.cookies, "KYB Mismatch Co");
-    mockResolvedAccountName.value = "JOHN DOE";
+  it("takes several directors, sends each to the provider, and uses the marked primary for the account", async () => {
+    const owner = await authenticate("KYB Directors Owner");
+    const businessId = await createBusiness(owner.cookies, "KYB Directors Co");
+    const payload = await kybPayload(owner.cookies, businessId);
+    const directors = [
+      await director(owner.cookies, businessId),
+      await director(owner.cookies, businessId, { fullName: "Tunde Bello", bvn: "33333333337", idType: "passport", idNumber: "A12345678", isPrimary: true }),
+    ];
 
-    const response = await submitKyb(owner.cookies, businessId, await kybPayload(owner.cookies, businessId));
-    expect(response.status).toBe(400);
+    const response = await submitKyb(owner.cookies, businessId, { ...payload, directors });
+    expect(response.status).toBe(200);
+
+    const [[customer]] = mockProvider.createBusinessCustomer.mock.calls as unknown as [[{ directors: { firstName: string; isPrimary: boolean }[] }]];
+    expect(customer.directors.map((officer) => [officer.firstName, officer.isPrimary])).toEqual([
+      ["Adaeze", false],
+      ["Tunde", true],
+    ]);
+
+    const profile = await migratorPool.query<{ firstName: string; bvn: string }>(`select "firstName", "bvn" from app.banking_profiles where "businessId" = $1`, [businessId]);
+    expect(profile.rows[0]!.firstName).toBe("Tunde");
+    const stored = await migratorPool.query<{ fullName: string; isPrimary: boolean; bvn: string }>(
+      `select "fullName", "isPrimary", "bvn" from app.banking_kyb_directors where "businessId" = $1 order by "position"`,
+      [businessId],
+    );
+    expect(stored.rows.map((row) => [row.fullName, row.isPrimary])).toEqual([
+      ["Adaeze Grace Okafor", false],
+      ["Tunde Bello", true],
+    ]);
+    expect(stored.rows.every((row) => row.bvn.startsWith("enc:v1:"))).toBe(true);
+
+    const owners = await migratorPool.query(`select 1 from app.beneficial_owners where "businessId" = $1`, [businessId]);
+    expect(owners.rowCount).toBe(2);
+  });
+
+  it("defaults the first director to primary, and rejects two primaries or a shared BVN", async () => {
+    const owner = await authenticate("KYB Primary Owner");
+    const businessId = await createBusiness(owner.cookies, "KYB Primary Co");
+    const payload = await kybPayload(owner.cookies, businessId);
+    const second = await director(owner.cookies, businessId, { fullName: "Tunde Bello", bvn: "33333333337" });
+    const first = (payload.directors as Record<string, unknown>[])[0]!;
+
+    expect((await submitKyb(owner.cookies, businessId, { ...payload, directors: [] })).status).toBe(400);
+    expect((await submitKyb(owner.cookies, businessId, { ...payload, directors: [{ ...first, isPrimary: true }, { ...second, isPrimary: true }] })).status).toBe(400);
+    expect((await submitKyb(owner.cookies, businessId, { ...payload, directors: [first, { ...second, bvn: first.bvn }] })).status).toBe(400);
+    expect((await submitKyb(owner.cookies, businessId, { ...payload, directors: [first, { ...second, idDocumentUploadId: first.idDocumentUploadId }] })).status).toBe(400);
     expect(mockProvider.createBusinessCustomer).not.toHaveBeenCalled();
+
+    expect((await submitKyb(owner.cookies, businessId, { ...payload, directors: [first, second] })).status).toBe(200);
+    const stored = await migratorPool.query<{ isPrimary: boolean }>(`select "isPrimary" from app.banking_kyb_directors where "businessId" = $1 order by "position"`, [businessId]);
+    expect(stored.rows.map((row) => row.isPrimary)).toEqual([true, false]);
   });
 
   it("stays pending, stores identity numbers encrypted, and emails only the verified submitter", async () => {
@@ -200,18 +244,19 @@ describe("corporate KYB", () => {
     expect(response.status).toBe(200);
     expect((response.body as { data: { kyc: { status: string } } }).data.kyc.status).toBe("pending");
 
-    const createInput = mockProvider.createBusinessCustomer.mock.calls[0] as unknown as [{ registrationNumber: string; director: { lastName: string; middleName: string } }];
+    const createInput = mockProvider.createBusinessCustomer.mock.calls[0] as unknown as [{ registrationNumber: string; directors: { lastName: string; middleName: string }[] }];
     expect(createInput[0].registrationNumber).toBe("RC1234567");
-    expect(createInput[0].director).toMatchObject({ lastName: "Okafor", middleName: "Grace" });
+    expect(createInput[0].directors[0]).toMatchObject({ lastName: "Okafor", middleName: "Grace" });
 
-    const stored = await migratorPool.query<{ bvn: string; directorIdNumber: string; settlementAccountName: string; providerCustomerType: string; notificationEmail: string }>(
-      `select "bvn", "directorIdNumber", "settlementAccountName", "providerCustomerType", "notificationEmail" from app.banking_profiles where "businessId" = $1`,
+    const stored = await migratorPool.query<{ bvn: string; providerCustomerType: string; notificationEmail: string }>(
+      `select "bvn", "providerCustomerType", "notificationEmail" from app.banking_profiles where "businessId" = $1`,
       [businessId],
     );
     expect(stored.rows[0]!.bvn).toMatch(/^enc:v1:/);
-    expect(stored.rows[0]!.directorIdNumber).toMatch(/^enc:v1:/);
-    expect(stored.rows[0]!.settlementAccountName).toBe("ACME VENTURES NIG LTD");
     expect(stored.rows[0]!.providerCustomerType).toBe("business");
+    const storedDirector = await migratorPool.query<{ idNumber: string; dateOfBirth: string }>(`select "idNumber", "dateOfBirth" from app.banking_kyb_directors where "businessId" = $1`, [businessId]);
+    expect(storedDirector.rows[0]!.idNumber).toMatch(/^enc:v1:/);
+    expect(storedDirector.rows[0]!.dateOfBirth).toMatch(/^enc:v1:/);
     expect(stored.rows[0]!.notificationEmail).toBe(owner.email);
 
     const owners = await migratorPool.query<{ nationality: string; idNumber: string; ownershipPercentageBps: number | null }>(
@@ -242,9 +287,12 @@ describe("corporate KYB", () => {
     await grantPlatformAdmin(moderator, "moderator");
     const detail = await request(server.baseUrl, reviewPath, { cookie: moderator.cookies });
     expect(detail.status).toBe(200);
-    const review = (detail.body as { data: { review: { directorBvnMasked: string; documents: { downloadUrl: string | null }[] } } }).data.review;
-    expect(review.directorBvnMasked).toBe("*******2226");
-    expect(review.documents).toHaveLength(4);
+    const review = (detail.body as { data: { review: { directors: { bvnMasked: string; idDocument: { downloadUrl: string | null } }[]; documents: { downloadUrl: string | null }[] } } })
+      .data.review;
+    expect(review.directors).toHaveLength(1);
+    expect(review.directors[0]!.bvnMasked).toBe("*******2226");
+    expect(review.directors[0]!.idDocument.downloadUrl).toBeTruthy();
+    expect(review.documents).toHaveLength(3);
     expect(review.documents.every((document) => document.downloadUrl)).toBe(true);
     expect(
       (await request(server.baseUrl, `${reviewPath}/decision`, { method: "POST", cookie: moderator.cookies, body: JSON.stringify({ decision: "approve" }) })).status,
@@ -280,7 +328,6 @@ describe("corporate KYB", () => {
     expect(rejected.status).toBe(200);
     expect(mockSentEmails.some((email) => email.kind === "kyb_failed" && email.to === owner.email && email.params.reason === "Certificate is illegible")).toBe(true);
 
-    mockResolvedAccountName.value = "BRIGHT FUTURES LIMITED";
     const retry = { ...(await kybPayload(owner.cookies, businessId)), registeredBusinessName: "Bright Futures Limited", registrationNumber: "RC7654321" };
     expect((await submitKyb(owner.cookies, businessId, retry)).status).toBe(200);
     // A different business identity gets a fresh provider customer.
@@ -293,17 +340,19 @@ describe("corporate KYB", () => {
     expect(stored.rows[0]).toMatchObject({ registeredBusinessName: "Bright Futures Limited", kybReviewNotes: null, kycStatus: "pending" });
   });
 
-  it("limits verification attempts per business", async () => {
+  it("limits verification attempts per business, counting ones that fail at the provider", async () => {
     const owner = await authenticate("KYB Limit Owner");
     const businessId = await createBusiness(owner.cookies, "KYB Limit Co");
     const payload = await kybPayload(owner.cookies, businessId);
-    mockResolvedAccountName.value = "SOMEONE ELSE ENTIRELY";
+    mockProvider.createBusinessCustomer.mockRejectedValue(new Error("Provider unavailable"));
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      expect((await submitKyb(owner.cookies, businessId, payload)).status).toBe(400);
+      expect((await submitKyb(owner.cookies, businessId, payload)).status).toBe(500);
     }
     const blocked = await submitKyb(owner.cookies, businessId, payload);
     expect(blocked.status).toBe(429);
-    expect(mockProvider.resolveBankAccount).toHaveBeenCalledTimes(5);
+    expect(mockProvider.createBusinessCustomer).toHaveBeenCalledTimes(5);
+    mockProvider.createBusinessCustomer.mockReset();
+    mockProvider.createBusinessCustomer.mockImplementation(() => Promise.resolve({ customerCode: `biz_${Math.random().toString(36).slice(2)}` }));
   });
 });

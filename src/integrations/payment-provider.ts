@@ -48,19 +48,23 @@ export interface BusinessCustomerInput {
   readonly email: string;
   readonly phone: string;
   readonly address: KybAddress;
-  readonly director: {
-    readonly firstName: string;
-    readonly lastName: string;
-    readonly middleName?: string | null;
-    readonly email: string;
-    readonly phone: string;
-    readonly bvn: string;
-    /** YYYY-MM-DD. */
-    readonly dateOfBirth: string;
-    /** ISO 3166-1 alpha-2. */
-    readonly nationality: string;
-    readonly address: KybAddress;
-  };
+  /** Every director is sent to the provider as an officer; exactly one is the primary signatory. */
+  readonly directors: readonly BusinessDirectorInput[];
+}
+
+export interface BusinessDirectorInput {
+  readonly isPrimary: boolean;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly middleName?: string | null;
+  readonly email: string;
+  readonly phone: string;
+  readonly bvn: string;
+  /** YYYY-MM-DD. */
+  readonly dateOfBirth: string;
+  /** ISO 3166-1 alpha-2. */
+  readonly nationality: string;
+  readonly address: KybAddress;
 }
 
 export type BusinessDocumentKind =
@@ -128,8 +132,6 @@ export interface PaymentProviderGateway {
     firstName: string;
     lastName: string;
     bvn: string;
-    bankCode: string;
-    accountNumber: string;
     /** Required by some providers' identity verification (e.g. Anchor); unused by others. */
     dateOfBirth?: string;
     gender?: "male" | "female" | "other";

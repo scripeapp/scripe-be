@@ -210,8 +210,6 @@ describe("AnchorPaymentProviderGateway", () => {
       firstName: "Ada",
       lastName: "Lovelace",
       bvn: "12345678901",
-      bankCode: "058",
-      accountNumber: "0123456789",
       dateOfBirth: "1990-01-01",
       gender: "female",
     });
@@ -296,5 +294,43 @@ describe("AnchorPaymentProviderGateway", () => {
     const gateway = anchorGateway();
     const result = await gateway.finalizeTransfer({ transferCode: "tr_1", otp: "" });
     expect(result).toEqual({ transferCode: "tr_1", status: "failed", reference: "ref1" });
+  });
+
+  it("creates a business customer with every director as an officer and the primary's BVN as businessBvn", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "biz_1", type: "BusinessCustomer", attributes: {} } }) });
+    global.fetch = fetchMock;
+    const address = { addressLine1: "1 Marina Road", city: "Lagos Island", state: "Lagos", postalCode: "101001", country: "NG" };
+    const director = { lastName: "Okafor", email: "a@example.com", phone: "+2348031234567", dateOfBirth: "1988-02-01", nationality: "NG", address };
+    await anchorGateway().createBusinessCustomer({
+      businessName: "Acme Ventures Limited",
+      registrationType: "limited_liability",
+      registrationNumber: "RC1234567",
+      dateOfRegistration: "2019-04-12",
+      industry: "Retail",
+      email: "a@example.com",
+      phone: "+2348031234567",
+      address,
+      directors: [
+        { ...director, isPrimary: false, firstName: "Adaeze", bvn: "22222222226" },
+        { ...director, isPrimary: true, firstName: "Tunde", bvn: "33333333337" },
+      ],
+    });
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body) as {
+      data: { attributes: { basicDetail: { businessBvn: string; registrationType: string }; officers: { fullName: { firstName: string }; phoneNumber: string }[] } };
+    };
+    expect(body.data.attributes.basicDetail).toMatchObject({ businessBvn: "33333333337", registrationType: "Private_Incorporated" });
+    expect(body.data.attributes.officers.map((officer) => officer.fullName.firstName)).toEqual(["Adaeze", "Tunde"]);
+    expect(body.data.attributes.officers[0]!.phoneNumber).toBe("08031234567");
+  });
+
+  it("opens a CURRENT deposit account for a business customer", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "acc_1", type: "DepositAccount", attributes: { status: "PENDING" } } }) });
+    global.fetch = fetchMock;
+    await anchorGateway().createDedicatedAccount({ customerCode: "biz_1", email: "a@example.com", firstName: "A", lastName: "B", phone: "0803", accountType: "CORPORATE" });
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body) as {
+      data: { attributes: { productName: string }; relationships: { customer: { data: { type: string } } } };
+    };
+    expect(body.data.attributes.productName).toBe("CURRENT");
+    expect(body.data.relationships.customer.data.type).toBe("BusinessCustomer");
   });
 });

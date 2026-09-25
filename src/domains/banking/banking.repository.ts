@@ -5,6 +5,7 @@ import type {
   BankingProfileRow,
   BusinessAddressInput,
   BusinessType,
+  KybDirectorRow,
   ProviderCustomerType,
   KycStatus,
   ListWalletTransactionsFilter,
@@ -18,7 +19,7 @@ import type {
   WithdrawalStatus,
 } from "./banking.types.js";
 
-const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "providerCustomerType", "notificationEmail", "email", "firstName", "lastName", "phone", "bvn", "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber", "dateOfRegistration"::text as "dateOfRegistration", "website", "description", "businessCategory", "annualRevenue", "businessAddress", "directorNin", "directorDob", "directorIdType", "directorIdNumber", "directorIdDocumentUploadId", "certificateOfIncorporationUploadId", "statusReportUploadId", "proofOfAddressUploadId", "settlementBankCode", "settlementAccountNumber", "settlementAccountName", "kybReviewedBy", "kybReviewedAt", "kybReviewNotes", "createdAt", "updatedAt"`;
+const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "providerCustomerType", "notificationEmail", "email", "firstName", "lastName", "phone", "bvn", "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber", "dateOfRegistration"::text as "dateOfRegistration", "website", "description", "businessCategory", "annualRevenue", "businessAddress", "certificateOfIncorporationUploadId", "statusReportUploadId", "proofOfAddressUploadId", "kybReviewedBy", "kybReviewedAt", "kybReviewNotes", "createdAt", "updatedAt"`;
 const VIRTUAL_ACCOUNT_COLUMNS = `"id", "businessId", "provider", "providerCustomerCode", "providerAccountId", "accountNumber", "accountName", "bankName", "bankSlug", "assetCode", "status", "assignmentReference", "failureReason", "metadata", "lastRequeryAt", "createdAt", "updatedAt"`;
 const WALLET_TRANSACTION_COLUMNS = `"id", "businessId", "type", "direction", "status", "assetCode", "amountMinor", "grossAmountMinor", "feeAmountMinor", "feeBreakdown", "provider", "providerReference", "description", "metadata", "postedAt", "createdAt"`;
 const WITHDRAWAL_COLUMNS = `"id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "transferRecipientCode", "providerReference", "providerTransferCode", "idempotencyKey", "status", "failureReason", "createdAt", "updatedAt"`;
@@ -28,9 +29,6 @@ function decryptProfile(row: BankingProfileRow | undefined): BankingProfileRow |
   return {
     ...row,
     bvn: decryptPii(row.bvn),
-    directorNin: decryptPii(row.directorNin),
-    directorDob: decryptPii(row.directorDob),
-    directorIdNumber: decryptPii(row.directorIdNumber),
   };
 }
 
@@ -75,10 +73,9 @@ export async function saveIndividualSubmission(
     lastName: string;
     phone: string;
     bvn: string;
-    settlementBankCode: string;
-    settlementAccountNumber: string;
   },
 ): Promise<BankingProfileRow> {
+  await replaceKybDirectors(context, businessId, []);
   const result = await sql<BankingProfileRow>`
     update app.banking_profiles set
       "kycStatus" = ${fields.kycStatus},
@@ -101,17 +98,9 @@ export async function saveIndividualSubmission(
       "businessCategory" = null,
       "annualRevenue" = null,
       "businessAddress" = null,
-      "directorNin" = null,
-      "directorDob" = null,
-      "directorIdType" = null,
-      "directorIdNumber" = null,
-      "directorIdDocumentUploadId" = null,
       "certificateOfIncorporationUploadId" = null,
       "statusReportUploadId" = null,
       "proofOfAddressUploadId" = null,
-      "settlementBankCode" = ${fields.settlementBankCode},
-      "settlementAccountNumber" = ${fields.settlementAccountNumber},
-      "settlementAccountName" = null,
       "kybReviewedBy" = null,
       "kybReviewedAt" = null,
       "kybReviewNotes" = null,
@@ -142,17 +131,9 @@ export async function saveBusinessSubmission(
     businessCategory: string;
     annualRevenue: string | null;
     businessAddress: BusinessAddressInput;
-    directorNin: string | null;
-    directorDob: string;
-    directorIdType: string;
-    directorIdNumber: string;
-    directorIdDocumentUploadId: string;
     certificateOfIncorporationUploadId: string;
     statusReportUploadId: string | null;
     proofOfAddressUploadId: string;
-    settlementBankCode: string;
-    settlementAccountNumber: string;
-    settlementAccountName: string;
   },
 ): Promise<BankingProfileRow> {
   const result = await sql<BankingProfileRow>`
@@ -177,17 +158,9 @@ export async function saveBusinessSubmission(
       "businessCategory" = ${fields.businessCategory},
       "annualRevenue" = ${fields.annualRevenue},
       "businessAddress" = ${JSON.stringify(fields.businessAddress)}::jsonb,
-      "directorNin" = ${encryptPii(fields.directorNin)},
-      "directorDob" = ${encryptPii(fields.directorDob)},
-      "directorIdType" = ${fields.directorIdType},
-      "directorIdNumber" = ${encryptPii(fields.directorIdNumber)},
-      "directorIdDocumentUploadId" = ${fields.directorIdDocumentUploadId}::uuid,
       "certificateOfIncorporationUploadId" = ${fields.certificateOfIncorporationUploadId}::uuid,
       "statusReportUploadId" = ${fields.statusReportUploadId}::uuid,
       "proofOfAddressUploadId" = ${fields.proofOfAddressUploadId}::uuid,
-      "settlementBankCode" = ${fields.settlementBankCode},
-      "settlementAccountNumber" = ${fields.settlementAccountNumber},
-      "settlementAccountName" = ${fields.settlementAccountName},
       "kybReviewedBy" = null,
       "kybReviewedAt" = null,
       "kybReviewNotes" = null,
@@ -196,6 +169,40 @@ export async function saveBusinessSubmission(
     returning ${sql.raw(PROFILE_COLUMNS)}
   `.execute(context.transaction);
   return decryptProfile(result.rows[0])!;
+}
+
+const DIRECTOR_COLUMNS = sql`"id", "businessId", "position", "isPrimary", "fullName", "firstName", "middleName", "lastName", "email", "phone", "bvn", "dateOfBirth", "idType", "idNumber", "idDocumentUploadId"`;
+
+function decryptDirector(row: KybDirectorRow): KybDirectorRow {
+  return { ...row, bvn: decryptPii(row.bvn) ?? "", dateOfBirth: decryptPii(row.dateOfBirth) ?? "", idNumber: decryptPii(row.idNumber) ?? "" };
+}
+
+export async function listKybDirectors(context: DatabaseContext, businessId: string): Promise<KybDirectorRow[]> {
+  const result = await sql<KybDirectorRow>`
+    select ${DIRECTOR_COLUMNS} from app.banking_kyb_directors where "businessId" = ${businessId}::uuid order by "position"
+  `.execute(context.transaction);
+  return result.rows.map(decryptDirector);
+}
+
+/** A resubmission replaces the whole director list — directors dropped from the form are dropped here too. */
+export async function replaceKybDirectors(
+  context: DatabaseContext,
+  businessId: string,
+  directors: readonly Omit<KybDirectorRow, "id" | "businessId" | "position">[],
+): Promise<void> {
+  await sql`delete from app.banking_kyb_directors where "businessId" = ${businessId}::uuid`.execute(context.transaction);
+  for (const [position, director] of directors.entries()) {
+    await sql`
+      insert into app.banking_kyb_directors (
+        "businessId", "position", "isPrimary", "fullName", "firstName", "middleName", "lastName", "email", "phone",
+        "bvn", "dateOfBirth", "idType", "idNumber", "idDocumentUploadId"
+      ) values (
+        ${businessId}::uuid, ${position}, ${director.isPrimary}, ${director.fullName}, ${director.firstName}, ${director.middleName}, ${director.lastName},
+        ${director.email}, ${director.phone}, ${encryptPii(director.bvn)}, ${encryptPii(director.dateOfBirth)}, ${director.idType},
+        ${encryptPii(director.idNumber)}, ${director.idDocumentUploadId}::uuid
+      )
+    `.execute(context.transaction);
+  }
 }
 
 /** Only individual profiles are promoted by an issued account — a business needs KYB review. */

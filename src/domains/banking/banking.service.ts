@@ -18,7 +18,6 @@ import * as complianceRepository from "../compliance/compliance.repository.js";
 import { requirePlatformAdministrator } from "../platform/platform.service.js";
 import { hasActiveHold, recordSignal } from "../risk/risk.service.js";
 import * as repository from "./banking.repository.js";
-import { settlementNameMatches } from "./banking.name-match.js";
 import type {
   BankingOperation,
   BankingProfileRow,
@@ -94,8 +93,6 @@ export class BankingService {
         firstName: input.firstName,
         lastName: input.lastName,
         bvn: input.bvn,
-        bankCode: input.bankCode,
-        accountNumber: input.accountNumber,
         dateOfBirth: input.dateOfBirth,
         gender: input.gender,
       });
@@ -107,8 +104,6 @@ export class BankingService {
         lastName: input.lastName,
         phone: input.phone,
         bvn: input.bvn,
-        settlementBankCode: input.bankCode,
-        settlementAccountNumber: input.accountNumber,
       });
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, { status: validation.status, type: "individual" });
       return validation.status;
@@ -131,19 +126,7 @@ export class BankingService {
   async submitKyb(operation: BankingOperation, input: SubmitKybInput): Promise<{ status: "pending" }> {
     const profile = await this.beginSubmission(operation, "business", (context) => this.requireKybUploads(context, operation.businessId, input));
 
-    // The settlement account must belong to the business being verified —
-    // resolved by the provider, never taken from the client.
-    const resolved = await paymentProvider.resolveBankAccount(input.settlementAccountNumber, input.settlementBankCode);
-    const acceptedNames = input.businessType === "sole_proprietorship" ? [input.registeredBusinessName, input.directorFullName] : [input.registeredBusinessName];
-    if (!acceptedNames.some((name) => settlementNameMatches(name, resolved.accountName))) {
-      throw validationError(
-        `The settlement account is registered to "${resolved.accountName}", which doesn't match ${input.businessType === "sole_proprietorship" ? "the business or director name" : "the registered business name"}. Use an account held in the business's name.`,
-      );
-    }
-
-    const [firstName, ...rest] = input.directorFullName.trim().split(/\s+/);
-    const lastName = rest.pop()!;
-    const middleName = rest.length > 0 ? rest.join(" ") : null;
+    const primary = primaryDirector(input);
     const address = {
       addressLine1: input.address.streetAddress,
       addressLine2: input.address.apartment ?? null,
@@ -154,10 +137,10 @@ export class BankingService {
     };
 
     // A provider customer is only reused when it was created for this same
-    // business identity — a changed name, CAC number or director gets a new
-    // customer rather than verifying new details against a stale record.
+    // business identity — a changed name, CAC number or primary director
+    // gets a new customer rather than verifying against a stale record.
     const sameIdentity =
-      profile?.registeredBusinessName === input.registeredBusinessName && profile?.registrationNumber === input.registrationNumber && profile?.bvn === input.directorBvn;
+      profile?.registeredBusinessName === input.registeredBusinessName && profile?.registrationNumber === input.registrationNumber && profile?.bvn === primary.bvn;
     const customerCode = await this.ensureProviderCustomer(operation, profile, "business", !sameIdentity, () =>
       paymentProvider.createBusinessCustomer({
         businessName: input.registeredBusinessName,
@@ -168,20 +151,23 @@ export class BankingService {
         industry: input.businessCategory,
         description: input.description ?? null,
         website: input.website ?? null,
-        email: input.directorEmail,
-        phone: input.directorPhone,
+        email: primary.email,
+        phone: primary.phone,
         address,
-        director: {
-          firstName: firstName!,
-          lastName,
-          middleName,
-          email: input.directorEmail,
-          phone: input.directorPhone,
-          bvn: input.directorBvn,
-          dateOfBirth: input.directorDob,
+        directors: input.directors.map((director) => ({
+          isPrimary: director.isPrimary,
+          firstName: director.firstName,
+          lastName: director.lastName,
+          middleName: director.middleName,
+          email: director.email,
+          phone: director.phone,
+          bvn: director.bvn,
+          dateOfBirth: director.dateOfBirth,
           nationality: "NG",
+          // Director home addresses aren't collected; the business address
+          // stands in, as Anchor requires one per officer.
           address,
-        },
+        })),
       }),
     );
 
@@ -191,11 +177,11 @@ export class BankingService {
       await paymentProvider.submitBusinessVerification({ customerCode });
       await repository.saveBusinessSubmission(context, operation.businessId, {
         notificationEmail: operation.userEmail,
-        email: input.directorEmail,
-        firstName: firstName!,
-        lastName,
-        phone: input.directorPhone,
-        bvn: input.directorBvn,
+        email: primary.email,
+        firstName: primary.firstName,
+        lastName: primary.lastName,
+        phone: primary.phone,
+        bvn: primary.bvn,
         businessType: input.businessType,
         registeredBusinessName: input.registeredBusinessName,
         registrationNumber: input.registrationNumber,
@@ -206,28 +192,39 @@ export class BankingService {
         businessCategory: input.businessCategory,
         annualRevenue: input.annualRevenue ?? null,
         businessAddress: input.address,
-        directorNin: input.directorNin ?? null,
-        directorDob: input.directorDob,
-        directorIdType: input.directorIdType,
-        directorIdNumber: input.directorIdNumber,
-        directorIdDocumentUploadId: input.directorIdDocumentUploadId,
         certificateOfIncorporationUploadId: input.certificateOfIncorporationUploadId,
         statusReportUploadId: input.statusReportUploadId ?? null,
         proofOfAddressUploadId: input.proofOfAddressUploadId,
-        settlementBankCode: input.settlementBankCode,
-        settlementAccountNumber: input.settlementAccountNumber,
-        settlementAccountName: resolved.accountName,
       });
+      await repository.replaceKybDirectors(
+        context,
+        operation.businessId,
+        input.directors.map((director) => ({
+          isPrimary: director.isPrimary,
+          fullName: director.fullName,
+          firstName: director.firstName,
+          middleName: director.middleName,
+          lastName: director.lastName,
+          email: director.email,
+          phone: director.phone,
+          bvn: director.bvn,
+          dateOfBirth: director.dateOfBirth,
+          idType: director.idType,
+          idNumber: director.idNumber,
+          idDocumentUploadId: director.idDocumentUploadId,
+        })),
+      );
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, {
         status: "pending",
         type: "corporate",
+        directors: input.directors.length,
         reviewer: paymentProvider.verifiesBusinesses ? paymentProvider.name : "platform",
       });
       return repository.findUploads(context, kybUploadIds(input));
     });
 
     this.notify("KYB submitted", () =>
-      emailSender.sendBankingKybSubmitted(operation.userEmail, { businessName: input.registeredBusinessName, directorName: firstName!, dashboardUrl: dashboardUrl() }),
+      emailSender.sendBankingKybSubmitted(operation.userEmail, { businessName: input.registeredBusinessName, directorName: primary.firstName, dashboardUrl: dashboardUrl() }),
     );
     // Anchor may already be asking for documents; anything it asks for later
     // arrives as customer.identification.awaitingDocument and is handled by
@@ -482,16 +479,17 @@ export class BankingService {
       postalCode: input.address.postalCode,
     });
     const owners = await complianceRepository.listBeneficialOwners(context, operation.businessId);
-    const alreadyRecorded = owners.some((owner) => owner.relationship === "director" && owner.idType === input.directorIdType && owner.idNumber === input.directorIdNumber);
-    if (!alreadyRecorded) {
+    for (const director of input.directors) {
+      const alreadyRecorded = owners.some((owner) => owner.relationship === "director" && owner.idType === director.idType && owner.idNumber === director.idNumber);
+      if (alreadyRecorded) continue;
       await complianceRepository.createBeneficialOwner(context, operation.businessId, operation.userId, {
-        fullName: input.directorFullName,
+        fullName: director.fullName,
         relationship: "director",
         // Ownership isn't collected by the KYB form; a director isn't
         // assumed to own the business.
         ownershipPercentageBps: null,
-        idType: input.directorIdType,
-        idNumber: input.directorIdNumber,
+        idType: director.idType,
+        idNumber: director.idNumber,
         nationality: "NG",
       });
     }
@@ -507,7 +505,9 @@ export class BankingService {
       file(input.certificateOfIncorporationUploadId, "certificate_of_incorporation"),
       file(input.statusReportUploadId, "status_report"),
       file(input.proofOfAddressUploadId, "proof_of_address"),
-      file(input.directorIdDocumentUploadId, "director_id"),
+      // Anchor's KYB documents list has one director-ID slot; it takes the
+      // primary signatory's.
+      file(primaryDirector(input).idDocumentUploadId, "director_id"),
       { kind: "registration_number" as const, text: input.registrationNumber },
       input.taxIdentificationNumber ? { kind: "tax_identification_number" as const, text: input.taxIdentificationNumber } : null,
     ].filter((document): document is BusinessDocument => document !== null);
@@ -515,24 +515,28 @@ export class BankingService {
   }
 
   private async toReviewSummary(context: DatabaseContext, profile: BankingProfileRow, withDownloadUrls: boolean): Promise<KybReviewSummary> {
-    const slots: [KybReviewDocument["kind"], string | null][] = [
+    const directors = await repository.listKybDirectors(context, profile.businessId);
+    const businessSlots: [KybReviewDocument["kind"], string | null][] = [
       ["certificate_of_incorporation", profile.certificateOfIncorporationUploadId],
       ["status_report", profile.statusReportUploadId],
       ["proof_of_address", profile.proofOfAddressUploadId],
-      ["director_id", profile.directorIdDocumentUploadId],
     ];
-    const uploads = await repository.findUploads(context, slots.map(([, id]) => id).filter((id): id is string => !!id));
-    const documents: KybReviewDocument[] = [];
-    for (const [kind, uploadId] of slots) {
+    const uploadIds = [...businessSlots.map(([, id]) => id), ...directors.map((director) => director.idDocumentUploadId)].filter((id): id is string => !!id);
+    const uploads = await repository.findUploads(context, uploadIds);
+    const toDocument = async (kind: KybReviewDocument["kind"], uploadId: string | null): Promise<KybReviewDocument | null> => {
       const upload = uploads.find((candidate) => candidate.id === uploadId);
-      if (!upload) continue;
-      documents.push({
+      if (!upload) return null;
+      return {
         kind,
         uploadId: upload.id,
         mimeType: upload.mimeType,
         downloadUrl: withDownloadUrls && upload.status === "confirmed" ? await objectStorage.createPresignedDownloadUrl(upload.objectKey) : null,
-      });
-    }
+      };
+    };
+
+    const documents = (await Promise.all(businessSlots.map(([kind, uploadId]) => toDocument(kind, uploadId)))).filter(
+      (document): document is KybReviewDocument => document !== null,
+    );
     return {
       businessId: profile.businessId,
       kycStatus: profile.kycStatus,
@@ -544,15 +548,19 @@ export class BankingService {
       businessCategory: profile.businessCategory,
       website: profile.website,
       businessAddress: profile.businessAddress,
-      directorName: [profile.firstName, profile.lastName].filter(Boolean).join(" "),
-      directorEmail: profile.email,
-      directorPhone: profile.phone,
-      directorBvnMasked: maskIdentifier(profile.bvn),
-      directorIdType: profile.directorIdType,
-      directorIdNumberMasked: maskIdentifier(profile.directorIdNumber),
-      settlementBankCode: profile.settlementBankCode,
-      settlementAccountNumber: profile.settlementAccountNumber,
-      settlementAccountName: profile.settlementAccountName,
+      directors: await Promise.all(
+        directors.map(async (director) => ({
+          isPrimary: director.isPrimary,
+          fullName: director.fullName,
+          email: director.email,
+          phone: director.phone,
+          bvnMasked: maskIdentifier(director.bvn)!,
+          dateOfBirth: director.dateOfBirth,
+          idType: director.idType,
+          idNumberMasked: maskIdentifier(director.idNumber)!,
+          idDocument: await toDocument("director_id", director.idDocumentUploadId),
+        })),
+      ),
       provider: paymentProvider.name,
       kycSubmittedAt: profile.kycSubmittedAt?.toISOString() ?? null,
       kybReviewedAt: profile.kybReviewedAt?.toISOString() ?? null,
@@ -831,7 +839,15 @@ function dashboardUrl(): string {
 }
 
 function kybUploadIds(input: SubmitKybInput): string[] {
-  return [input.certificateOfIncorporationUploadId, input.proofOfAddressUploadId, input.directorIdDocumentUploadId, input.statusReportUploadId].filter(
-    (id): id is string => !!id,
-  );
+  return [
+    input.certificateOfIncorporationUploadId,
+    input.proofOfAddressUploadId,
+    input.statusReportUploadId,
+    ...input.directors.map((director) => director.idDocumentUploadId),
+  ].filter((id): id is string => !!id);
+}
+
+/** The schema guarantees exactly one primary director. */
+function primaryDirector(input: SubmitKybInput): SubmitKybInput["directors"][number] {
+  return input.directors.find((director) => director.isPrimary)!;
 }
