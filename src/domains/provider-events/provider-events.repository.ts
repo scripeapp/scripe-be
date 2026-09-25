@@ -130,3 +130,24 @@ export async function recordWalletDeposit(
   `.execute(context.transaction);
   return result.rows[0] ?? { found: false, businessId: null, email: null, accountNumber: null, bankName: null, businessName: null };
 }
+
+export interface KybDocumentsForCustomer {
+  readonly businessId: string;
+  readonly registrationNumber: string | null;
+  readonly taxIdentificationNumber: string | null;
+  readonly certificateOfIncorporationKey: string | null;
+  readonly certificateOfIncorporationMimeType: string | null;
+  readonly statusReportKey: string | null;
+  readonly statusReportMimeType: string | null;
+  readonly proofOfAddressKey: string | null;
+  readonly proofOfAddressMimeType: string | null;
+  readonly directorIdDocumentKey: string | null;
+  readonly directorIdDocumentMimeType: string | null;
+}
+
+export async function findKybDocumentsForCustomer(context: DatabaseContext, providerCustomerCode: string): Promise<KybDocumentsForCustomer | undefined> {
+  const result = await sql<KybDocumentsForCustomer>`
+    select * from app.banking_kyb_documents_for_customer(${providerCustomerCode})
+  `.execute(context.transaction);
+  return result.rows[0];
+}

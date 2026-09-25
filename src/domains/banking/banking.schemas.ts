@@ -33,77 +33,118 @@ export const submitKycSchema = z.preprocess((val: any) => {
   gender: z.enum(["male", "female", "other"]).optional(),
 }));
 
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").refine((value) => !Number.isNaN(Date.parse(value)), "Enter a valid date");
+const pastIsoDate = isoDate.refine((value) => Date.parse(value) <= Date.now(), "Date cannot be in the future");
+const uploadId = z.string().uuid("Upload the document before submitting");
+
+/**
+ * CAC numbers: RC (companies), BN (business names), IT (incorporated
+ * trustees). Normalised to "RC1234567" so later lookups and provider calls
+ * see one format.
+ */
+const REGISTRATION_PREFIX = { limited_liability: "RC", sole_proprietorship: "BN", ngo_cooperative: "IT" } as const;
+
 export const submitKybSchema = z.preprocess((val: any) => {
   if (val && typeof val === "object") {
     const rawAddress = val.address ?? val.businessAddress ?? {};
     return {
-      businessType: val.businessType ?? val.business_type ?? "limited_liability",
+      businessType: val.businessType ?? val.business_type,
       registeredBusinessName: val.registeredBusinessName ?? val.registered_business_name ?? val.businessName ?? val.business_name,
       registrationNumber: val.registrationNumber ?? val.registration_number ?? val.rcNumber ?? val.rc_number,
       taxIdentificationNumber: val.taxIdentificationNumber ?? val.tax_identification_number ?? val.tin,
+      dateOfRegistration: val.dateOfRegistration ?? val.date_of_registration ?? val.incorporationDate ?? val.incorporation_date,
       website: val.website ?? val.businessWebsite ?? val.business_website,
       description: val.description,
-      businessCategory: val.businessCategory ?? val.business_category ?? val.category,
+      businessCategory: val.businessCategory ?? val.business_category ?? val.category ?? val.industry,
       annualRevenue: val.annualRevenue ?? val.annual_revenue ?? val.revenue,
       address: {
-        streetAddress: rawAddress.streetAddress ?? rawAddress.street_address ?? rawAddress.addressLine1 ?? rawAddress.address_line_1 ?? "",
+        streetAddress: rawAddress.streetAddress ?? rawAddress.street_address ?? rawAddress.addressLine1 ?? rawAddress.address_line_1,
         apartment: rawAddress.apartment ?? rawAddress.addressLine2 ?? rawAddress.address_line_2,
-        city: rawAddress.city ?? "",
-        state: rawAddress.state ?? "",
+        city: rawAddress.city,
+        state: rawAddress.state,
         postalCode: rawAddress.postalCode ?? rawAddress.postal_code ?? rawAddress.postcode,
         countryCode: rawAddress.countryCode ?? rawAddress.country_code ?? rawAddress.country ?? "NG",
       },
-      directorFullName: val.directorFullName ?? val.director_full_name ?? val.fullName ?? val.full_name ?? `${val.firstName ?? ""} ${val.lastName ?? ""}`.trim(),
-      directorEmail: val.directorEmail ?? val.director_email ?? val.email,
-      directorPhone: val.directorPhone ?? val.director_phone ?? val.phone,
-      directorBvn: val.directorBvn ?? val.director_bvn ?? val.bvn,
-      directorNin: val.directorNin ?? val.director_nin ?? val.nin,
-      directorDob: val.directorDob ?? val.director_dob ?? val.dateOfBirth ?? val.date_of_birth,
-      directorGender: val.directorGender ?? val.director_gender ?? val.gender,
-      directorIdType: val.directorIdType ?? val.director_id_type ?? val.idType ?? val.id_type,
-      directorIdDocumentUrl: val.directorIdDocumentUrl ?? val.director_id_document_url,
-      certificateOfIncorporationUrl: val.certificateOfIncorporationUrl ?? val.certificate_of_incorporation_url,
-      statusReportUrl: val.statusReportUrl ?? val.status_report_url,
-      proofOfAddressUrl: val.proofOfAddressUrl ?? val.proof_of_address_url,
-      settlementBankCode: val.settlementBankCode ?? val.settlement_bank_code ?? val.bankCode ?? val.bank_code,
-      settlementAccountNumber: val.settlementAccountNumber ?? val.settlement_account_number ?? val.accountNumber ?? val.account_number,
-      settlementAccountName: val.settlementAccountName ?? val.settlement_account_name ?? val.accountName ?? val.account_name,
+      directorFullName: val.directorFullName ?? val.director_full_name,
+      directorEmail: val.directorEmail ?? val.director_email,
+      directorPhone: val.directorPhone ?? val.director_phone,
+      directorBvn: val.directorBvn ?? val.director_bvn,
+      directorNin: val.directorNin ?? val.director_nin,
+      directorDob: val.directorDob ?? val.director_dob,
+      directorGender: val.directorGender ?? val.director_gender,
+      directorIdType: val.directorIdType ?? val.director_id_type,
+      directorIdNumber: val.directorIdNumber ?? val.director_id_number,
+      directorIdDocumentUploadId: val.directorIdDocumentUploadId ?? val.director_id_document_upload_id,
+      certificateOfIncorporationUploadId: val.certificateOfIncorporationUploadId ?? val.certificate_of_incorporation_upload_id,
+      statusReportUploadId: val.statusReportUploadId ?? val.status_report_upload_id,
+      proofOfAddressUploadId: val.proofOfAddressUploadId ?? val.proof_of_address_upload_id,
+      settlementBankCode: val.settlementBankCode ?? val.settlement_bank_code,
+      settlementAccountNumber: val.settlementAccountNumber ?? val.settlement_account_number,
     };
   }
   return val;
 }, z.object({
-  businessType: z.enum(["sole_proprietorship", "limited_liability", "ngo_cooperative"]).default("limited_liability"),
-  registeredBusinessName: z.string().trim().min(1).max(255),
-  registrationNumber: z.string().trim().min(2).max(50).optional(),
-  taxIdentificationNumber: z.string().trim().max(50).optional(),
-  website: z.string().trim().max(255).optional(),
+  businessType: z.enum(["sole_proprietorship", "limited_liability", "ngo_cooperative"]),
+  registeredBusinessName: z.string().trim().min(2).max(255),
+  registrationNumber: z.string().trim().min(2).max(20),
+  taxIdentificationNumber: z.string().trim().regex(/^[0-9-]{8,15}$/, "Enter a valid TIN").optional(),
+  dateOfRegistration: pastIsoDate,
+  website: z.string().trim().url("Enter a full URL, e.g. https://example.com").max(255).optional(),
   description: z.string().trim().max(1000).optional(),
-  businessCategory: z.string().trim().max(100).optional(),
+  businessCategory: z.string().trim().min(1, "Select a business category").max(100),
   annualRevenue: z.string().trim().max(100).optional(),
   address: z.object({
     streetAddress: z.string().trim().min(1).max(255),
     apartment: z.string().trim().max(255).optional().nullable(),
     city: z.string().trim().min(1).max(100),
     state: z.string().trim().min(1).max(100),
-    postalCode: z.string().trim().max(20).optional().nullable(),
-    countryCode: z.string().trim().max(10).default("NG"),
+    postalCode: z.string().trim().min(4, "Enter the postal code").max(20),
+    countryCode: z.literal("NG", { errorMap: () => ({ message: "Only Nigerian businesses can be verified" }) }),
   }),
-  directorFullName: z.string().trim().min(1).max(255),
+  directorFullName: z.string().trim().min(3).max(255).refine((value) => value.split(/\s+/).length >= 2, "Enter the director's first and last name"),
   directorEmail: z.string().trim().email().max(255),
-  directorPhone: z.string().trim().min(7).max(30),
+  directorPhone: z.string().trim().regex(/^\+?[0-9]{10,14}$/, "Enter a valid phone number"),
   directorBvn: bvn,
   directorNin: z.string().regex(/^\d{11}$/, "Enter an 11 digit NIN").optional(),
-  directorDob: z.string().optional(),
+  directorDob: pastIsoDate,
   directorGender: z.enum(["male", "female", "other"]).optional(),
-  directorIdType: z.string().optional(),
-  directorIdDocumentUrl: z.string().optional(),
-  certificateOfIncorporationUrl: z.string().optional(),
-  statusReportUrl: z.string().optional(),
-  proofOfAddressUrl: z.string().optional(),
+  directorIdType: z.enum(["nin", "passport", "drivers_license", "voters_card"]),
+  directorIdNumber: z.string().trim().min(5).max(30),
+  directorIdDocumentUploadId: uploadId,
+  certificateOfIncorporationUploadId: uploadId,
+  statusReportUploadId: uploadId.optional(),
+  proofOfAddressUploadId: uploadId,
   settlementBankCode: bankCode,
   settlementAccountNumber: accountNumber,
-  settlementAccountName: z.string().optional(),
-}));
+}).superRefine((input, context) => {
+  if (input.businessType === "limited_liability" && !input.statusReportUploadId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["statusReportUploadId"], message: "Upload the CAC status report" });
+  }
+  if (input.directorIdType === "nin" && !/^\d{11}$/.test(input.directorIdNumber)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["directorIdNumber"], message: "Enter an 11 digit NIN" });
+  }
+  const digits = input.registrationNumber.replace(/^(RC|BN|IT)[\s-]*/i, "");
+  if (!/^\d{4,10}$/.test(digits)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["registrationNumber"], message: "Enter the CAC registration number, e.g. RC1234567" });
+  }
+}).transform((input) => ({
+  ...input,
+  registrationNumber: `${REGISTRATION_PREFIX[input.businessType]}${input.registrationNumber.replace(/^(RC|BN|IT)[\s-]*/i, "")}`,
+  directorNin: input.directorNin ?? (input.directorIdType === "nin" ? input.directorIdNumber : undefined),
+})));
+
+export const reviewKybParamsSchema = z.object({ businessId: z.string().uuid() });
+
+export const reviewKybSchema = z.discriminatedUnion("decision", [
+  z.object({ decision: z.literal("approve"), notes: z.string().trim().max(2000).optional() }),
+  z.object({ decision: z.literal("reject"), notes: z.string().trim().min(5, "Tell the business what to fix").max(2000) }),
+]);
+
+export const listKybReviewsQuerySchema = z.object({
+  status: z.enum(["pending", "verified", "failed"]).default("pending"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
 
 export const requestVirtualAccountSchema = z.object({
   preferredBank: z.string().trim().min(2).max(80).optional(),

@@ -28,6 +28,8 @@ export interface ObjectStorage {
   createPresignedDownloadUrl(key: string, expiresInSeconds?: number): Promise<string>;
   headObject(key: string): Promise<ObjectMetadata>;
   deleteObject(key: string): Promise<void>;
+  /** Server-side read, used only to forward a stored document to a provider that takes file uploads (e.g. Anchor KYB). */
+  getObjectBytes(key: string): Promise<Uint8Array>;
 }
 
 class R2ObjectStorage implements ObjectStorage {
@@ -79,6 +81,13 @@ class R2ObjectStorage implements ObjectStorage {
   async deleteObject(key: string): Promise<void> {
     const { client, bucket } = this.resolve();
     await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  }
+
+  async getObjectBytes(key: string): Promise<Uint8Array> {
+    const { client, bucket } = this.resolve();
+    const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!result.Body) throw new Error(`Object ${key} has no body`);
+    return result.Body.transformToByteArray();
   }
 }
 

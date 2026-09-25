@@ -1,7 +1,11 @@
 import { sql } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
+import { decryptPii, encryptPii } from "../../shared/pii-crypto.js";
 import type {
   BankingProfileRow,
+  BusinessAddressInput,
+  BusinessType,
+  ProviderCustomerType,
   KycStatus,
   ListWalletTransactionsFilter,
   VirtualAccountRow,
@@ -14,107 +18,262 @@ import type {
   WithdrawalStatus,
 } from "./banking.types.js";
 
-const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "email", "firstName", "lastName", "phone", "bvn", "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber", "website", "description", "businessCategory", "annualRevenue", "businessAddress", "directorNin", "directorDob", "directorIdType", "directorIdDocumentUrl", "certificateOfIncorporationUrl", "statusReportUrl", "proofOfAddressUrl", "settlementBankCode", "settlementAccountNumber", "settlementAccountName", "createdAt", "updatedAt"`;
+const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "providerCustomerType", "notificationEmail", "email", "firstName", "lastName", "phone", "bvn", "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber", "dateOfRegistration"::text as "dateOfRegistration", "website", "description", "businessCategory", "annualRevenue", "businessAddress", "directorNin", "directorDob", "directorIdType", "directorIdNumber", "directorIdDocumentUploadId", "certificateOfIncorporationUploadId", "statusReportUploadId", "proofOfAddressUploadId", "settlementBankCode", "settlementAccountNumber", "settlementAccountName", "kybReviewedBy", "kybReviewedAt", "kybReviewNotes", "createdAt", "updatedAt"`;
 const VIRTUAL_ACCOUNT_COLUMNS = `"id", "businessId", "provider", "providerCustomerCode", "providerAccountId", "accountNumber", "accountName", "bankName", "bankSlug", "assetCode", "status", "assignmentReference", "failureReason", "metadata", "lastRequeryAt", "createdAt", "updatedAt"`;
 const WALLET_TRANSACTION_COLUMNS = `"id", "businessId", "type", "direction", "status", "assetCode", "amountMinor", "grossAmountMinor", "feeAmountMinor", "feeBreakdown", "provider", "providerReference", "description", "metadata", "postedAt", "createdAt"`;
 const WITHDRAWAL_COLUMNS = `"id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "transferRecipientCode", "providerReference", "providerTransferCode", "idempotencyKey", "status", "failureReason", "createdAt", "updatedAt"`;
+
+function decryptProfile(row: BankingProfileRow | undefined): BankingProfileRow | undefined {
+  if (!row) return undefined;
+  return {
+    ...row,
+    bvn: decryptPii(row.bvn),
+    directorNin: decryptPii(row.directorNin),
+    directorDob: decryptPii(row.directorDob),
+    directorIdNumber: decryptPii(row.directorIdNumber),
+  };
+}
 
 export async function findProfile(context: DatabaseContext, businessId: string): Promise<BankingProfileRow | undefined> {
   const result = await sql<BankingProfileRow>`
     select ${sql.raw(PROFILE_COLUMNS)} from app.banking_profiles where "businessId" = ${businessId}::uuid
   `.execute(context.transaction);
-  return result.rows[0];
+  return decryptProfile(result.rows[0]);
 }
 
-export async function upsertProfile(
+/**
+ * Persists a freshly created provider customer on its own, before any
+ * further provider call can fail — otherwise a failed verification rolls
+ * back the only record of a customer that already exists at the provider,
+ * and every retry creates another orphan.
+ */
+export async function saveProviderCustomer(
+  context: DatabaseContext,
+  businessId: string,
+  fields: { providerCustomerCode: string; providerCustomerType: ProviderCustomerType; notificationEmail: string },
+): Promise<void> {
+  await sql`
+    insert into app.banking_profiles ("businessId", "kycStatus", "providerCustomerCode", "providerCustomerType", "notificationEmail")
+    values (${businessId}::uuid, 'not_started', ${fields.providerCustomerCode}, ${fields.providerCustomerType}, ${fields.notificationEmail})
+    on conflict ("businessId") do update set
+      "providerCustomerCode" = excluded."providerCustomerCode",
+      "providerCustomerType" = excluded."providerCustomerType",
+      "notificationEmail" = excluded."notificationEmail",
+      "updatedAt" = now()
+  `.execute(context.transaction);
+}
+
+/** Replaces the whole submission — nothing from an earlier (failed or different-type) attempt survives. */
+export async function saveIndividualSubmission(
   context: DatabaseContext,
   businessId: string,
   fields: {
-    kycStatus: KycStatus;
-    kycFailureReason?: string | null;
-    kycSubmittedAt?: Date | null;
-    kycVerifiedAt?: Date | null;
-    providerCustomerCode?: string | null;
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-    bvn?: string;
-    businessType?: string | null;
-    registeredBusinessName?: string | null;
-    registrationNumber?: string | null;
-    taxIdentificationNumber?: string | null;
-    website?: string | null;
-    description?: string | null;
-    businessCategory?: string | null;
-    annualRevenue?: string | null;
-    businessAddress?: any | null;
-    directorNin?: string | null;
-    directorDob?: string | null;
-    directorIdType?: string | null;
-    directorIdDocumentUrl?: string | null;
-    certificateOfIncorporationUrl?: string | null;
-    statusReportUrl?: string | null;
-    proofOfAddressUrl?: string | null;
-    settlementBankCode?: string | null;
-    settlementAccountNumber?: string | null;
-    settlementAccountName?: string | null;
+    kycStatus: "pending" | "verified";
+    notificationEmail: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    bvn: string;
+    settlementBankCode: string;
+    settlementAccountNumber: string;
   },
 ): Promise<BankingProfileRow> {
-  const addressJson = fields.businessAddress ? JSON.stringify(fields.businessAddress) : null;
   const result = await sql<BankingProfileRow>`
-    insert into app.banking_profiles (
-      "businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode",
-      "email", "firstName", "lastName", "phone", "bvn",
-      "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber",
-      "website", "description", "businessCategory", "annualRevenue", "businessAddress",
-      "directorNin", "directorDob", "directorIdType", "directorIdDocumentUrl",
-      "certificateOfIncorporationUrl", "statusReportUrl", "proofOfAddressUrl",
-      "settlementBankCode", "settlementAccountNumber", "settlementAccountName"
-    )
-    values (
-      ${businessId}::uuid, ${fields.kycStatus}, ${fields.kycFailureReason ?? null}, ${fields.kycSubmittedAt ?? null}, ${fields.kycVerifiedAt ?? null},
-      ${fields.providerCustomerCode ?? null}, ${fields.email ?? null}, ${fields.firstName ?? null}, ${fields.lastName ?? null}, ${fields.phone ?? null}, ${fields.bvn ?? null},
-      ${fields.businessType ?? null}, ${fields.registeredBusinessName ?? null}, ${fields.registrationNumber ?? null}, ${fields.taxIdentificationNumber ?? null},
-      ${fields.website ?? null}, ${fields.description ?? null}, ${fields.businessCategory ?? null}, ${fields.annualRevenue ?? null}, ${addressJson ? sql`${addressJson}::jsonb` : null},
-      ${fields.directorNin ?? null}, ${fields.directorDob ?? null}, ${fields.directorIdType ?? null}, ${fields.directorIdDocumentUrl ?? null},
-      ${fields.certificateOfIncorporationUrl ?? null}, ${fields.statusReportUrl ?? null}, ${fields.proofOfAddressUrl ?? null},
-      ${fields.settlementBankCode ?? null}, ${fields.settlementAccountNumber ?? null}, ${fields.settlementAccountName ?? null}
-    )
-    on conflict ("businessId") do update set
-      "kycStatus" = excluded."kycStatus",
-      "kycFailureReason" = excluded."kycFailureReason",
-      "kycSubmittedAt" = coalesce(excluded."kycSubmittedAt", app.banking_profiles."kycSubmittedAt"),
-      "kycVerifiedAt" = excluded."kycVerifiedAt",
-      "providerCustomerCode" = coalesce(excluded."providerCustomerCode", app.banking_profiles."providerCustomerCode"),
-      "email" = coalesce(excluded."email", app.banking_profiles."email"),
-      "firstName" = coalesce(excluded."firstName", app.banking_profiles."firstName"),
-      "lastName" = coalesce(excluded."lastName", app.banking_profiles."lastName"),
-      "phone" = coalesce(excluded."phone", app.banking_profiles."phone"),
-      "bvn" = coalesce(excluded."bvn", app.banking_profiles."bvn"),
-      "businessType" = coalesce(excluded."businessType", app.banking_profiles."businessType"),
-      "registeredBusinessName" = coalesce(excluded."registeredBusinessName", app.banking_profiles."registeredBusinessName"),
-      "registrationNumber" = coalesce(excluded."registrationNumber", app.banking_profiles."registrationNumber"),
-      "taxIdentificationNumber" = coalesce(excluded."taxIdentificationNumber", app.banking_profiles."taxIdentificationNumber"),
-      "website" = coalesce(excluded."website", app.banking_profiles."website"),
-      "description" = coalesce(excluded."description", app.banking_profiles."description"),
-      "businessCategory" = coalesce(excluded."businessCategory", app.banking_profiles."businessCategory"),
-      "annualRevenue" = coalesce(excluded."annualRevenue", app.banking_profiles."annualRevenue"),
-      "businessAddress" = coalesce(excluded."businessAddress", app.banking_profiles."businessAddress"),
-      "directorNin" = coalesce(excluded."directorNin", app.banking_profiles."directorNin"),
-      "directorDob" = coalesce(excluded."directorDob", app.banking_profiles."directorDob"),
-      "directorIdType" = coalesce(excluded."directorIdType", app.banking_profiles."directorIdType"),
-      "directorIdDocumentUrl" = coalesce(excluded."directorIdDocumentUrl", app.banking_profiles."directorIdDocumentUrl"),
-      "certificateOfIncorporationUrl" = coalesce(excluded."certificateOfIncorporationUrl", app.banking_profiles."certificateOfIncorporationUrl"),
-      "statusReportUrl" = coalesce(excluded."statusReportUrl", app.banking_profiles."statusReportUrl"),
-      "proofOfAddressUrl" = coalesce(excluded."proofOfAddressUrl", app.banking_profiles."proofOfAddressUrl"),
-      "settlementBankCode" = coalesce(excluded."settlementBankCode", app.banking_profiles."settlementBankCode"),
-      "settlementAccountNumber" = coalesce(excluded."settlementAccountNumber", app.banking_profiles."settlementAccountNumber"),
-      "settlementAccountName" = coalesce(excluded."settlementAccountName", app.banking_profiles."settlementAccountName"),
+    update app.banking_profiles set
+      "kycStatus" = ${fields.kycStatus},
+      "kycFailureReason" = null,
+      "kycSubmittedAt" = now(),
+      "kycVerifiedAt" = case when ${fields.kycStatus} = 'verified' then now() else null end,
+      "notificationEmail" = ${fields.notificationEmail},
+      "email" = ${fields.email},
+      "firstName" = ${fields.firstName},
+      "lastName" = ${fields.lastName},
+      "phone" = ${fields.phone},
+      "bvn" = ${encryptPii(fields.bvn)},
+      "businessType" = null,
+      "registeredBusinessName" = null,
+      "registrationNumber" = null,
+      "taxIdentificationNumber" = null,
+      "dateOfRegistration" = null,
+      "website" = null,
+      "description" = null,
+      "businessCategory" = null,
+      "annualRevenue" = null,
+      "businessAddress" = null,
+      "directorNin" = null,
+      "directorDob" = null,
+      "directorIdType" = null,
+      "directorIdNumber" = null,
+      "directorIdDocumentUploadId" = null,
+      "certificateOfIncorporationUploadId" = null,
+      "statusReportUploadId" = null,
+      "proofOfAddressUploadId" = null,
+      "settlementBankCode" = ${fields.settlementBankCode},
+      "settlementAccountNumber" = ${fields.settlementAccountNumber},
+      "settlementAccountName" = null,
+      "kybReviewedBy" = null,
+      "kybReviewedAt" = null,
+      "kybReviewNotes" = null,
       "updatedAt" = now()
+    where "businessId" = ${businessId}::uuid
     returning ${sql.raw(PROFILE_COLUMNS)}
   `.execute(context.transaction);
-  return result.rows[0]!;
+  return decryptProfile(result.rows[0])!;
+}
+
+export async function saveBusinessSubmission(
+  context: DatabaseContext,
+  businessId: string,
+  fields: {
+    notificationEmail: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    bvn: string;
+    businessType: BusinessType;
+    registeredBusinessName: string;
+    registrationNumber: string;
+    taxIdentificationNumber: string | null;
+    dateOfRegistration: string;
+    website: string | null;
+    description: string | null;
+    businessCategory: string;
+    annualRevenue: string | null;
+    businessAddress: BusinessAddressInput;
+    directorNin: string | null;
+    directorDob: string;
+    directorIdType: string;
+    directorIdNumber: string;
+    directorIdDocumentUploadId: string;
+    certificateOfIncorporationUploadId: string;
+    statusReportUploadId: string | null;
+    proofOfAddressUploadId: string;
+    settlementBankCode: string;
+    settlementAccountNumber: string;
+    settlementAccountName: string;
+  },
+): Promise<BankingProfileRow> {
+  const result = await sql<BankingProfileRow>`
+    update app.banking_profiles set
+      "kycStatus" = 'pending',
+      "kycFailureReason" = null,
+      "kycSubmittedAt" = now(),
+      "kycVerifiedAt" = null,
+      "notificationEmail" = ${fields.notificationEmail},
+      "email" = ${fields.email},
+      "firstName" = ${fields.firstName},
+      "lastName" = ${fields.lastName},
+      "phone" = ${fields.phone},
+      "bvn" = ${encryptPii(fields.bvn)},
+      "businessType" = ${fields.businessType},
+      "registeredBusinessName" = ${fields.registeredBusinessName},
+      "registrationNumber" = ${fields.registrationNumber},
+      "taxIdentificationNumber" = ${fields.taxIdentificationNumber},
+      "dateOfRegistration" = ${fields.dateOfRegistration}::date,
+      "website" = ${fields.website},
+      "description" = ${fields.description},
+      "businessCategory" = ${fields.businessCategory},
+      "annualRevenue" = ${fields.annualRevenue},
+      "businessAddress" = ${JSON.stringify(fields.businessAddress)}::jsonb,
+      "directorNin" = ${encryptPii(fields.directorNin)},
+      "directorDob" = ${encryptPii(fields.directorDob)},
+      "directorIdType" = ${fields.directorIdType},
+      "directorIdNumber" = ${encryptPii(fields.directorIdNumber)},
+      "directorIdDocumentUploadId" = ${fields.directorIdDocumentUploadId}::uuid,
+      "certificateOfIncorporationUploadId" = ${fields.certificateOfIncorporationUploadId}::uuid,
+      "statusReportUploadId" = ${fields.statusReportUploadId}::uuid,
+      "proofOfAddressUploadId" = ${fields.proofOfAddressUploadId}::uuid,
+      "settlementBankCode" = ${fields.settlementBankCode},
+      "settlementAccountNumber" = ${fields.settlementAccountNumber},
+      "settlementAccountName" = ${fields.settlementAccountName},
+      "kybReviewedBy" = null,
+      "kybReviewedAt" = null,
+      "kybReviewNotes" = null,
+      "updatedAt" = now()
+    where "businessId" = ${businessId}::uuid
+    returning ${sql.raw(PROFILE_COLUMNS)}
+  `.execute(context.transaction);
+  return decryptProfile(result.rows[0])!;
+}
+
+/** Only individual profiles are promoted by an issued account — a business needs KYB review. */
+export async function markIndividualProfileVerified(context: DatabaseContext, businessId: string): Promise<void> {
+  await sql`
+    update app.banking_profiles set "kycStatus" = 'verified', "kycVerifiedAt" = now(), "updatedAt" = now()
+    where "businessId" = ${businessId}::uuid and "kycStatus" <> 'verified' and coalesce("providerCustomerType", 'individual') = 'individual'
+  `.execute(context.transaction);
+}
+
+export async function recordKycAttempt(context: DatabaseContext, businessId: string, userId: string, kind: ProviderCustomerType): Promise<void> {
+  await sql`
+    insert into app.banking_kyc_attempts ("businessId", "userId", "kind") values (${businessId}::uuid, ${userId}::uuid, ${kind})
+  `.execute(context.transaction);
+}
+
+export async function countKycAttemptsSince(context: DatabaseContext, businessId: string, since: Date): Promise<number> {
+  const result = await sql<{ count: string }>`
+    select count(*)::text as "count" from app.banking_kyc_attempts where "businessId" = ${businessId}::uuid and "createdAt" >= ${since}
+  `.execute(context.transaction);
+  return Number(result.rows[0]?.count ?? "0");
+}
+
+export interface KybUploadRow {
+  readonly id: string;
+  readonly businessId: string | null;
+  readonly purpose: string;
+  readonly status: string;
+  readonly mimeType: string;
+  readonly objectKey: string;
+}
+
+export async function findUploads(context: DatabaseContext, uploadIds: readonly string[]): Promise<KybUploadRow[]> {
+  if (uploadIds.length === 0) return [];
+  const result = await sql<KybUploadRow>`
+    select "id", "businessId", "purpose", "status", "mimeType", "objectKey" from app.uploads
+    where "id" in (${sql.join(uploadIds.map((id) => sql`${id}::uuid`))})
+  `.execute(context.transaction);
+  return result.rows;
+}
+
+export async function listProfilesForReview(
+  context: DatabaseContext,
+  filter: { status: KycStatus; limit: number; offset: number },
+): Promise<{ profiles: BankingProfileRow[]; totalCount: number }> {
+  const [rows, count] = await Promise.all([
+    sql<BankingProfileRow>`
+      select ${sql.raw(PROFILE_COLUMNS)} from app.banking_profiles
+      where "providerCustomerType" = 'business' and "kycStatus" = ${filter.status}
+      order by "kycSubmittedAt" asc nulls last
+      limit ${filter.limit} offset ${filter.offset}
+    `.execute(context.transaction),
+    sql<{ count: string }>`
+      select count(*)::text as "count" from app.banking_profiles where "providerCustomerType" = 'business' and "kycStatus" = ${filter.status}
+    `.execute(context.transaction),
+  ]);
+  return { profiles: rows.rows.map((row) => decryptProfile(row)!), totalCount: Number(count.rows[0]?.count ?? "0") };
+}
+
+/** Conditional on still being a pending business submission, so a concurrent decision (or a provider webhook) is never overwritten. */
+export async function decideBusinessReview(
+  context: DatabaseContext,
+  businessId: string,
+  fields: { status: "verified" | "failed"; reviewedBy: string; notes: string | null },
+): Promise<BankingProfileRow | undefined> {
+  const result = await sql<BankingProfileRow>`
+    update app.banking_profiles set
+      "kycStatus" = ${fields.status},
+      "kycFailureReason" = case when ${fields.status} = 'failed' then ${fields.notes} else null end,
+      "kycVerifiedAt" = case when ${fields.status} = 'verified' then now() else null end,
+      "kybReviewedBy" = ${fields.reviewedBy}::uuid,
+      "kybReviewedAt" = now(),
+      "kybReviewNotes" = ${fields.notes},
+      "updatedAt" = now()
+    where "businessId" = ${businessId}::uuid and "providerCustomerType" = 'business' and "kycStatus" = 'pending'
+    returning ${sql.raw(PROFILE_COLUMNS)}
+  `.execute(context.transaction);
+  return decryptProfile(result.rows[0]);
 }
 
 export async function findCurrentVirtualAccount(context: DatabaseContext, businessId: string): Promise<VirtualAccountRow | undefined> {

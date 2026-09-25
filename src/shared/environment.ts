@@ -51,6 +51,8 @@ const EnvironmentSchema = z.object({
   FLW_WEBHOOK_HASH: z.string().optional(),
   ANCHOR_WEBHOOK_TOKEN: z.string().optional(),
   BRAILS_WEBHOOK_SECRET: z.string().optional(),
+  /** base64-encoded 32-byte key for field-level encryption of BVN/NIN/ID numbers (see shared/pii-crypto.ts). */
+  PII_ENCRYPTION_KEY: z.string().optional(),
   SMS_PROVIDER: z.enum(["dev", "termii", "twilio"]).optional(),
   WHATSAPP_PROVIDER: z.enum(["dev", "termii", "meta"]).optional(),
   TERMII_API_KEY: z.string().optional(),
@@ -95,6 +97,20 @@ const EnvironmentSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["R2_ACCOUNT_ID"],
       message: "R2 object storage credentials are required in production.",
+    });
+  }
+  if (environment.NODE_ENV === "production" && !environment.PII_ENCRYPTION_KEY) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["PII_ENCRYPTION_KEY"],
+      message: "PII_ENCRYPTION_KEY is required in production.",
+    });
+  }
+  if (environment.PII_ENCRYPTION_KEY && Buffer.from(environment.PII_ENCRYPTION_KEY, "base64").length !== 32) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["PII_ENCRYPTION_KEY"],
+      message: "PII_ENCRYPTION_KEY must be 32 bytes, base64 encoded (e.g. `openssl rand -base64 32`).",
     });
   }
   if (environment.BANKING_PROVIDER === "brails" && !environment.BRAILS_API_KEY) {

@@ -64,3 +64,6 @@ export function authRequiredError(message = "Authentication required"): AppError
 export function serviceUnavailableError(message: string): AppError {
   return new AppError("SERVICE_UNAVAILABLE", message, 503);
 }
+export function rateLimitedError(message: string): AppError {
+  return new AppError("RATE_LIMITED", message, 429);
+}

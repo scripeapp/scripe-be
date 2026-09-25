@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { loadEnvironment } from "../../shared/environment.js";
 import { serviceUnavailableError } from "../../shared/errors.js";
 import type {
+  BusinessDocumentSubmissionResult,
   BankAccountResolution,
   CustomerValidationResult,
   DedicatedAccountResult,
@@ -57,6 +58,8 @@ const SENDER_ADDRESS_REQUIRED = "Brails payouts require the business's registere
  */
 export class BrailsPaymentProviderGateway implements PaymentProviderGateway {
   readonly name = "brails" as const;
+  /** Brails validates the director's BVN while issuing the account, nothing about the business itself — so a platform administrator reviews KYB. */
+  readonly verifiesBusinesses = false;
 
   private config(): { apiKey: string; baseUrl: string } {
     const environment = loadEnvironment();
@@ -85,6 +88,19 @@ export class BrailsPaymentProviderGateway implements PaymentProviderGateway {
     return Promise.resolve({ status: "pending" });
   }
 
+  createBusinessCustomer(): Promise<{ customerCode: string }> {
+    return Promise.resolve({ customerCode: `pending:${randomUUID()}` });
+  }
+
+  submitBusinessVerification(): Promise<CustomerValidationResult> {
+    return Promise.resolve({ status: "pending" });
+  }
+
+  /** Nothing to upload — documents stay with us for the platform review. */
+  submitBusinessDocuments(): Promise<BusinessDocumentSubmissionResult> {
+    return Promise.resolve({ submitted: [], missing: [] });
+  }
+
   async createDedicatedAccount(input: {
     customerCode: string;
     email: string;
@@ -101,7 +117,11 @@ export class BrailsPaymentProviderGateway implements PaymentProviderGateway {
     void input.customerCode;
     if (!input.bvn) throw new Error("Brails requires the customer's BVN to create a virtual account.");
     const bank = input.preferredBank === "providus" ? "providus" : "safehaven";
-    const isCorporate = input.accountType === "CORPORATE" || !!input.businessName;
+    // Brails' public reference documents only the individual fields
+    // (firstName, lastName, phoneNumber, bank, bvn, customerEmail); the
+    // corporate fields below follow Brails' CORPORATE account type and are
+    // only ever sent once a platform administrator has approved the KYB.
+    const isCorporate = input.accountType === "CORPORATE";
     const account = await this.request<BrailsVirtualAccount>("POST", "/virtual-accounts", {
       firstName: input.firstName,
       lastName: input.lastName,

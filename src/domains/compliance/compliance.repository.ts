@@ -1,4 +1,5 @@
 import { sql, type RawBuilder } from "kysely";
+import { decryptPii, encryptPii } from "../../shared/pii-crypto.js";
 import type { DatabaseContext } from "../../db/database-context.js";
 import type {
   BeneficialOwnerRow,
@@ -67,29 +68,36 @@ const OWNER_COLUMNS = sql`
   "nationality", "createdBy", "createdAt", "updatedAt", "archivedAt"
 `;
 
+/** idNumber is encrypted at rest (shared/pii-crypto.ts); legacy plain-text rows read back unchanged. */
+function decryptOwner(row: BeneficialOwnerRow): BeneficialOwnerRow;
+function decryptOwner(row: BeneficialOwnerRow | undefined): BeneficialOwnerRow | undefined;
+function decryptOwner(row: BeneficialOwnerRow | undefined): BeneficialOwnerRow | undefined {
+  return row ? { ...row, idNumber: decryptPii(row.idNumber) ?? "" } : row;
+}
+
 export async function listBeneficialOwners(context: DatabaseContext, businessId: string): Promise<BeneficialOwnerRow[]> {
   const result = await sql<BeneficialOwnerRow>`
     select ${OWNER_COLUMNS} from app.beneficial_owners
     where "businessId" = ${businessId}::uuid and "archivedAt" is null
     order by "createdAt"
   `.execute(context.transaction);
-  return result.rows;
+  return result.rows.map((row) => decryptOwner(row));
 }
 
 export async function findBeneficialOwner(context: DatabaseContext, businessId: string, ownerId: string): Promise<BeneficialOwnerRow | undefined> {
   const result = await sql<BeneficialOwnerRow>`
     select ${OWNER_COLUMNS} from app.beneficial_owners where "businessId" = ${businessId}::uuid and "id" = ${ownerId}::uuid
   `.execute(context.transaction);
-  return result.rows[0];
+  return decryptOwner(result.rows[0]);
 }
 
 export async function createBeneficialOwner(context: DatabaseContext, businessId: string, userId: string, input: CreateBeneficialOwnerInput): Promise<BeneficialOwnerRow> {
   const result = await sql<BeneficialOwnerRow>`
     insert into app.beneficial_owners ("businessId", "fullName", "relationship", "ownershipPercentageBps", "idType", "idNumber", "nationality", "createdBy")
-    values (${businessId}::uuid, ${input.fullName}, ${input.relationship}, ${input.ownershipPercentageBps ?? null}, ${input.idType}, ${input.idNumber}, ${input.nationality ?? "NG"}, ${userId}::uuid)
+    values (${businessId}::uuid, ${input.fullName}, ${input.relationship}, ${input.ownershipPercentageBps ?? null}, ${input.idType}, ${encryptPii(input.idNumber)}, ${input.nationality ?? "NG"}, ${userId}::uuid)
     returning ${OWNER_COLUMNS}
   `.execute(context.transaction);
-  return result.rows[0]!;
+  return decryptOwner(result.rows[0]!);
 }
 
 export async function updateBeneficialOwner(context: DatabaseContext, businessId: string, ownerId: string, input: UpdateOwnerInput): Promise<BeneficialOwnerRow | undefined> {
@@ -98,7 +106,7 @@ export async function updateBeneficialOwner(context: DatabaseContext, businessId
   if (input.relationship !== undefined) fields.push(sql`"relationship" = ${input.relationship}`);
   if (input.ownershipPercentageBps !== undefined) fields.push(sql`"ownershipPercentageBps" = ${input.ownershipPercentageBps}`);
   if (input.idType !== undefined) fields.push(sql`"idType" = ${input.idType}`);
-  if (input.idNumber !== undefined) fields.push(sql`"idNumber" = ${input.idNumber}`);
+  if (input.idNumber !== undefined) fields.push(sql`"idNumber" = ${encryptPii(input.idNumber)}`);
   if (input.nationality !== undefined) fields.push(sql`"nationality" = ${input.nationality}`);
   if (fields.length === 0) return findBeneficialOwner(context, businessId, ownerId);
 
@@ -107,7 +115,7 @@ export async function updateBeneficialOwner(context: DatabaseContext, businessId
     where "businessId" = ${businessId}::uuid and "id" = ${ownerId}::uuid and "archivedAt" is null
     returning ${OWNER_COLUMNS}
   `.execute(context.transaction);
-  return result.rows[0];
+  return decryptOwner(result.rows[0]);
 }
 
 export async function archiveBeneficialOwner(context: DatabaseContext, businessId: string, ownerId: string): Promise<boolean> {

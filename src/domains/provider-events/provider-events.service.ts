@@ -12,9 +12,24 @@ import type { CaptureResult } from "./provider-events.repository.js";
 import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature, verifyShipbubbleSignature } from "./provider-events.signatures.js";
 import type { ProviderName } from "./provider-events.types.js";
 import { emailSender } from "../../shared/email.js";
+import { paymentProvider, type BusinessDocument } from "../../integrations/payment-provider.js";
+import { objectStorage } from "../../integrations/r2.js";
 import { loadEnvironment } from "../../shared/environment.js";
 
 type JsonRecord = Record<string, unknown>;
+
+function toBusinessDocuments(stored: repository.KybDocumentsForCustomer): BusinessDocument[] {
+  const file = (key: string | null, mimeType: string | null, kind: BusinessDocument["kind"]): BusinessDocument | null =>
+    key ? { kind, file: { mimeType: mimeType ?? "application/octet-stream", fileName: key.split("/").pop() ?? kind, load: () => objectStorage.getObjectBytes(key) } } : null;
+  return [
+    file(stored.certificateOfIncorporationKey, stored.certificateOfIncorporationMimeType, "certificate_of_incorporation"),
+    file(stored.statusReportKey, stored.statusReportMimeType, "status_report"),
+    file(stored.proofOfAddressKey, stored.proofOfAddressMimeType, "proof_of_address"),
+    file(stored.directorIdDocumentKey, stored.directorIdDocumentMimeType, "director_id"),
+    stored.registrationNumber ? { kind: "registration_number" as const, text: stored.registrationNumber } : null,
+    stored.taxIdentificationNumber ? { kind: "tax_identification_number" as const, text: stored.taxIdentificationNumber } : null,
+  ].filter((document): document is BusinessDocument => document !== null);
+}
 
 function parseJson(rawBody: Buffer): JsonRecord {
   return JSON.parse(rawBody.toString("utf8")) as JsonRecord;
@@ -176,6 +191,13 @@ export class ProviderEventsService {
     await this.ingest("anchor", eventType, resourceId, signatureValid, body, requestId, async (context) => {
       if (eventType.startsWith("customer.identification.")) {
         if (!resourceId) return "ignored";
+        if (eventType === "customer.identification.awaitingDocument") {
+          const stored = await repository.findKybDocumentsForCustomer(context, resourceId);
+          if (!stored) return "ignored";
+          const result = await paymentProvider.submitBusinessDocuments({ customerCode: resourceId, documents: toBusinessDocuments(stored) });
+          if (result.missing.length > 0) console.warn(`Anchor requested KYB documents we don't hold for ${stored.businessId}:`, result.missing);
+          return "processed";
+        }
         if (eventType === "customer.identification.approved") {
           const result = await repository.markBankingKycStatus(context, resourceId, "verified", null);
           if (result.found && result.email) {

@@ -26,5 +26,13 @@ export function createBankingRouter(): Router {
   router.post(`${base}/withdrawals`, controller.requestWithdrawal);
   router.post(`${base}/withdrawals/finalize`, controller.finalizeWithdrawal);
 
+  // Platform administrators review corporate KYB that the provider doesn't
+  // verify itself (Brails). Role checks live in the service.
+  const reviewsBase = "/api/platform/banking/kyb-reviews";
+  router.use(reviewsBase, requireAuth);
+  router.get(reviewsBase, controller.listKybReviews);
+  router.get(`${reviewsBase}/:businessId`, controller.getKybReview);
+  router.post(`${reviewsBase}/:businessId/decision`, controller.reviewKyb);
+
   return router;
 }

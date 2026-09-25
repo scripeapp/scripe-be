@@ -3,7 +3,7 @@ import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
 import * as schemas from "./banking.schemas.js";
 import type { BankingService } from "./banking.service.js";
-import type { BankingOperation } from "./banking.types.js";
+import type { BankingOperation, PlatformBankingOperation } from "./banking.types.js";
 
 export const NIGERIAN_BANKS = [
   { code: "044", name: "Access Bank" },
@@ -102,12 +102,33 @@ export class BankingController {
     withdrawal: await this.service.finalizeWithdrawal(this.operation(request), schemas.finalizeWithdrawalSchema.parse(request.body)),
   }));
 
+  readonly listKybReviews = this.handle(async (request) => this.service.listKybReviews(this.platformOperation(request), schemas.listKybReviewsQuerySchema.parse(request.query)));
+
+  readonly getKybReview = this.handle(async (request) => ({
+    review: await this.service.getKybReview(this.platformOperation(request), schemas.reviewKybParamsSchema.parse(request.params).businessId),
+  }));
+
+  readonly reviewKyb = this.handle(async (request) => ({
+    review: await this.service.reviewKyb(
+      this.platformOperation(request),
+      schemas.reviewKybParamsSchema.parse(request.params).businessId,
+      schemas.reviewKybSchema.parse(request.body),
+    ),
+  }));
+
+  private platformOperation(request: Request): PlatformBankingOperation {
+    return { userId: requireAuthContext(request).userId, requestId: request.requestId };
+  }
+
   private operation(request: Request): BankingOperation {
     const { businessId } = schemas.businessParamsSchema.parse(request.params);
+    const auth = requireAuthContext(request);
     return {
-      userId: requireAuthContext(request).userId,
+      userId: auth.userId,
       businessId,
       requestId: request.requestId,
+      userEmail: auth.email,
+      userEmailVerified: auth.emailVerified,
     };
   }
 

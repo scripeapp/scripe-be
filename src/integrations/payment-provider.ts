@@ -22,6 +22,69 @@ export interface DedicatedAccountResult {
   readonly status: "pending" | "active" | "failed";
 }
 
+export interface KybAddress {
+  readonly addressLine1: string;
+  readonly addressLine2?: string | null;
+  readonly city: string;
+  /** Nigerian state name as entered (e.g. "Lagos") — providers normalise casing. */
+  readonly state: string;
+  readonly postalCode: string;
+  /** ISO 3166-1 alpha-2. */
+  readonly country: string;
+}
+
+export type KybRegistrationType = "sole_proprietorship" | "limited_liability" | "ngo_cooperative";
+
+export interface BusinessCustomerInput {
+  readonly businessName: string;
+  readonly registrationType: KybRegistrationType;
+  readonly registrationNumber: string;
+  readonly taxIdentificationNumber?: string | null;
+  /** YYYY-MM-DD. */
+  readonly dateOfRegistration: string;
+  readonly industry: string;
+  readonly description?: string | null;
+  readonly website?: string | null;
+  readonly email: string;
+  readonly phone: string;
+  readonly address: KybAddress;
+  readonly director: {
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly middleName?: string | null;
+    readonly email: string;
+    readonly phone: string;
+    readonly bvn: string;
+    /** YYYY-MM-DD. */
+    readonly dateOfBirth: string;
+    /** ISO 3166-1 alpha-2. */
+    readonly nationality: string;
+    readonly address: KybAddress;
+  };
+}
+
+export type BusinessDocumentKind =
+  | "certificate_of_incorporation"
+  | "status_report"
+  | "proof_of_address"
+  | "director_id"
+  | "registration_number"
+  | "tax_identification_number";
+
+export interface BusinessDocument {
+  readonly kind: BusinessDocumentKind;
+  /** File-backed documents — loaded lazily so only documents the provider actually asks for are downloaded. */
+  readonly file?: { readonly mimeType: string; readonly fileName: string; load(): Promise<Uint8Array> };
+  /** Text-backed documents (RC/BN number, TIN). */
+  readonly text?: string;
+}
+
+export interface BusinessDocumentSubmissionResult {
+  readonly submitted: readonly string[];
+  /** Document types the provider requested that we hold nothing for. */
+  readonly missing: readonly string[];
+}
+
 export interface TransferRecipientResult {
   readonly recipientCode: string;
 }
@@ -47,15 +110,19 @@ export interface TransferResult {
 export interface PaymentProviderGateway {
   readonly name: "brails" | "anchor" | "unconfigured";
   resolveBankAccount(accountNumber: string, bankCode: string): Promise<BankAccountResolution>;
-  createCustomer(input: {
-    email: string;
-    firstName: string;
-    lastName: string;
-    phone: string;
-    businessName?: string;
-    rcNumber?: string;
-    businessType?: string;
-  }): Promise<{ customerCode: string }>;
+  /**
+   * True when the provider itself performs KYB on a business (Anchor: CAC
+   * checks plus document review, decided via webhook). When false (Brails,
+   * which only validates the director's BVN while issuing the account) a
+   * business is only verified by a platform administrator's review.
+   */
+  readonly verifiesBusinesses: boolean;
+  createCustomer(input: { email: string; firstName: string; lastName: string; phone: string }): Promise<{ customerCode: string }>;
+  createBusinessCustomer(input: BusinessCustomerInput): Promise<{ customerCode: string }>;
+  /** Starts the provider's KYB for a business customer. Never synchronously "verified" — the decision arrives by webhook or review. */
+  submitBusinessVerification(input: { customerCode: string }): Promise<CustomerValidationResult>;
+  /** Uploads whichever documents the provider has requested for this business customer. */
+  submitBusinessDocuments(input: { customerCode: string; documents: readonly BusinessDocument[] }): Promise<BusinessDocumentSubmissionResult>;
   validateCustomerBvn(input: {
     customerCode: string;
     firstName: string;
@@ -112,6 +179,7 @@ export interface PaymentProviderGateway {
 
 class UnconfiguredPaymentProviderGateway implements PaymentProviderGateway {
   readonly name = "unconfigured" as const;
+  readonly verifiesBusinesses = false;
 
   private unavailable(): never {
     throw serviceUnavailableError("Banking provider is not configured yet.");
@@ -126,6 +194,18 @@ class UnconfiguredPaymentProviderGateway implements PaymentProviderGateway {
   }
 
   validateCustomerBvn(): Promise<CustomerValidationResult> {
+    this.unavailable();
+  }
+
+  createBusinessCustomer(): Promise<{ customerCode: string }> {
+    this.unavailable();
+  }
+
+  submitBusinessVerification(): Promise<CustomerValidationResult> {
+    this.unavailable();
+  }
+
+  submitBusinessDocuments(): Promise<BusinessDocumentSubmissionResult> {
     this.unavailable();
   }
 
@@ -167,6 +247,22 @@ class SelectedPaymentProviderGateway implements PaymentProviderGateway {
 
   get name(): PaymentProviderGateway["name"] {
     return this.resolve().name;
+  }
+
+  get verifiesBusinesses(): boolean {
+    return this.resolve().verifiesBusinesses;
+  }
+
+  createBusinessCustomer(...args: Parameters<PaymentProviderGateway["createBusinessCustomer"]>): ReturnType<PaymentProviderGateway["createBusinessCustomer"]> {
+    return this.resolve().createBusinessCustomer(...args);
+  }
+
+  submitBusinessVerification(...args: Parameters<PaymentProviderGateway["submitBusinessVerification"]>): ReturnType<PaymentProviderGateway["submitBusinessVerification"]> {
+    return this.resolve().submitBusinessVerification(...args);
+  }
+
+  submitBusinessDocuments(...args: Parameters<PaymentProviderGateway["submitBusinessDocuments"]>): ReturnType<PaymentProviderGateway["submitBusinessDocuments"]> {
+    return this.resolve().submitBusinessDocuments(...args);
   }
 
   resolveBankAccount(...args: Parameters<PaymentProviderGateway["resolveBankAccount"]>): ReturnType<PaymentProviderGateway["resolveBankAccount"]> {
