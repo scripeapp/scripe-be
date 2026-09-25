@@ -87,8 +87,8 @@ create policy discount_redemptions_read on app.discount_redemptions for select
 create policy discount_redemptions_insert on app.discount_redemptions for insert
   with check (app.has_business_permission("businessId", 'order.create'));
 
-grant select, insert, update on app.discounts to surge_app;
-grant select, insert on app.discount_redemptions to surge_app;
+grant select, insert, update on app.discounts to scripe_app;
+grant select, insert on app.discount_redemptions to scripe_app;
 
 create trigger discounts_set_updated_at before update on app.discounts
   for each row execute function app.set_updated_at();

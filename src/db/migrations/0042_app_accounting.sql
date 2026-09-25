@@ -69,7 +69,7 @@ create policy ledger_accounts_write on app.ledger_accounts for all
   using (app.has_business_permission("businessId", 'accounting.manage'))
   with check (app.has_business_permission("businessId", 'accounting.manage'));
 
-grant select, insert, update on app.ledger_accounts to surge_app;
+grant select, insert, update on app.ledger_accounts to scripe_app;
 
 -- Calendar-month periods, lazily created on first post into a given month.
 create table app.accounting_periods (
@@ -102,7 +102,7 @@ create policy accounting_periods_manage on app.accounting_periods for update
   using (app.has_business_permission("businessId", 'accounting.manage'))
   with check (app.has_business_permission("businessId", 'accounting.manage'));
 
-grant select, update on app.accounting_periods to surge_app;
+grant select, update on app.accounting_periods to scripe_app;
 
 -- Immutable once posted - "corrections create reversing journals; posted
 -- rows are not edited" (PROPOSED_TABLE_INVENTORY.md section 10). No status
@@ -135,7 +135,7 @@ create policy journal_entries_read on app.journal_entries for select
 -- append-only-log pattern as audit_events and subscription_dunning_events.
 create policy journal_entries_insert on app.journal_entries for insert with check (true);
 
-grant select, insert on app.journal_entries to surge_app;
+grant select, insert on app.journal_entries to scripe_app;
 
 create table app.journal_lines (
   "id" uuid primary key default gen_random_uuid(),
@@ -160,7 +160,7 @@ create policy journal_lines_read on app.journal_lines for select
   using (app.has_business_permission("businessId", 'accounting.read'));
 create policy journal_lines_insert on app.journal_lines for insert with check (true);
 
-grant select, insert on app.journal_lines to surge_app;
+grant select, insert on app.journal_lines to scripe_app;
 
 -- The one write path into journal_entries/journal_lines, called by every
 -- domain that posts (payments, returns, payables, inventory) through
@@ -236,7 +236,7 @@ end;
 $$;
 
 revoke all on function app.post_journal_entry(uuid, date, text, text, text, uuid, uuid, jsonb) from public;
-grant execute on function app.post_journal_entry(uuid, date, text, text, text, uuid, uuid, jsonb) to surge_app;
+grant execute on function app.post_journal_entry(uuid, date, text, text, text, uuid, uuid, jsonb) to scripe_app;
 
 -- Widens capture_checkout_payment_from_webhook's result (originally
 -- migration 0037) with the fields provider-events.service.ts now needs to
@@ -301,7 +301,7 @@ end;
 $$;
 
 revoke all on function app.capture_checkout_payment_from_webhook(text) from public;
-grant execute on function app.capture_checkout_payment_from_webhook(text) to surge_app;
+grant execute on function app.capture_checkout_payment_from_webhook(text) to scripe_app;
 
 -- The standard chart of accounts itself is seeded per business from
 -- application code (accounting.service.ts's seedDefaultChartOfAccounts,

@@ -2,7 +2,7 @@ import { Kysely, PostgresDialect, sql } from "kysely";
 import type { Pool } from "pg";
 import {
   type Database,
-  type SurgeDatabaseTables,
+  type ScripeDatabaseTables,
 } from "./database.types.js";
 
 export interface DatabaseGateway {
@@ -13,7 +13,7 @@ export interface DatabaseGateway {
 }
 
 export function createDatabaseGateway(pool: Pool): DatabaseGateway {
-  const database = new Kysely<SurgeDatabaseTables>({
+  const database = new Kysely<ScripeDatabaseTables>({
     dialect: new PostgresDialect({ pool }),
   }).withSchema("app");
 

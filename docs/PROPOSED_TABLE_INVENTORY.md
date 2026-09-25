@@ -1,8 +1,8 @@
 # Proposed Table Inventory
 
 This document defines the proposed PostgreSQL table inventory for the new
-Surge backend. It replaces the earlier literal translation of the legacy
-schema with a model centered on Surge's actual product:
+Scripe backend. It replaces the earlier literal translation of the legacy
+schema with a model centered on Scripe's actual product:
 
 > A business runs one or more stores, sells through online and physical
 > channels, manages stock and suppliers, receives and spends money through
@@ -109,7 +109,7 @@ presence does not exempt them from the final schema review.
 
 - `app.beneficial_owners` — Ultimate beneficial owners and control percentage
   required during KYB.
-- `app.compliance_cases` — Surge-level KYB case and review state, independent
+- `app.compliance_cases` — Scripe-level KYB case and review state, independent
   of any provider's status vocabulary.
 - `app.compliance_documents` — Encrypted document metadata, object key, type,
   expiry, and retention state.
@@ -171,7 +171,7 @@ merchant should not be duplicated as unrelated supplier and customer rows.
 - `app.products` — Sellable product, service, menu item, or pharmacy item with
   shared presentation and lifecycle fields.
 - `app.product_variants` — Sellable SKU-level options such as pack size, color,
-  dosage, or unit size. Every product has at least one variant; Surge creates a
+  dosage, or unit size. Every product has at least one variant; Scripe creates a
   hidden default variant when the merchant does not configure options.
 - `app.product_categories` — Many-to-many product/category membership.
 - `app.product_barcodes` — Barcode or alternate identifier mapped to a product
@@ -328,11 +328,11 @@ both gateways can be used.
 - `app.integration_connections` — Platform- or business-scoped provider
   connection, capability (`payment_gateway`, `account_issuer`, or another
   integration), environment, state, and secret reference.
-- `app.provider_customers` — Maps a Surge business to a provider's customer/KYB
+- `app.provider_customers` — Maps a Scripe business to a provider's customer/KYB
   identifier and normalized provider onboarding state.
 - `app.assets` — NGN, USD, or other supported currency/asset with precision and
   lifecycle state.
-- `app.financial_accounts` — Surge's canonical merchant bank, virtual, wallet,
+- `app.financial_accounts` — Scripe's canonical merchant bank, virtual, wallet,
   cash, clearing, or settlement account.
 - `app.provider_account_links` — Brails/Anchor external account ID, provider
   product type, and normalized lifecycle state for a financial account.
@@ -426,23 +426,23 @@ Support continues to use the existing `app.support_tickets` and
 Marketing campaigns, audiences, and advanced CRM automation are deferred until
 the commerce, inventory, and financial foundations are stable.
 
-## 14. Surge platform subscriptions
+## 14. Scripe platform subscriptions
 
-- `app.platform_plans` — Surge subscription plan, billing interval, currency,
+- `app.platform_plans` — Scripe subscription plan, billing interval, currency,
   and lifecycle state.
 - `app.platform_plan_entitlements` — Feature and usage entitlement included in a
   platform plan.
 - `app.business_subscriptions` — A business's active, trialing, past-due,
-  cancelled, or historical Surge subscription.
+  cancelled, or historical Scripe subscription.
 - `app.subscription_invoices` — Amount due, tax, discount, billing period, and
-  payment state for Surge's own SaaS billing.
+  payment state for Scripe's own SaaS billing.
 - `app.subscription_payment_attempts` — Paystack or Flutterwave attempt to pay a
-  Surge subscription invoice.
+  Scripe subscription invoice.
 - `app.subscription_dunning_events` — Reminder, retry, grace-period, suspension,
   and recovery history after failed subscription payments.
 
 Platform subscription billing is separate from a merchant's operational
-orders, revenue, bank accounts, and accounting ledger. A merchant buying Surge
+orders, revenue, bank accounts, and accounting ledger. A merchant buying Scripe
 software is not a sale made by that merchant's store.
 
 ## 15. Uploads and object storage
@@ -563,7 +563,7 @@ The following legacy concepts must not be recreated as authoritative tables:
 6. Payroll, approvals, fraud controls, notifications, and communication.
 7. Deferred CRM or other expansion modules only after the core is stable.
 
-The schema is successful when Surge can reliably answer five questions for a
+The schema is successful when Scripe can reliably answer five questions for a
 merchant:
 
 1. What was sold?

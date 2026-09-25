@@ -73,4 +73,4 @@ create policy product_location_settings_read on app.product_location_settings fo
 create policy product_location_settings_write on app.product_location_settings for all using (app.has_business_permission("businessId", 'pricing.manage')) with check (app.has_business_permission("businessId", 'pricing.manage'));
 create policy tax_rates_read on app.tax_rates for select using (app.has_business_permission("businessId", 'pricing.read'));
 create policy tax_rates_write on app.tax_rates for all using (app.has_business_permission("businessId", 'pricing.manage')) with check (app.has_business_permission("businessId", 'pricing.manage'));
-grant select, insert, update on app.product_prices, app.product_location_settings, app.tax_rates to surge_app;
+grant select, insert, update on app.product_prices, app.product_location_settings, app.tax_rates to scripe_app;

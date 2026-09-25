@@ -58,7 +58,7 @@ Every domain below is an implemented, mounted vertical slice **except**:
 | `approvals` | Approval policy, request, step, and decision. |
 | `notifications` | Notification preference and in-product notification. |
 | `communications` | Message template, delivery, and communication credit. |
-| `subscriptions` | Surge plan, entitlement, invoice, payment, and dunning. |
+| `subscriptions` | Scripe plan, entitlement, invoice, payment, and dunning. |
 | `uploads` | R2 upload metadata and processing. |
 | `provider-events` | Provider webhook ingestion and processing. |
 | `jobs` | Background and scheduled work execution. |

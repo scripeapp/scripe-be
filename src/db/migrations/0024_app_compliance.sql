@@ -154,8 +154,8 @@ create policy compliance_submissions_read on app.compliance_submissions for sele
 create policy compliance_submissions_insert on app.compliance_submissions for insert
   with check (app.has_business_permission("businessId", 'compliance.manage'));
 
-grant select, insert, update on app.business_legal_profiles, app.beneficial_owners, app.compliance_cases to surge_app;
-grant select, insert on app.compliance_documents, app.compliance_submissions to surge_app;
+grant select, insert, update on app.business_legal_profiles, app.beneficial_owners, app.compliance_cases to scripe_app;
+grant select, insert on app.compliance_documents, app.compliance_submissions to scripe_app;
 
 -- Personal, user-scoped tables (not business-tenancy scoped).
 
@@ -177,7 +177,7 @@ create policy user_consents_update_own on app.user_consents for update
   using (app.current_user_id() = "userId"::text)
   with check (app.current_user_id() = "userId"::text);
 
-grant select, insert, update on app.user_consents to surge_app;
+grant select, insert, update on app.user_consents to scripe_app;
 
 create table app.data_privacy_requests (
   "id" uuid primary key default gen_random_uuid(),
@@ -195,4 +195,4 @@ alter table app.data_privacy_requests enable row level security;
 create policy data_privacy_requests_select_own on app.data_privacy_requests for select using (app.current_user_id() = "userId"::text);
 create policy data_privacy_requests_insert_own on app.data_privacy_requests for insert with check (app.current_user_id() = "userId"::text);
 
-grant select, insert on app.data_privacy_requests to surge_app;
+grant select, insert on app.data_privacy_requests to scripe_app;

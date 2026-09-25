@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { verifyAnchorSignature, verifyBrailsSignature, verifyFlutterwaveSignature, verifyPaystackSignature } from "./provider-events.signatures.js";
 
 const MINIMAL_ENV = {
-  DATABASE_URL: "postgres://surge_app@localhost:5432/surge_test",
+  DATABASE_URL: "postgres://scripe_app@localhost:5432/scripe_test",
   BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
   BETTER_AUTH_URL: "http://localhost:4000",
 };

@@ -1,9 +1,9 @@
--- Platform: internal Surge-staff administration, operational alerts, and
+-- Platform: internal Scripe-staff administration, operational alerts, and
 -- platform-wide announcements. Ported from legacy admin_users/admin_alerts/
 -- system_announcements (src/services/admin.service.ts,
 -- src/services/admin-alerts.service.ts,
 -- src/services/system-announcements.service.ts), verified against the live
--- admin console (Surge-fe/src/components/Admin/{AdminUsers,Alerts,
+-- admin console (Scripe-fe/src/components/Admin/{AdminUsers,Alerts,
 -- Announcements}) rather than the legacy backend alone.
 --
 -- Redesign vs legacy:
@@ -76,7 +76,7 @@ as $$
 $$;
 
 revoke all on function app.is_platform_administrator() from public;
-grant execute on function app.is_platform_administrator() to surge_app;
+grant execute on function app.is_platform_administrator() to scripe_app;
 
 alter table app.platform_administrators enable row level security;
 
@@ -88,7 +88,7 @@ create policy platform_administrators_update on app.platform_administrators for 
   using (app.is_platform_administrator())
   with check (app.is_platform_administrator());
 
-grant select, insert, update on app.platform_administrators to surge_app;
+grant select, insert, update on app.platform_administrators to scripe_app;
 
 create table app.admin_alerts (
   "id" uuid primary key default gen_random_uuid(),
@@ -117,7 +117,7 @@ create policy admin_alerts_update on app.admin_alerts for update
 -- notifications.
 create policy admin_alerts_insert on app.admin_alerts for insert with check (true);
 
-grant select, insert, update on app.admin_alerts to surge_app;
+grant select, insert, update on app.admin_alerts to scripe_app;
 
 create table app.system_announcements (
   "id" uuid primary key default gen_random_uuid(),
@@ -154,4 +154,4 @@ create policy system_announcements_update on app.system_announcements for update
 create policy system_announcements_delete on app.system_announcements for delete
   using (app.is_platform_administrator());
 
-grant select, insert, update, delete on app.system_announcements to surge_app;
+grant select, insert, update, delete on app.system_announcements to scripe_app;

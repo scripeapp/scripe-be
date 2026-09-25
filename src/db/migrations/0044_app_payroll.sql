@@ -65,7 +65,7 @@ create policy payroll_runs_write on app.payroll_runs for all
   using (app.has_business_permission("businessId", 'payroll.manage'))
   with check (app.has_business_permission("businessId", 'payroll.manage'));
 
-grant select, insert, update on app.payroll_runs to surge_app;
+grant select, insert, update on app.payroll_runs to scripe_app;
 
 create table app.payroll_items (
   "id" uuid primary key default gen_random_uuid(),
@@ -100,4 +100,4 @@ create policy payroll_items_write on app.payroll_items for all
   using (app.has_business_permission("businessId", 'payroll.manage'))
   with check (app.has_business_permission("businessId", 'payroll.manage'));
 
-grant select, insert, update on app.payroll_items to surge_app;
+grant select, insert, update on app.payroll_items to scripe_app;

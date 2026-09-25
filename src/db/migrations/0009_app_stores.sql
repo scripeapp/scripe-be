@@ -212,8 +212,8 @@ create policy shifts_update on app.register_shifts for update using (app.has_bus
 create policy cash_read on app.cash_movements for select using (app.has_business_permission("businessId", 'store.read'));
 create policy cash_insert on app.cash_movements for insert with check (app.has_business_permission("businessId", 'cash.manage'));
 
-grant select, insert, update on app.stores, app.locations, app.sales_channels, app.registers, app.pos_devices, app.register_shifts to surge_app;
-grant select, insert on app.cash_movements to surge_app;
+grant select, insert, update on app.stores, app.locations, app.sales_channels, app.registers, app.pos_devices, app.register_shifts to scripe_app;
+grant select, insert on app.cash_movements to scripe_app;
 
 comment on table app.cash_movements is 'Immutable register cash events; corrections are compensating movements.';
 
@@ -279,4 +279,4 @@ end;
 $$;
 
 revoke all on function app.create_business_with_default_store(text, text, text, text, text) from public;
-grant execute on function app.create_business_with_default_store(text, text, text, text, text) to surge_app;
+grant execute on function app.create_business_with_default_store(text, text, text, text, text) to scripe_app;

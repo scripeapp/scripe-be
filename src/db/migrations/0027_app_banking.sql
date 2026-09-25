@@ -151,7 +151,7 @@ create policy withdrawals_update on app.withdrawals for update
   using (app.has_business_permission("businessId", 'banking.manage'))
   with check (app.has_business_permission("businessId", 'banking.manage'));
 
-grant select, insert, update on app.banking_profiles to surge_app;
-grant select, insert, update on app.virtual_accounts to surge_app;
-grant select, insert on app.wallet_transactions to surge_app;
-grant select, insert, update on app.withdrawals to surge_app;
+grant select, insert, update on app.banking_profiles to scripe_app;
+grant select, insert, update on app.virtual_accounts to scripe_app;
+grant select, insert on app.wallet_transactions to scripe_app;
+grant select, insert, update on app.withdrawals to scripe_app;

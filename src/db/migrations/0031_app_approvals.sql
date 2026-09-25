@@ -240,13 +240,13 @@ create policy approval_requests_update on app.approval_requests for update
   using (app.has_business_permission("businessId", 'banking.manage') or app.has_business_permission("businessId", 'payables.manage'))
   with check (app.has_business_permission("businessId", 'banking.manage') or app.has_business_permission("businessId", 'payables.manage'));
 
-grant select, insert, update, delete on app.approval_workflows to surge_app;
-grant select, insert, update, delete on app.approval_workflow_submitters to surge_app;
-grant select, insert, update, delete on app.approval_groups to surge_app;
-grant select, insert, update, delete on app.approval_group_approvers to surge_app;
-grant select, insert, update, delete on app.approval_rules to surge_app;
-grant select, insert, update, delete on app.approval_rule_approvers to surge_app;
-grant select, insert, update on app.approval_requests to surge_app;
+grant select, insert, update, delete on app.approval_workflows to scripe_app;
+grant select, insert, update, delete on app.approval_workflow_submitters to scripe_app;
+grant select, insert, update, delete on app.approval_groups to scripe_app;
+grant select, insert, update, delete on app.approval_group_approvers to scripe_app;
+grant select, insert, update, delete on app.approval_rules to scripe_app;
+grant select, insert, update, delete on app.approval_rule_approvers to scripe_app;
+grant select, insert, update on app.approval_requests to scripe_app;
 
 -- A gated withdrawal sits in 'awaitingApproval' before any provider call is
 -- made; a rejected one never gets one at all.

@@ -24,4 +24,4 @@ as $$
 $$;
 
 revoke all on function app.get_confirmed_avatar_object_key(uuid) from public;
-grant execute on function app.get_confirmed_avatar_object_key(uuid) to surge_app;
+grant execute on function app.get_confirmed_avatar_object_key(uuid) to scripe_app;

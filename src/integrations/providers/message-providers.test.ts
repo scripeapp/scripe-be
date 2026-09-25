@@ -8,7 +8,7 @@ import { TermiiMessageProvider } from "./termii-message-provider.js";
 import { TwilioMessageProvider } from "./twilio-message-provider.js";
 
 const MINIMAL_ENV = {
-  DATABASE_URL: "postgres://surge_app@localhost:5432/surge_test",
+  DATABASE_URL: "postgres://scripe_app@localhost:5432/scripe_test",
   BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
   BETTER_AUTH_URL: "http://localhost:4000",
 };
@@ -26,7 +26,7 @@ describe("TermiiMessageProvider", () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
-    process.env = { ...MINIMAL_ENV, TERMII_API_KEY: "key", TERMII_SENDER_ID: "Surge", TERMII_BASE_URL: "https://api.ng.termii.com" };
+    process.env = { ...MINIMAL_ENV, TERMII_API_KEY: "key", TERMII_SENDER_ID: "Scripe", TERMII_BASE_URL: "https://api.ng.termii.com" };
   });
   afterEach(() => {
     global.fetch = originalFetch;

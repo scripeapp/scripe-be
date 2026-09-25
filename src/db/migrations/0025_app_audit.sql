@@ -51,4 +51,4 @@ create policy audit_events_read on app.audit_events for select
 -- restricted to current_user_id() — the same shape as notifications.
 create policy audit_events_insert on app.audit_events for insert with check (true);
 
-grant select, insert on app.audit_events to surge_app;
+grant select, insert on app.audit_events to scripe_app;

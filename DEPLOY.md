@@ -10,8 +10,8 @@ or any container platform) — not as serverless functions.
 The `Dockerfile` is a multi-stage build (Bun builds, Node 22 runs):
 
 ```bash
-docker build -t surge-backend .
-docker run --env-file .env -p 4000:4000 surge-backend
+docker build -t scripe-backend .
+docker run --env-file .env -p 4000:4000 scripe-backend
 ```
 
 Without Docker:
@@ -26,8 +26,8 @@ node dist/server.js    # reads process.env (PORT defaults to 4000)
 
 Set the variables in `.env.example` on the platform. Required in production:
 
-- `DATABASE_URL` — runtime role (`surge_app`); never a superuser/owner/BYPASSRLS role
-- `DATABASE_MIGRATE_URL` — migration role (`surge_migrator`); used only by the migrate step
+- `DATABASE_URL` — runtime role (`scripe_app`); never a superuser/owner/BYPASSRLS role
+- `DATABASE_MIGRATE_URL` — migration role (`scripe_migrator`); used only by the migrate step
 - `BETTER_AUTH_SECRET` (>= 32 chars), `BETTER_AUTH_URL`, `AUTH_COOKIE_DOMAIN`, `AUTH_TRUSTED_ORIGINS`
 - `PLUNK_API_KEY` / `PLUNK_FROM_EMAIL` (verification/reset/security emails)
 - `R2_*` (object storage — set all four together)
@@ -68,4 +68,4 @@ Point the platform's health probe at `/health/ready`.
 ## Notes
 
 - The frontend is not wired to this backend yet; that is a separate task.
-- The legacy backend is archived at `../surge-be-legacy` (reference only).
+- The legacy backend is archived at `../scripe-be-legacy` (reference only).

@@ -48,6 +48,6 @@ create policy fiscal_documents_read on app.fiscal_documents for select
 create policy fiscal_documents_insert on app.fiscal_documents for insert
   with check (app.has_business_permission("businessId", 'payment.manage'));
 
-grant select, insert on app.fiscal_documents to surge_app;
+grant select, insert on app.fiscal_documents to scripe_app;
 
 comment on table app.fiscal_documents is 'Immutable; never updated or deleted once issued.';

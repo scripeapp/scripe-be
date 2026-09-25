@@ -24,4 +24,4 @@ as $$
 $$;
 
 revoke all on function app.has_business_permission(uuid, text) from public;
-grant execute on function app.has_business_permission(uuid, text) to surge_app;
+grant execute on function app.has_business_permission(uuid, text) to scripe_app;

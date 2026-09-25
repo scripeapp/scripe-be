@@ -3,7 +3,7 @@
 -- Mirrors the legacy support_tickets product columns (category/priority/status
 -- enums from evidence, rules.md §C) translated to new conventions, reusing
 -- app.set_updated_at() (0006) and app.current_user_id() RLS helper.
--- Runs as the surge_migrator.
+-- Runs as the scripe_migrator.
 
 create table app.support_tickets (
   "id"           uuid        primary key default gen_random_uuid(),
@@ -50,8 +50,8 @@ create trigger support_tickets_set_updated_at
 alter table app.support_tickets enable row level security;
 alter table app.support_ticket_replies enable row level security;
 
--- Submitter owns their ticket + its replies. surge_worker (agent) may read a
--- ticket via the surge_app-adjacent path granted below.
+-- Submitter owns their ticket + its replies. scripe_worker (agent) may read a
+-- ticket via the scripe_app-adjacent path granted below.
 create policy support_tickets_select_submitter on app.support_tickets
   for select
   using (app.current_user_id() = "submitterId"::text);
@@ -72,5 +72,5 @@ create policy support_ticket_replies_insert_submitter on app.support_ticket_repl
   for insert
   with check (app.current_user_id() = "authorId"::text);
 
-grant select on app.support_tickets, app.support_ticket_replies to surge_worker;
-grant select, insert, update on app.support_tickets, app.support_ticket_replies to surge_app;
+grant select on app.support_tickets, app.support_ticket_replies to scripe_worker;
+grant select, insert, update on app.support_tickets, app.support_ticket_replies to scripe_app;

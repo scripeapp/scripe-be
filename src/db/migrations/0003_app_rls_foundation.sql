@@ -2,7 +2,7 @@
 -- RLS infrastructure for the `app` schema (defense-in-depth, rule D).
 -- Policies read identity from transaction-local config set by the app:
 --   app.user_id, app.business_id, app.request_id
--- Runtime roles never hold BYPASSRLS; migrations belong to surge_migrator.
+-- Runtime roles never hold BYPASSRLS; migrations belong to scripe_migrator.
 -- Auth-schema tables stay under Better Auth and are NOT RLS-enforced here.
 
 -- A convenience parameter accessor; safe for use inside policies.
@@ -19,8 +19,8 @@ as $$
 $$;
 
 -- Grant policy evaluation reads to the runtime roles.
-grant execute on function app.current_user_id() to surge_app, surge_worker;
-grant execute on function app.current_business_id() to surge_app, surge_worker;
+grant execute on function app.current_user_id() to scripe_app, scripe_worker;
+grant execute on function app.current_business_id() to scripe_app, scripe_worker;
 
 revoke all on function app.current_user_id() from public;
 revoke all on function app.current_business_id() from public;

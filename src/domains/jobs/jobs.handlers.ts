@@ -33,7 +33,7 @@ function expireStalePendingUploadsHandler(database: Database) {
 
 /**
  * Daily dunning sweep: reminds and eventually expires businesses whose
- * Surge subscription payment failed, per subscriptions.service.ts's
+ * Scripe subscription payment failed, per subscriptions.service.ts's
  * runDunningSweep. This is legacy's invoice.payment_failed handler's bare
  * "TODO: Send notification email to business owner" actually built - see
  * that function's own comment for the full history.

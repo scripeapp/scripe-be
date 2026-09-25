@@ -78,4 +78,4 @@ create policy bill_lines_read on app.bill_lines for select using (app.has_busine
 create policy bill_lines_write on app.bill_lines for all using (app.has_business_permission("businessId", 'payables.manage')) with check (app.has_business_permission("businessId", 'payables.manage'));
 create policy bill_payment_allocations_read on app.bill_payment_allocations for select using (app.has_business_permission("businessId", 'payables.read'));
 create policy bill_payment_allocations_write on app.bill_payment_allocations for insert with check (app.has_business_permission("businessId", 'payables.manage'));
-grant select, insert, update on app.bills, app.bill_lines, app.bill_payment_allocations to surge_app;
+grant select, insert, update on app.bills, app.bill_lines, app.bill_payment_allocations to scripe_app;

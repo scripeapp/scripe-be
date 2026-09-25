@@ -127,7 +127,7 @@ $$;
 
 revoke all on function app.is_business_member(uuid) from public;
 revoke all on function app.has_business_permission(uuid, text) from public;
-grant execute on function app.is_business_member(uuid), app.has_business_permission(uuid, text) to surge_app;
+grant execute on function app.is_business_member(uuid), app.has_business_permission(uuid, text) to scripe_app;
 
 alter table app.businesses enable row level security;
 alter table app.business_memberships enable row level security;
@@ -151,8 +151,8 @@ create policy role_permissions_member_select on app.role_permissions for select
 create policy membership_roles_member_select on app.membership_roles for select
   using (app.is_business_member("businessId"));
 
-grant select, update on app.businesses to surge_app;
-grant select on app.business_memberships, app.roles, app.permissions, app.role_permissions, app.membership_roles to surge_app;
+grant select, update on app.businesses to scripe_app;
+grant select on app.business_memberships, app.roles, app.permissions, app.role_permissions, app.membership_roles to scripe_app;
 
 alter table app.support_tickets
   add constraint support_tickets_business_fkey foreign key ("businessId") references app.businesses ("id") on delete restrict;

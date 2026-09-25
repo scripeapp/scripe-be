@@ -62,4 +62,4 @@ create policy notifications_update_own on app.notifications for update
 create policy notifications_insert_system on app.notifications for insert
   with check (true);
 
-grant select, insert, update on app.notification_preferences, app.notifications to surge_app;
+grant select, insert, update on app.notification_preferences, app.notifications to scripe_app;

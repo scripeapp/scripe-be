@@ -122,7 +122,7 @@ describe("subscriptions domain", () => {
     process.env.PAYSTACK_SECRET_KEY = "sk_test_paystack";
     const fetchSpy = jest.spyOn(global, "fetch").mockImplementation((_url, init) => {
       const body = JSON.parse((init as RequestInit).body as string) as { reference: string; plan: string };
-      expect(body.plan).toBe("surge-plus");
+      expect(body.plan).toBe("scripe-plus");
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ status: true, message: "ok", data: { authorization_url: "https://paystack.test/sub-pay", reference: body.reference } }),

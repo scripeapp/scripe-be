@@ -1,19 +1,19 @@
-# Surge Domain Rewrite
+# Scripe Domain Rewrite
 
-Migrate one approved Surge business capability from the legacy backend into the greenfield `surge-be/next` architecture without treating legacy code as the design authority.
+Migrate one approved Scripe business capability from the legacy backend into the greenfield `scripe-be/next` architecture without treating legacy code as the design authority.
 
 ## Invocation
 
 ```text
-$surge-domain-rewrite <domain-name>
+$scripe-domain-rewrite <domain-name>
 ```
 
 Examples:
 
 ```text
-$surge-domain-rewrite inventory
-$surge-domain-rewrite payments
-$surge-domain-rewrite stores
+$scripe-domain-rewrite inventory
+$scripe-domain-rewrite payments
+$scripe-domain-rewrite stores
 ```
 
 Treat the text after the skill name as the requested domain. Normalize only for lookup; do not silently substitute a neighboring domain. If no domain is given, ask for it and do not start implementation.
@@ -22,10 +22,10 @@ Treat the text after the skill name as the requested domain. Normalize only for 
 
 Before implementation, require:
 
-- `surge-be/next/rules.md`
-- `surge-be/next/PROPOSED_TABLE_INVENTORY.md`
-- `surge-be/next/src/domains/README.md`
-- Legacy backend under `surge-be/src` and/or `surge-be/supabase`
+- `scripe-be/next/rules.md`
+- `scripe-be/next/PROPOSED_TABLE_INVENTORY.md`
+- `scripe-be/next/src/domains/README.md`
+- Legacy backend under `scripe-be/src` and/or `scripe-be/supabase`
 - The project skill's rewrite workflow reference
 
 Read `rules.md` completely. Read the relevant inventory sections, the complete domain manifest, and the rewrite workflow before acting.
@@ -35,7 +35,7 @@ Read `rules.md` completely. Read the relevant inventory sections, the complete d
 Apply this precedence:
 
 1. The user's current explicit instruction and approved product decisions.
-2. `surge-be/next/rules.md` for engineering, security, data, and migration rules.
+2. `scripe-be/next/rules.md` for engineering, security, data, and migration rules.
 3. `PROPOSED_TABLE_INVENTORY.md` and `src/domains/README.md` for approved schema and domain scope.
 4. Current frontend behavior for active product expectations.
 5. Legacy backend code, migrations, and tests as requirements evidence only.

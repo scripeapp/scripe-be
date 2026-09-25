@@ -2,7 +2,7 @@
 -- Extends app.user_profiles with the product profile fields the frontend reads
 -- from GET /api/me (rules F.3). Deprecated subscription mirrors and unused
 -- legacy columns are intentionally not reproduced.
--- Runs as surge_migrator.
+-- Runs as scripe_migrator.
 
 alter table app.user_profiles
     add column "firstName"     text  not null default '',

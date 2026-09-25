@@ -416,8 +416,8 @@ export interface CompletedTopup {
 
 /**
  * Called from the provider-events webhook context (an anonymous principal,
- * not a business-authorized one - webhooks run as surge_app with no caller
- * business context, and there is no separate surge_worker-authenticated
+ * not a business-authorized one - webhooks run as scripe_app with no caller
+ * business context, and there is no separate scripe_worker-authenticated
  * connection in this codebase). Goes through a security-definer function
  * rather than a direct UPDATE, the same escape hatch
  * capture_checkout_payment_from_webhook already established for the

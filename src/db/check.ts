@@ -1,7 +1,7 @@
 import { Kysely, PostgresDialect, sql } from "kysely";
 import { Pool } from "pg";
 import { loadEnvironment } from "../shared/environment.js";
-import type { SurgeDatabaseTables } from "./database.types.js";
+import type { ScripeDatabaseTables } from "./database.types.js";
 
 type CheckStatus = "pass" | "warn" | "fail";
 
@@ -25,9 +25,9 @@ async function main(): Promise<void> {
   report(results);
 }
 
-function createDatabase(url: string): { database: Kysely<SurgeDatabaseTables>; pool: Pool } {
+function createDatabase(url: string): { database: Kysely<ScripeDatabaseTables>; pool: Pool } {
   const pool = new Pool({ connectionString: url });
-  const database = new Kysely<SurgeDatabaseTables>({
+  const database = new Kysely<ScripeDatabaseTables>({
     dialect: new PostgresDialect({ pool }),
   });
   return { database, pool };

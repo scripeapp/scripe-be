@@ -3,8 +3,8 @@
 -- Mirrors the legacy user_addresses product columns (rules.md §C evidence-only,
 -- no invented columns) translated to the new conventions: app schema, quoted
 -- camelCase, auth.user FK via the shared app.current_user_id() RLS helper,
--- grants to surge_app only (surge_worker/surge_readonly get nothing here).
--- Runs as the surge_migrator.
+-- grants to scripe_app only (scripe_worker/scripe_readonly get nothing here).
+-- Runs as the scripe_migrator.
 
 -- Shared updated-at helper, shipped once here (rules.md §D: reuse, don't
 -- reinvent); 0007 references it rather than redefining it.
@@ -68,5 +68,5 @@ create policy user_addresses_delete_own on app.user_addresses
   for delete
   using (app.current_user_id() = "userId"::text);
 
-grant select, insert, update, delete on app.user_addresses to surge_app;
-grant execute on function app.set_updated_at() to surge_app;
+grant select, insert, update, delete on app.user_addresses to scripe_app;
+grant execute on function app.set_updated_at() to scripe_app;

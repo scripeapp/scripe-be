@@ -18,7 +18,7 @@ as $$
   select exists (select 1 from updated);
 $$;
 revoke all on function app.mark_banking_kyc_status_from_webhook(text, text, text) from public;
-grant execute on function app.mark_banking_kyc_status_from_webhook(text, text, text) to surge_app;
+grant execute on function app.mark_banking_kyc_status_from_webhook(text, text, text) to scripe_app;
 
 drop function if exists app.mark_virtual_account_status_from_webhook(text, text, text, text, text);
 create or replace function app.mark_virtual_account_status_from_webhook(
@@ -49,7 +49,7 @@ begin
 end;
 $$;
 revoke all on function app.mark_virtual_account_status_from_webhook(text, text, text, text, text) from public;
-grant execute on function app.mark_virtual_account_status_from_webhook(text, text, text, text, text) to surge_app;
+grant execute on function app.mark_virtual_account_status_from_webhook(text, text, text, text, text) to scripe_app;
 
 drop function if exists app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text);
 create or replace function app.record_wallet_deposit_from_webhook(
@@ -76,4 +76,4 @@ begin
 end;
 $$;
 revoke all on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) from public;
-grant execute on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) to surge_app;
+grant execute on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) to scripe_app;

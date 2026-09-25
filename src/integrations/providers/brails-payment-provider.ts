@@ -40,7 +40,7 @@ interface BrailsPayout {
 }
 
 /**
- * Brails requires the sender's (the Surge business's) registered address as
+ * Brails requires the sender's (the Scripe business's) registered address as
  * compliance data when adding a payout beneficiary — see
  * https://docs.brails.com/docs/beneficiaries/nigeria-beneficiary. Thrown
  * when the caller didn't supply it (businesses.service exposes it once a
@@ -113,7 +113,7 @@ export class BrailsPaymentProviderGateway implements PaymentProviderGateway {
       businessName: isCorporate ? input.businessName : undefined,
       rcNumber: isCorporate ? input.rcNumber : undefined,
       tin: isCorporate ? input.tin : undefined,
-      reference: `surge_${randomUUID()}`,
+      reference: `scripe_${randomUUID()}`,
       bvn: input.bvn,
     });
     return toResult(account);

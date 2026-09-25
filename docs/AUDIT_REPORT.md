@@ -1,4 +1,4 @@
-# Implementation Review — `surge-be/next`
+# Implementation Review — `scripe-be/next`
 
 **Reviewed:** 2026-09-18  
 **Scope:** backend foundation, PostgreSQL migrations/RLS foundation, and Better Auth  
@@ -35,7 +35,7 @@ This is not a statement that the complete authentication scope is finished. Goog
 - Limited reset to `app`, `auth`, and Kysely's migration metadata. It no longer enumerates and drops unrelated database schemas.
 - Moved cluster login-role ownership completely into `bootstrap.sql`; schema rollback no longer deletes runtime roles.
 - Removed `CREATEDB` and `CREATEROLE` from the migrator and explicitly retained `NOSUPERUSER`/`NOBYPASSRLS` on all application roles.
-- Removed broad automatic auth/app access for `surge_worker` and automatic table access for `surge_readonly`. Future worker/reporting access must be granted explicitly by the migration that needs it.
+- Removed broad automatic auth/app access for `scripe_worker` and automatic table access for `scripe_readonly`. Future worker/reporting access must be granted explicitly by the migration that needs it.
 - Removed the unused `pgcrypto` extension.
 - Removed the misleading `getDatabaseTransaction()` function, which returned the root database rather than a transaction.
 
@@ -64,7 +64,7 @@ This is not a statement that the complete authentication scope is finished. Goog
 | `bun run db:migrate:down:all` | Reverted 0004 → 0001 successfully |
 | Migration status at zero | All four reported `Not executed` |
 | Reapply all migrations | Applied 0001–0004 successfully |
-| `bun run db:check` | Runtime `surge_app` is not superuser, has no `BYPASSRLS`, and is not `postgres` |
+| `bun run db:check` | Runtime `scripe_app` is not superuser, has no `BYPASSRLS`, and is not `postgres` |
 | `bun run test -- --runInBand` | 15/15 tests passed across 2 suites against local PostgreSQL |
 | Active-code Supabase scan | No matches |
 
@@ -75,7 +75,7 @@ The two Better Auth “Invalid password” warnings in the test output are expec
 - Bun 1.4.2 remains the package manager and local TypeScript script runner.
 - Node.js 22 remains the production runtime.
 - Better Auth owns the `auth` schema; product data lives in `app`.
-- `surge_app` is the API runtime identity. `surge_worker` and `surge_readonly` receive only explicitly declared access.
+- `scripe_app` is the API runtime identity. `scripe_worker` and `scripe_readonly` receive only explicitly declared access.
 - RLS identity is transaction-local through `set_config(..., true)`.
 - `app.user_profiles` is created/updated atomically by the hardened `SECURITY DEFINER` trigger on `auth.user`; direct application inserts have no RLS policy.
 

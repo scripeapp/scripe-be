@@ -63,4 +63,4 @@ create policy return_lines_read on app.return_lines for select
 create policy return_lines_insert on app.return_lines for insert
   with check (app.has_business_permission("businessId", 'return.manage'));
 
-grant select, insert on app.returns, app.return_lines to surge_app;
+grant select, insert on app.returns, app.return_lines to scripe_app;

@@ -1,7 +1,7 @@
 -- Risk: fraud signal, case investigation, and transaction holds. Ported
 -- from legacy src/services/fraud-detection.service.ts (public.fraud_signals),
 -- verified against the live admin console
--- (Surge-fe/src/components/Admin/TrustSafety/FraudDashboard.tsx).
+-- (Scripe-fe/src/components/Admin/TrustSafety/FraudDashboard.tsx).
 --
 -- This is a platform-staff feature, not a business self-service one:
 -- legacy's fraud_signals table was RLS'd service-role-only, and its only
@@ -21,7 +21,7 @@
 --     legacy's original, never-activated intent, actually turned on.
 --   * risk_cases and transaction_holds have no legacy implementation or
 --     frontend surface (confirmed: zero matches for "investigation" or
---     "hold" anywhere in Surge-fe), but both are explicitly named in
+--     "hold" anywhere in Scripe-fe), but both are explicitly named in
 --     PROPOSED_TABLE_INVENTORY.md section 16 - approved schema, not
 --     invented. Kept intentionally minimal: risk_cases groups signals
 --     under a status/assignee/resolution note; transaction_holds only
@@ -64,7 +64,7 @@ create policy risk_signals_update on app.risk_signals for update
 -- caller's own identity - same insert shape as admin_alerts/audit_events.
 create policy risk_signals_insert on app.risk_signals for insert with check (true);
 
-grant select, insert, update on app.risk_signals to surge_app;
+grant select, insert, update on app.risk_signals to scripe_app;
 
 create table app.risk_cases (
   "id" uuid primary key default gen_random_uuid(),
@@ -94,7 +94,7 @@ create policy risk_cases_update on app.risk_cases for update
   using (app.is_platform_administrator())
   with check (app.is_platform_administrator());
 
-grant select, insert, update on app.risk_cases to surge_app;
+grant select, insert, update on app.risk_cases to scripe_app;
 
 create table app.transaction_holds (
   "id" uuid primary key default gen_random_uuid(),
@@ -121,7 +121,7 @@ create policy transaction_holds_update on app.transaction_holds for update
   using (app.is_platform_administrator())
   with check (app.is_platform_administrator());
 
-grant select, insert, update on app.transaction_holds to surge_app;
+grant select, insert, update on app.transaction_holds to scripe_app;
 
 -- Lets any business-scoped caller (e.g. banking's withdrawal gate) check for
 -- an active hold without needing direct table access, the same shape as
@@ -138,4 +138,4 @@ as $$
 $$;
 
 revoke all on function app.has_active_transaction_hold(text, uuid) from public;
-grant execute on function app.has_active_transaction_hold(text, uuid) to surge_app;
+grant execute on function app.has_active_transaction_hold(text, uuid) to scripe_app;

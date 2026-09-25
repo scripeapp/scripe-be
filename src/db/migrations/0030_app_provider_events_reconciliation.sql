@@ -50,7 +50,7 @@ end;
 $$;
 
 revoke all on function app.issue_receipt_from_webhook(uuid, uuid) from public;
-grant execute on function app.issue_receipt_from_webhook(uuid, uuid) to surge_app;
+grant execute on function app.issue_receipt_from_webhook(uuid, uuid) to scripe_app;
 
 -- Reconciles a withdrawal once its transfer's final status is known,
 -- mirroring banking.service.ts's finalizeWithdrawal: posts the pending
@@ -108,7 +108,7 @@ end;
 $$;
 
 revoke all on function app.mark_withdrawal_status_from_webhook(text, text, text) from public;
-grant execute on function app.mark_withdrawal_status_from_webhook(text, text, text) to surge_app;
+grant execute on function app.mark_withdrawal_status_from_webhook(text, text, text) to scripe_app;
 
 -- Credits the wallet ledger for an inbound virtual-account deposit.
 -- Idempotent via wallet_transactions' existing unique(provider,
@@ -138,4 +138,4 @@ end;
 $$;
 
 revoke all on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) from public;
-grant execute on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) to surge_app;
+grant execute on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) to scripe_app;

@@ -3,7 +3,7 @@
 -- Better Auth's kysely adapter emits camelCase identifiers verbatim, so every
 -- column is double-quoted here to preserve exact case (unquoted identifiers
 -- would be folded to lowercase by PostgreSQL).
--- Runs as surge_migrator.
+-- Runs as scripe_migrator.
 
 create table auth.user (
     "id"            uuid primary key,
@@ -76,5 +76,5 @@ create table auth.passkey (
 create index if not exists passkey_user_id_idx on auth.passkey ("userId");
 create unique index if not exists passkey_credential_id_idx on auth.passkey ("credentialID");
 
-grant select, insert, update, delete on all tables in schema auth to surge_app;
-grant usage, select on all sequences in schema auth to surge_app;
+grant select, insert, update, delete on all tables in schema auth to scripe_app;
+grant usage, select on all sequences in schema auth to scripe_app;

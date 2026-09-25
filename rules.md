@@ -1,4 +1,4 @@
-# Agent Rules — `surge-be/next` Rewrite
+# Agent Rules — `scripe-be/next` Rewrite
 
 Derived from `SUPABASE_REMOVAL_IMPLEMENTATION_PLAN.md`. This is the compact rulebook agents must follow when working on the new backend.
 
@@ -9,7 +9,7 @@ Derived from `SUPABASE_REMOVAL_IMPLEMENTATION_PLAN.md`. This is the compact rule
 - Only the backend touches the database. The frontend communicates only via HTTP API + Better Auth client.
 - Only standard PostgreSQL 16+. No vendor extensions without documentation and approval.
 - ESM only from first commit (NodeNext-compatible TypeScript). Do not port CommonJS patterns from legacy.
-- **Never import** from legacy `surge-be/src`, its tests, or `surge-be/supabase/`. Reuse legacy code only by reviewed copy + new tests.
+- **Never import** from legacy `scripe-be/src`, its tests, or `scripe-be/supabase/`. Reuse legacy code only by reviewed copy + new tests.
 - Legacy code is **requirements evidence, not truth**. If legacy sources conflict, stop and record a human-approved product decision — never guess.
 - One authoritative lockfile per app: `bun.lock` (committed). Bun is the package manager/script runner; **Node.js 22 stays the production runtime** until separate Bun-runtime gates pass. Jest stays the test runner.
 - No `any` at HTTP, domain, repository, integration, or event boundaries.
@@ -32,7 +32,7 @@ Derived from `SUPABASE_REMOVAL_IMPLEMENTATION_PLAN.md`. This is the compact rule
 ## C. Schema and roles
 
 - Schemas: `auth` (Better Auth-owned) and `app` (product/domain).
-- Roles: `surge_migrator` (runs migrations, owns schemas, never runtime), `surge_app` (normal API traffic), `surge_worker` (webhooks/background jobs, narrow grants), `surge_readonly` (optional reporting).
+- Roles: `scripe_migrator` (runs migrations, owns schemas, never runtime), `scripe_app` (normal API traffic), `scripe_worker` (webhooks/background jobs, narrow grants), `scripe_readonly` (optional reporting).
 - Runtime never connects as `postgres`, a schema owner, or a `BYPASSRLS` role.
 - Schema-qualify all tables/functions/views/enums; safe `search_path` in every `SECURITY DEFINER`; revoke `PUBLIC` on privileged functions.
 
@@ -48,7 +48,7 @@ Derived from `SUPABASE_REMOVAL_IMPLEMENTATION_PLAN.md`. This is the compact rule
 
 - Policies read via `current_setting('app.user_id', true)` / `app.business_id`.
 - Public queries always get an explicit anonymous context; never inherit a prior request's identity.
-- Worker/webhook jobs run as `surge_worker` with dedicated functions/grants; never impersonate end users.
+- Worker/webhook jobs run as `scripe_worker` with dedicated functions/grants; never impersonate end users.
 - Admin operations require application permission checks plus explicit policies or narrowly scoped privileged functions.
 - Product authorization lives in the app domain (membership, store access, admin status, permissions). Authentication only proves identity.
 
@@ -65,11 +65,11 @@ Derived from `SUPABASE_REMOVAL_IMPLEMENTATION_PLAN.md`. This is the compact rule
 - Inventory every Supabase occurrence (backend + frontend); categorize each (db/auth/storage/type/test/script/doc/dead).
 - Classify every legacy route Keep/Redesign/Merge/Delete with human-approved rationale.
 - Tag/branch the current legacy state for Git history.
-- CI gates: fail on new Supabase imports/vars/URLs; fail if `next/` imports legacy source, legacy tests, or `surge-be/supabase`.
-- Freeze `surge-be/src` except documented critical fixes.
+- CI gates: fail on new Supabase imports/vars/URLs; fail if `next/` imports legacy source, legacy tests, or `scripe-be/supabase`.
+- Freeze `scripe-be/src` except documented critical fixes.
 
 ### 2. Foundation (no product features)
-- Scaffold `surge-be/next`: own `package.json`, `bun.lock`, `tsconfig`, scripts, tests, `.env.example`.
+- Scaffold `scripe-be/next`: own `package.json`, `bun.lock`, `tsconfig`, scripts, tests, `.env.example`.
 - ESM/NodeNext; Express app with health + readiness, structured error handler, request ID, CORS.
 - Bun tooling: `packageManager` field, fresh `bun install` per app, commit `bun.lock`. Add Kysely + `pg`. Scripts: `db:migrate`, `db:migrate:down`, `db:migrate:status`, `db:reset`, `db:seed`, `db:types`, `db:check`. Use `bunx`, `bun --watch`, `tsc --noEmit` authoritative.
 - Local PostgreSQL via Docker Compose (health check + persistent dev volume); separate disposable test DB.
@@ -121,7 +121,7 @@ Large legacy modules decompose by cohesive responsibility (e.g. `store.service.t
 - Centralize credentials, CSRF, base URL, error normalization, request ID in `api-client.ts`.
 - Move query logic into domain query modules; stable TanStack Query keys; explicit cache invalidation.
 - Cursor pagination for high-volume collections; public pages use public endpoints with explicit projections + rate limits.
-- Remove `surge-fe/src/utils/supabase/`, `surge-fe/src/supabase/`, `@supabase/ssr`, `@supabase/supabase-js`.
+- Remove `scripe-fe/src/utils/supabase/`, `scripe-fe/src/supabase/`, `@supabase/ssr`, `@supabase/supabase-js`.
 
 ### 9. Storage completion
 - Single R2 service (upload/download/delete/metadata/signed URLs). Private buckets by default. Metadata + ownership in `app.uploads` or the owning domain table (e.g. products, event images, avatars). Digital downloads: short-lived signed URLs + entitlement checks. Orphan cleanup via worker role.
@@ -133,7 +133,7 @@ Large legacy modules decompose by cohesive responsibility (e.g. `store.service.t
 
 ### 11. Destructive cutover (single, once all waves pass)
 - Archive-tag the final legacy state; stop old environments; remove Supabase webhook destinations + OAuth redirect URLs; provision clean Postgres + roles; provision R2; configure Better Auth secrets/origins/callbacks/cookie domain.
-- Cutover: recreate target DB → migrate as `surge_migrator` → delete legacy backend files → promote `surge-be/next` to repo root → deploy only the new backend → register new Paystack/QStash/Google callbacks → smoke test with fresh accounts → start workers/schedulers only after smoke tests pass.
+- Cutover: recreate target DB → migrate as `scripe_migrator` → delete legacy backend files → promote `scripe-be/next` to repo root → deploy only the new backend → register new Paystack/QStash/Google callbacks → smoke test with fresh accounts → start workers/schedulers only after smoke tests pass.
 - Post: revoke/delete all Supabase keys and secrets; confirm no requests reach Supabase domains; confirm no Supabase packages in any lockfile. Rollback = redeploy last-known-good + recreate disposable data (no dual-compatible schema).
 
 ### 12. Optional — Bun production runtime (post-migration, separate decision)
@@ -161,7 +161,7 @@ The whole migration is done only when all of: fresh dev env boots with Postgres 
 | Emails | Plunk (verification, password reset, security) |
 | Sessions | Opaque, DB-backed, HTTP-only secure cookies (no browser-readable tokens) |
 | Authorization | Application permission checks + RLS via transaction-local `set_config()` (not `auth.uid()`/`auth.jwt()`) |
-| DB roles | `surge_migrator`, `surge_app`, `surge_worker`, `surge_readonly` |
+| DB roles | `scripe_migrator`, `scripe_app`, `scripe_worker`, `scripe_readonly` |
 | Object storage | Cloudflare R2 (private buckets, presigned URLs) |
 | Validation / contracts | Zod at every boundary; OpenAPI generated from routes; typed frontend API client |
 | Frontend server state | TanStack Query |
@@ -170,10 +170,10 @@ The whole migration is done only when all of: fresh dev env boots with Postgres 
 
 ## I. Proposed folder structure
 
-### Backend — `surge-be/next` (promoted to repo root at cutover)
+### Backend — `scripe-be/next` (promoted to repo root at cutover)
 
 ```text
-surge-be/
+scripe-be/
   next/
     package.json          # ESM, packageManager field, scripts
     bun.lock              # single authoritative lockfile
@@ -215,10 +215,10 @@ surge-be/
       e2e/                 # critical user journeys
 ```
 
-### Frontend — `surge-fe` (rewritten in place, not greenfield)
+### Frontend — `scripe-fe` (rewritten in place, not greenfield)
 
 ```text
-surge-fe/src/
+scripe-fe/src/
   lib/
     auth-client.ts        # Better Auth React client
     api-client.ts         # base URL, credentials, CSRF, error normalization, request ID
@@ -233,7 +233,7 @@ surge-fe/src/
 
 ### Structural rules
 
-- Every `surge-be/next` module is self-contained; nothing resolves legacy `surge-be/src`, legacy tests, or `surge-be/supabase`.
+- Every `scripe-be/next` module is self-contained; nothing resolves legacy `scripe-be/src`, legacy tests, or `scripe-be/supabase`.
 - Per-domain files own one responsibility (repository/service/controller/routes/schemas/types); controllers contain no SQL, repositories never import the global pool.
 - Integrations are reviewed copies under `integrations/` with their own tests — never imports back into legacy code.
 - API/domain types stay separate from database row types; explicit mapping functions bridge them.

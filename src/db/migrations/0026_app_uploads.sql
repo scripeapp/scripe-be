@@ -94,5 +94,5 @@ create policy upload_processing_jobs_insert on app.upload_processing_jobs for in
       )
   ));
 
-grant select, insert, update on app.uploads to surge_app;
-grant select, insert on app.upload_processing_jobs to surge_app;
+grant select, insert, update on app.uploads to scripe_app;
+grant select, insert on app.upload_processing_jobs to scripe_app;

@@ -32,7 +32,7 @@ create index provider_events_provider_idx on app.provider_events ("provider", "r
 -- No RLS: this is a system-written audit/idempotency log with no HTTP read
 -- endpoint in this pass (no platform-admin authority concept exists yet to
 -- gate one against), not a business-facing resource.
-grant select, insert, update on app.provider_events to surge_app;
+grant select, insert, update on app.provider_events to scripe_app;
 
 -- Captures a payment left "pending" by payments.service.initiateCheckout,
 -- mirroring payments.repository.ts's allocate()/captureCheckoutPayment()
@@ -94,7 +94,7 @@ end;
 $$;
 
 revoke all on function app.capture_checkout_payment_from_webhook(text) from public;
-grant execute on function app.capture_checkout_payment_from_webhook(text) to surge_app;
+grant execute on function app.capture_checkout_payment_from_webhook(text) to scripe_app;
 
 -- Marks a payment (still pending) as failed once its gateway confirms the
 -- charge failed — the counterpart to capture, for the "failed" branch.
@@ -114,7 +114,7 @@ as $$
 $$;
 
 revoke all on function app.fail_checkout_payment_from_webhook(text) from public;
-grant execute on function app.fail_checkout_payment_from_webhook(text) to surge_app;
+grant execute on function app.fail_checkout_payment_from_webhook(text) to scripe_app;
 
 -- The webhook only carries the provider's own customer id, not our
 -- internal businessId (which itself sits behind RLS) — looked up here by
@@ -138,7 +138,7 @@ as $$
 $$;
 
 revoke all on function app.mark_banking_kyc_status_from_webhook(text, text, text) from public;
-grant execute on function app.mark_banking_kyc_status_from_webhook(text, text, text) to surge_app;
+grant execute on function app.mark_banking_kyc_status_from_webhook(text, text, text) to scripe_app;
 
 create or replace function app.mark_virtual_account_status_from_webhook(
   target_provider_account_id text, new_status text, new_account_number text, new_account_name text, new_bank_name text
@@ -169,4 +169,4 @@ end;
 $$;
 
 revoke all on function app.mark_virtual_account_status_from_webhook(text, text, text, text, text) from public;
-grant execute on function app.mark_virtual_account_status_from_webhook(text, text, text, text, text) to surge_app;
+grant execute on function app.mark_virtual_account_status_from_webhook(text, text, text, text, text) to scripe_app;

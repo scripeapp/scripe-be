@@ -96,7 +96,7 @@ export class CommunicationsService {
       await requirePermission(context, operation.businessId, "communications.manage");
       const token = randomBytes(16).toString("hex");
       const created = await repository.createDomain(context, operation.businessId, domain, [
-        { type: "TXT", name: `_surge-verify.${domain}`, value: `surge-domain-verification=${token}` },
+        { type: "TXT", name: `_scripe-verify.${domain}`, value: `scripe-domain-verification=${token}` },
       ]);
       return toDomain(created);
     });
@@ -202,7 +202,7 @@ export class CommunicationsService {
     const defaultSender = await repository.findDefaultSender(context, businessId);
     if (defaultSender) return { name: defaultSender.name, email: defaultSender.email };
     const environment = loadEnvironment();
-    return { name: "Surge", email: environment.PLUNK_FROM_EMAIL ?? "noreply@surge.app" };
+    return { name: "Scripe", email: environment.PLUNK_FROM_EMAIL ?? "noreply@scripe.app" };
   }
 
   // ---------------------------------------------------------------------
@@ -358,7 +358,7 @@ export class CommunicationsService {
       const checkout = await gateway.initializeCheckout({
         amountMinor: creditPackage.priceMinor,
         assetCode: creditPackage.assetCode,
-        email: `billing+${operation.businessId}@surge.app`,
+        email: `billing+${operation.businessId}@scripe.app`,
         reference,
         callbackUrl: input.callbackUrl,
         metadata: { kind: "communication_credit_topup", businessId: operation.businessId, packageId: creditPackage.id },

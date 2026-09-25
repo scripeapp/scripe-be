@@ -174,9 +174,9 @@ export function buildOpenApiDocument(app: Application): ReturnType<OpenApiGenera
   return new OpenApiGeneratorV3(registry.definitions).generateDocument({
     openapi: "3.0.0",
     info: {
-      title: "Surge Backend API",
+      title: "Scripe Backend API",
       version: "0.1.0",
-      description: "Interactive API docs for the Surge backend, generated from the live routes. Authentication is a session cookie: call an Auth sign-in/verify endpoint first (same-origin, so the cookie is set automatically), then use the business and domain endpoints. Endpoints with a precise request body are validated against the real Zod schemas; the rest accept a freeform JSON body.",
+      description: "Interactive API docs for the Scripe backend, generated from the live routes. Authentication is a session cookie: call an Auth sign-in/verify endpoint first (same-origin, so the cookie is set automatically), then use the business and domain endpoints. Endpoints with a precise request body are validated against the real Zod schemas; the rest accept a freeform JSON body.",
     },
     servers: [{ url: "/" }],
   });

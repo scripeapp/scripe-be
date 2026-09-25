@@ -89,7 +89,7 @@ create policy communication_domains_update on app.communication_domains for upda
 create policy communication_domains_delete on app.communication_domains for delete
   using (app.has_business_permission("businessId", 'communications.manage'));
 
-grant select, insert, update, delete on app.communication_domains to surge_app;
+grant select, insert, update, delete on app.communication_domains to scripe_app;
 
 create table app.communication_senders (
   "id" uuid primary key default gen_random_uuid(),
@@ -121,7 +121,7 @@ create policy communication_senders_update on app.communication_senders for upda
 create policy communication_senders_delete on app.communication_senders for delete
   using (app.has_business_permission("businessId", 'communications.manage'));
 
-grant select, insert, update, delete on app.communication_senders to surge_app;
+grant select, insert, update, delete on app.communication_senders to scripe_app;
 
 -- ============================================================================
 -- Templates
@@ -158,7 +158,7 @@ create policy communication_templates_update on app.communication_templates for 
 create policy communication_templates_delete on app.communication_templates for delete
   using (app.has_business_permission("businessId", 'communications.manage'));
 
-grant select, insert, update, delete on app.communication_templates to surge_app;
+grant select, insert, update, delete on app.communication_templates to scripe_app;
 
 -- ============================================================================
 -- Audience segments (new - curated membership, not dynamic filtering)
@@ -189,7 +189,7 @@ create policy communication_audience_segments_update on app.communication_audien
 create policy communication_audience_segments_delete on app.communication_audience_segments for delete
   using (app.has_business_permission("businessId", 'communications.manage'));
 
-grant select, insert, update, delete on app.communication_audience_segments to surge_app;
+grant select, insert, update, delete on app.communication_audience_segments to scripe_app;
 
 create table app.communication_audience_segment_members (
   "segmentId" uuid not null references app.communication_audience_segments ("id") on delete cascade,
@@ -215,7 +215,7 @@ create policy communication_audience_segment_members_delete on app.communication
     where segment."id" = "segmentId" and app.has_business_permission(segment."businessId", 'communications.manage')
   ));
 
-grant select, insert, delete on app.communication_audience_segment_members to surge_app;
+grant select, insert, delete on app.communication_audience_segment_members to scripe_app;
 
 -- ============================================================================
 -- Opt-out / suppression (new - replaces legacy's per-contact opt-out columns
@@ -240,7 +240,7 @@ create policy communication_opt_outs_write on app.communication_opt_outs for ins
 create policy communication_opt_outs_delete on app.communication_opt_outs for delete
   using (app.has_business_permission("businessId", 'communications.manage'));
 
-grant select, insert, delete on app.communication_opt_outs to surge_app;
+grant select, insert, delete on app.communication_opt_outs to scripe_app;
 
 -- ============================================================================
 -- Credits: a locked stored balance (not a derived sum) plus an immutable
@@ -269,7 +269,7 @@ create policy communication_credit_accounts_update on app.communication_credit_a
   using (app.has_business_permission("businessId", 'communications.manage'))
   with check (app.has_business_permission("businessId", 'communications.manage'));
 
-grant select, insert, update on app.communication_credit_accounts to surge_app;
+grant select, insert, update on app.communication_credit_accounts to scripe_app;
 
 create table app.communication_credit_entries (
   "id" uuid primary key default gen_random_uuid(),
@@ -294,7 +294,7 @@ create policy communication_credit_entries_read on app.communication_credit_entr
 create policy communication_credit_entries_insert on app.communication_credit_entries for insert
   with check (app.has_business_permission("businessId", 'communications.manage'));
 
-grant select, insert on app.communication_credit_entries to surge_app;
+grant select, insert on app.communication_credit_entries to scripe_app;
 
 create table app.communication_credit_topups (
   "id" uuid primary key default gen_random_uuid(),
@@ -318,14 +318,14 @@ create policy communication_credit_topups_read on app.communication_credit_topup
 create policy communication_credit_topups_insert on app.communication_credit_topups for insert
   with check (app.has_business_permission("businessId", 'communications.manage'));
 -- No update policy: the webhook path never has the submitter's authorized
--- business context (provider-events runs every webhook as surge_app with an
--- anonymous principal - there is no separate surge_worker-authenticated
+-- business context (provider-events runs every webhook as scripe_app with an
+-- anonymous principal - there is no separate scripe_worker-authenticated
 -- connection anywhere in this codebase despite the role existing). Webhook
 -- reconciliation goes through the security-definer function below instead,
 -- the same escape hatch capture_checkout_payment_from_webhook (0029) already
 -- established for this exact problem.
 
-grant select, insert on app.communication_credit_topups to surge_app;
+grant select, insert on app.communication_credit_topups to scripe_app;
 
 -- Reconciles a Paystack/Flutterwave credit top-up from its webhook: marks
 -- the topup succeeded (idempotent - only a still-pending row transitions,
@@ -371,7 +371,7 @@ end;
 $$;
 
 revoke all on function app.complete_communication_credit_topup(text) from public;
-grant execute on function app.complete_communication_credit_topup(text) to surge_app;
+grant execute on function app.complete_communication_credit_topup(text) to scripe_app;
 
 -- Marks a top-up failed from its webhook (payment declined/abandoned) -
 -- same anonymous-caller problem, same security-definer escape hatch.
@@ -389,7 +389,7 @@ as $$
 $$;
 
 revoke all on function app.fail_communication_credit_topup(text) from public;
-grant execute on function app.fail_communication_credit_topup(text) to surge_app;
+grant execute on function app.fail_communication_credit_topup(text) to scripe_app;
 
 -- ============================================================================
 -- Messages and deliveries
@@ -436,7 +436,7 @@ create policy communication_messages_update on app.communication_messages for up
 create policy communication_messages_delete on app.communication_messages for delete
   using (app.has_business_permission("businessId", 'communications.manage') and "status" = 'draft');
 
-grant select, insert, update, delete on app.communication_messages to surge_app;
+grant select, insert, update, delete on app.communication_messages to scripe_app;
 
 create table app.communication_deliveries (
   "id" uuid primary key default gen_random_uuid(),
@@ -476,4 +476,4 @@ create policy communication_deliveries_update on app.communication_deliveries fo
     where message."id" = "messageId" and app.has_business_permission(message."businessId", 'communications.manage')
   ));
 
-grant select, insert, update on app.communication_deliveries to surge_app;
+grant select, insert, update on app.communication_deliveries to scripe_app;

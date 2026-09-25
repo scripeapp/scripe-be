@@ -74,7 +74,7 @@ create policy beneficiaries_write on app.beneficiaries for all
   using (app.has_business_permission("businessId", 'transfers.manage'))
   with check (app.has_business_permission("businessId", 'transfers.manage'));
 
-grant select, insert, update on app.beneficiaries to surge_app;
+grant select, insert, update on app.beneficiaries to scripe_app;
 
 -- Provider-neutral outbound money movement requested by a merchant workflow.
 -- `purpose` records which workflow raised it; the row itself carries no
@@ -120,7 +120,7 @@ create policy transfers_write on app.transfers for all
   using (app.has_business_permission("businessId", 'transfers.manage'))
   with check (app.has_business_permission("businessId", 'transfers.manage'));
 
-grant select, insert, update on app.transfers to surge_app;
+grant select, insert, update on app.transfers to scripe_app;
 
 -- Append-only per-provider execution record. A retry is a new row, never an
 -- edit - the full submission history stays auditable. Provider identity
@@ -155,4 +155,4 @@ create policy transfer_attempts_write on app.transfer_attempts for all
   using (app.has_business_permission("businessId", 'transfers.manage'))
   with check (app.has_business_permission("businessId", 'transfers.manage'));
 
-grant select, insert, update on app.transfer_attempts to surge_app;
+grant select, insert, update on app.transfer_attempts to scripe_app;

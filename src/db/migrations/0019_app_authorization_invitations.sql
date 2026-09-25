@@ -41,26 +41,26 @@ create policy business_invitations_write on app.business_invitations for all
   using (app.has_business_permission("businessId", 'team.invite'))
   with check (app.has_business_permission("businessId", 'team.invite'));
 
-grant select, insert, update on app.business_invitations to surge_app;
+grant select, insert, update on app.business_invitations to scripe_app;
 
 -- Membership lifecycle (ending a membership) and role assignment become
 -- writable by authorized members. Reads were already granted in 0008.
 create policy business_memberships_manage on app.business_memberships for update
   using (app.has_business_permission("businessId", 'team.manage'))
   with check (app.has_business_permission("businessId", 'team.manage'));
-grant update on app.business_memberships to surge_app;
+grant update on app.business_memberships to scripe_app;
 
 create policy membership_roles_manage on app.membership_roles for all
   using (app.has_business_permission("businessId", 'team.manage'))
   with check (app.has_business_permission("businessId", 'team.manage'));
-grant insert, delete on app.membership_roles to surge_app;
+grant insert, delete on app.membership_roles to scripe_app;
 
 -- Custom business roles. System roles (businessId is null) can never satisfy
 -- has_business_permission and stay read-only through this policy.
 create policy roles_manage on app.roles for all
   using ("businessId" is not null and app.has_business_permission("businessId", 'team.manage'))
   with check ("businessId" is not null and app.has_business_permission("businessId", 'team.manage'));
-grant insert, update, delete on app.roles to surge_app;
+grant insert, update, delete on app.roles to scripe_app;
 
 create policy role_permissions_manage on app.role_permissions for all
   using (exists (
@@ -73,7 +73,7 @@ create policy role_permissions_manage on app.role_permissions for all
     where role."id" = "roleId" and role."businessId" is not null
       and app.has_business_permission(role."businessId", 'team.manage')
   ));
-grant insert, delete on app.role_permissions to surge_app;
+grant insert, delete on app.role_permissions to scripe_app;
 
 -- Accepting an invitation creates a membership for a user who is not yet a
 -- member of the target business, so no has_business_permission check can
@@ -125,4 +125,4 @@ end;
 $$;
 
 revoke all on function app.accept_business_invitation(text) from public;
-grant execute on function app.accept_business_invitation(text) to surge_app;
+grant execute on function app.accept_business_invitation(text) to scripe_app;

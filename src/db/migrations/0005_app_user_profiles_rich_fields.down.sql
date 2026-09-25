@@ -1,5 +1,5 @@
 -- 0005_app_user_profiles_rich_fields.down.sql
--- Reverts 0005. Runs as surge_migrator.
+-- Reverts 0005. Runs as scripe_migrator.
 
 drop index if exists app.user_profiles_username_lower_key;
 

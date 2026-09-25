@@ -179,7 +179,7 @@ export class ProviderEventsService {
         if (eventType === "customer.identification.approved") {
           const result = await repository.markBankingKycStatus(context, resourceId, "verified", null);
           if (result.found && result.email) {
-            const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+            const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
             void emailSender.sendBankingKybApproved(result.email, {
               businessName: result.businessName || "your business",
               directorName: result.firstName || "Director",
@@ -192,7 +192,7 @@ export class ProviderEventsService {
           const reason = asString(attributes.reason) ?? asString(attributes.message) ?? "KYC rejected by provider";
           const result = await repository.markBankingKycStatus(context, resourceId, "failed", reason);
           if (result.found && result.email) {
-            const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+            const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
             void emailSender.sendBankingKybFailed(result.email, {
               businessName: result.businessName || "your business",
               directorName: result.firstName || "Director",
@@ -214,7 +214,7 @@ export class ProviderEventsService {
           bankName: asString(virtualNuban.bankName) ?? asString(asRecord(attributes.bank).name),
         });
         if (result.found && result.email && result.accountNumber && result.bankName) {
-          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
           void emailSender.sendVirtualAccountIssued(result.email, {
             businessName: result.accountName || "your business",
             accountNumber: result.accountNumber,
@@ -262,7 +262,7 @@ export class ProviderEventsService {
           description: "Virtual account deposit",
         });
         if (result.found && result.email && result.accountNumber && result.bankName) {
-          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
           const amountFormatted = `₦${(Number(amountMinor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
           void emailSender.sendVirtualAccountDeposit(result.email, {
             businessName: result.businessName || "your business",
@@ -315,7 +315,7 @@ export class ProviderEventsService {
           description: "Virtual account deposit",
         });
         if (result.found && result.email && result.accountNumber && result.bankName) {
-          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
           const amountFormatted = `₦${(Number(amountMinor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
           void emailSender.sendVirtualAccountDeposit(result.email, {
             businessName: result.businessName || "your business",

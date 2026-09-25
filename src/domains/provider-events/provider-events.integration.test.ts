@@ -119,7 +119,7 @@ describe("provider-events domain", () => {
     const amountMinor = 150000;
     const { businessId, orderId, base } = await createPricedOrder(owner.cookies, amountMinor);
 
-    const externalReference = `surge_test_${randomUUID()}`;
+    const externalReference = `scripe_test_${randomUUID()}`;
     await withDatabaseContext(getDatabase(), withIdentity(randomUUID(), owner.userId, businessId), async (context) => {
       await paymentsRepository.record(context, businessId, owner.userId, {
         orderId,
@@ -155,7 +155,7 @@ describe("provider-events domain", () => {
     const amountMinor = 75000;
     const { businessId, orderId, base } = await createPricedOrder(owner.cookies, amountMinor);
 
-    const externalReference = `surge_test_${randomUUID()}`;
+    const externalReference = `scripe_test_${randomUUID()}`;
     await withDatabaseContext(getDatabase(), withIdentity(randomUUID(), owner.userId, businessId), async (context) => {
       await paymentsRepository.record(context, businessId, owner.userId, {
         orderId,

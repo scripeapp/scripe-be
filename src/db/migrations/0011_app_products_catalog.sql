@@ -206,4 +206,4 @@ create policy product_modifier_groups_write on app.product_modifier_groups for a
 
 grant select, insert, update on app.categories, app.products, app.product_variants, app.product_categories,
   app.units, app.unit_conversions, app.product_barcodes, app.modifier_groups, app.modifier_options,
-  app.product_modifier_groups to surge_app;
+  app.product_modifier_groups to scripe_app;

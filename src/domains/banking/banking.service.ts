@@ -102,7 +102,7 @@ export class BankingService {
 
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, { status: validation.status });
 
-      const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+      const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
       if (input.email) {
         void emailSender.sendBankingKybSubmitted?.(input.email, {
           businessName: `${input.firstName} ${input.lastName}`,
@@ -218,7 +218,7 @@ export class BankingService {
 
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, { status: validation.status, type: "corporate" });
 
-      const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+      const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
       if (input.directorEmail) {
         void emailSender.sendBankingKybSubmitted?.(input.directorEmail, {
           businessName: input.registeredBusinessName || "your business",
@@ -296,7 +296,7 @@ export class BankingService {
       await this.logAction(context, operation, "banking.virtual_account_requested", "virtual_account", created.id, {});
 
       if (profile.email && created.accountNumber && created.bankName) {
-        const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+        const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
         const accountDisplayName = created.accountName || profile.registeredBusinessName || "your business";
         void emailSender.sendVirtualAccountIssued?.(profile.email, {
           businessName: accountDisplayName,
@@ -337,7 +337,7 @@ export class BankingService {
           await repository.upsertProfile(context, operation.businessId, { kycStatus: "verified", kycVerifiedAt: new Date() });
         }
         if (account.status !== "active" && profile?.email && (account.accountNumber || updated?.accountNumber) && (account.bankName || updated?.bankName)) {
-          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://gosurge.com";
+          const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
           const accountDisplayName = updated?.accountName || account.accountName || profile.registeredBusinessName || "your business";
           void emailSender.sendVirtualAccountIssued?.(profile.email, {
             businessName: accountDisplayName,

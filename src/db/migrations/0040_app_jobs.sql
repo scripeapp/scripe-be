@@ -68,7 +68,7 @@ create policy jobs_update on app.jobs for update
 -- risk_signals.
 create policy jobs_insert on app.jobs for insert with check (true);
 
-grant select, insert, update on app.jobs to surge_app;
+grant select, insert, update on app.jobs to scripe_app;
 
 create table app.job_attempts (
   "id" uuid primary key default gen_random_uuid(),
@@ -90,7 +90,7 @@ create policy job_attempts_read on app.job_attempts for select
   using (app.is_platform_administrator());
 create policy job_attempts_insert on app.job_attempts for insert with check (true);
 
-grant select, insert on app.job_attempts to surge_app;
+grant select, insert on app.job_attempts to scripe_app;
 
 -- Atomically claims up to p_limit due jobs (pending and due, or running
 -- past a dead lease) under FOR UPDATE SKIP LOCKED, so concurrent poller
@@ -118,7 +118,7 @@ end;
 $$;
 
 revoke all on function app.claim_due_jobs(integer, integer, text) from public;
-grant execute on function app.claim_due_jobs(integer, integer, text) to surge_app;
+grant execute on function app.claim_due_jobs(integer, integer, text) to scripe_app;
 
 -- Records the attempt and transitions the job: succeeded with a
 -- next-run-at reschedules to pending (the self-perpetuating-recurring-job
@@ -161,7 +161,7 @@ end;
 $$;
 
 revoke all on function app.finish_job(uuid, boolean, text, timestamptz) from public;
-grant execute on function app.finish_job(uuid, boolean, text, timestamptz) to surge_app;
+grant execute on function app.finish_job(uuid, boolean, text, timestamptz) to scripe_app;
 
 -- The one concrete wired task this slice ships: uploads left pending (never
 -- confirmed) past the cutoff are marked failed, freeing them from lingering
@@ -180,7 +180,7 @@ as $$
 $$;
 
 revoke all on function app.expire_stale_pending_uploads(timestamptz) from public;
-grant execute on function app.expire_stale_pending_uploads(timestamptz) to surge_app;
+grant execute on function app.expire_stale_pending_uploads(timestamptz) to scripe_app;
 
 -- Idempotent bootstrap for a built-in recurring job (e.g. the upload
 -- expiry sweep) seeded on every server start: security definer since the
@@ -202,4 +202,4 @@ end;
 $$;
 
 revoke all on function app.ensure_recurring_job(text, integer) from public;
-grant execute on function app.ensure_recurring_job(text, integer) to surge_app;
+grant execute on function app.ensure_recurring_job(text, integer) to scripe_app;

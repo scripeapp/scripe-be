@@ -14,7 +14,7 @@ const PAGE = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Surge API Docs</title>
+    <title>Scripe API Docs</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/${SWAGGER_VERSION}/swagger-ui.min.css" />
     <style>body { margin: 0; background: #fafafa; }</style>
   </head>

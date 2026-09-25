@@ -79,7 +79,7 @@ export class PlunkEmailSender implements EmailSender {
   async sendVerificationCode(to: string, code: string): Promise<void> {
     await this.send({
       to,
-      subject: "Your Surge verification code",
+      subject: "Your Scripe verification code",
       html:
         `<p>Enter this code to verify your email address:</p>` +
         `<p style="font-size:24px;font-weight:700;letter-spacing:6px">${code}</p>` +
@@ -92,7 +92,7 @@ export class PlunkEmailSender implements EmailSender {
     await this.send({
       to,
       subject: "Reset your password",
-      html: `<p>Reset your Surge account password:</p><p><a href="${url}">${url}</a></p>`,
+      html: `<p>Reset your Scripe account password:</p><p><a href="${url}">${url}</a></p>`,
       logHint: `link=${url}`,
     });
   }
@@ -100,9 +100,9 @@ export class PlunkEmailSender implements EmailSender {
   async sendBusinessInvitation(to: string, params: BusinessInvitationEmail): Promise<void> {
     await this.send({
       to,
-      subject: `You've been invited to join ${params.businessName} on Surge`,
+      subject: `You've been invited to join ${params.businessName} on Scripe`,
       html:
-        `<p>${params.inviterName} invited you to join <strong>${params.businessName}</strong> on Surge.</p>` +
+        `<p>${params.inviterName} invited you to join <strong>${params.businessName}</strong> on Scripe.</p>` +
         `<p><a href="${params.acceptUrl}">${params.acceptUrl}</a></p>` +
         `<p>This invitation expires in 7 days. If you weren't expecting this, ignore this email.</p>`,
       logHint: `link=${params.acceptUrl}`,
@@ -116,7 +116,7 @@ export class PlunkEmailSender implements EmailSender {
   async sendBankingKybSubmitted(to: string, params: BankingKybSubmittedEmail): Promise<void> {
     await this.send({
       to,
-      subject: `Your business verification is under review — Surge`,
+      subject: `Your business verification is under review — Scripe`,
       html:
         `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
         `<h2 style="font-size:20px;font-weight:600;margin-bottom:16px">We received your business verification</h2>` +
@@ -133,7 +133,7 @@ export class PlunkEmailSender implements EmailSender {
   async sendBankingKybApproved(to: string, params: BankingKybApprovedEmail): Promise<void> {
     await this.send({
       to,
-      subject: `Your business verification has been approved! — Surge`,
+      subject: `Your business verification has been approved! — Scripe`,
       html:
         `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
         `<h2 style="font-size:20px;font-weight:600;color:#10b981;margin-bottom:16px">Verification Approved</h2>` +
@@ -149,7 +149,7 @@ export class PlunkEmailSender implements EmailSender {
   async sendBankingKybFailed(to: string, params: BankingKybFailedEmail): Promise<void> {
     await this.send({
       to,
-      subject: `Action required: Update your business verification — Surge`,
+      subject: `Action required: Update your business verification — Scripe`,
       html:
         `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
         `<h2 style="font-size:20px;font-weight:600;color:#ef4444;margin-bottom:16px">Verification Update Required</h2>` +
@@ -166,7 +166,7 @@ export class PlunkEmailSender implements EmailSender {
   async sendVirtualAccountIssued(to: string, params: VirtualAccountIssuedEmail): Promise<void> {
     await this.send({
       to,
-      subject: `Your dedicated corporate account is ready — Surge`,
+      subject: `Your dedicated corporate account is ready — Scripe`,
       html:
         `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
         `<h2 style="font-size:20px;font-weight:600;margin-bottom:16px">Your Business Account is Ready</h2>` +
@@ -176,7 +176,7 @@ export class PlunkEmailSender implements EmailSender {
         `<div style="margin-bottom:8px"><span style="color:#6b7280;font-size:12px;display:block">ACCOUNT NUMBER</span><strong style="font-size:18px;letter-spacing:1px">${params.accountNumber}</strong></div>` +
         `<div><span style="color:#6b7280;font-size:12px;display:block">ACCOUNT NAME</span><strong style="font-size:15px">${params.accountName}</strong></div>` +
         `</div>` +
-        `<p style="color:#4b5563;font-size:14px">Any bank transfer sent to this account will be automatically credited to your Surge business balance.</p>` +
+        `<p style="color:#4b5563;font-size:14px">Any bank transfer sent to this account will be automatically credited to your Scripe business balance.</p>` +
         `<p style="margin:24px 0"><a href="${params.dashboardUrl}" style="background-color:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:500;display:inline-block">View in Dashboard</a></p>` +
         `</div>`,
       logHint: `account_issued=${params.accountNumber}`,
@@ -186,13 +186,13 @@ export class PlunkEmailSender implements EmailSender {
   async sendVirtualAccountDeposit(to: string, params: VirtualAccountDepositEmail): Promise<void> {
     await this.send({
       to,
-      subject: `Deposit received: ${params.amountFormatted} into your business account — Surge`,
+      subject: `Deposit received: ${params.amountFormatted} into your business account — Scripe`,
       html:
         `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
         `<h2 style="font-size:20px;font-weight:600;color:#10b981;margin-bottom:16px">Deposit Received</h2>` +
         `<p>You received a new deposit into your <strong>${params.businessName}</strong> account (${params.bankName} - ${params.accountNumber.slice(-4)}):</p>` +
         `<p style="font-size:28px;font-weight:700;color:#111827;margin:16px 0">${params.amountFormatted}</p>` +
-        `<p style="color:#4b5563;font-size:14px">The funds are now credited and available in your Surge business balance.</p>` +
+        `<p style="color:#4b5563;font-size:14px">The funds are now credited and available in your Scripe business balance.</p>` +
         `<p style="margin:24px 0"><a href="${params.dashboardUrl}" style="background-color:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:500;display:inline-block">View Transaction</a></p>` +
         `</div>`,
       logHint: `deposit_received=${params.amountFormatted}`,

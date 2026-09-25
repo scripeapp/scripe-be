@@ -5,7 +5,7 @@
 -- - this logic lives inside the legacy "store" god-service, not its own
 -- module, despite the standalone delivery.service.ts (38 lines) looking
 -- like the whole feature. Verified against the live storefront checkout
--- (Surge-fe CartCheckout.tsx/FullPageCheckout.tsx) and merchant settings
+-- (Scripe-fe CartCheckout.tsx/FullPageCheckout.tsx) and merchant settings
 -- (DeliverySettings.tsx, DeliveryZonesSettings.tsx).
 --
 -- Redesigned, not ported, in one place: legacy's 20260729 migration
@@ -73,7 +73,7 @@ create policy delivery_methods_write on app.delivery_methods for all
   using (app.has_business_permission("businessId", 'delivery.manage'))
   with check (app.has_business_permission("businessId", 'delivery.manage'));
 
-grant select, insert, update, delete on app.delivery_methods to surge_app;
+grant select, insert, update, delete on app.delivery_methods to scripe_app;
 
 create table app.delivery_zones (
   "id" uuid primary key default gen_random_uuid(),
@@ -104,7 +104,7 @@ create policy delivery_zones_write on app.delivery_zones for all
   using (app.has_business_permission("businessId", 'delivery.manage'))
   with check (app.has_business_permission("businessId", 'delivery.manage'));
 
-grant select, insert, update, delete on app.delivery_zones to surge_app;
+grant select, insert, update, delete on app.delivery_zones to scripe_app;
 
 create table app.deliveries (
   "id" uuid primary key default gen_random_uuid(),
@@ -148,12 +148,12 @@ create policy deliveries_update on app.deliveries for update
   using (app.has_business_permission("businessId", 'delivery.manage'))
   with check (app.has_business_permission("businessId", 'delivery.manage'));
 
-grant select, insert, update on app.deliveries to surge_app;
+grant select, insert, update on app.deliveries to scripe_app;
 
 -- Reconciles a Shipbubble tracking-status webhook by trackingCode, the same
 -- anonymous-caller problem (and security-definer escape hatch) as the
 -- Paystack/Flutterwave checkout and communication-credit webhook paths -
--- provider-events runs every webhook as surge_app with no caller business
+-- provider-events runs every webhook as scripe_app with no caller business
 -- context.
 create or replace function app.update_delivery_from_webhook(target_tracking_code text, new_status text, new_event jsonb)
 returns table ("found" boolean, "businessId" uuid, "orderId" uuid)
@@ -180,4 +180,4 @@ end;
 $$;
 
 revoke all on function app.update_delivery_from_webhook(text, text, jsonb) from public;
-grant execute on function app.update_delivery_from_webhook(text, text, jsonb) to surge_app;
+grant execute on function app.update_delivery_from_webhook(text, text, jsonb) to scripe_app;

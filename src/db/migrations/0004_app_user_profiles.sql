@@ -4,7 +4,7 @@
 -- RLS defense-in-depth: rows are readable/updatable only by the owning user
 -- (transaction-local app.user_id). The profile is created transactionally by a
 -- SECURITY DEFINER trigger on auth.user so signup and profile are atomic.
--- Runs as surge_migrator.
+-- Runs as scripe_migrator.
 
 create table app.user_profiles (
     "userId"    uuid primary key references auth.user ("id") on delete cascade,
@@ -38,9 +38,9 @@ begin
 end $$;
 
 revoke all on function app.sync_user_profile() from public;
-grant execute on function app.sync_user_profile() to surge_app;
+grant execute on function app.sync_user_profile() to scripe_app;
 
--- Owner (surge_migrator) bypasses RLS; the definer trigger inherits that.
+-- Owner (scripe_migrator) bypasses RLS; the definer trigger inherits that.
 -- The trigger is the only insert path into app.user_profiles.
 create trigger auth_user_profile_sync
 after insert or update on auth.user
@@ -61,4 +61,4 @@ create policy user_profiles_delete_own on app.user_profiles
   for delete
   using (app.current_user_id() = "userId"::text);
 
--- No insert policy: surge_app may never insert directly; only the trigger does.
+-- No insert policy: scripe_app may never insert directly; only the trigger does.

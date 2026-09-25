@@ -107,4 +107,4 @@ create policy stock_counts_write on app.stock_counts for all using (app.has_busi
 create policy stock_count_lines_read on app.stock_count_lines for select using (app.has_business_permission("businessId", 'inventory.read'));
 create policy stock_count_lines_write on app.stock_count_lines for all using (app.has_business_permission("businessId", 'inventory.manage')) with check (app.has_business_permission("businessId", 'inventory.manage'));
 
-grant select, insert, update, delete on app.stock_transfers, app.stock_transfer_lines, app.stock_counts, app.stock_count_lines to surge_app;
+grant select, insert, update, delete on app.stock_transfers, app.stock_transfer_lines, app.stock_counts, app.stock_count_lines to scripe_app;

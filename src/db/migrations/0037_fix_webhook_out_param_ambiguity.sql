@@ -62,7 +62,7 @@ end;
 $$;
 
 revoke all on function app.capture_checkout_payment_from_webhook(text) from public;
-grant execute on function app.capture_checkout_payment_from_webhook(text) to surge_app;
+grant execute on function app.capture_checkout_payment_from_webhook(text) to scripe_app;
 
 create or replace function app.mark_withdrawal_status_from_webhook(target_provider_transfer_code text, new_status text, failure_reason text)
 returns table ("found" boolean, "businessId" uuid)
@@ -113,7 +113,7 @@ end;
 $$;
 
 revoke all on function app.mark_withdrawal_status_from_webhook(text, text, text) from public;
-grant execute on function app.mark_withdrawal_status_from_webhook(text, text, text) to surge_app;
+grant execute on function app.mark_withdrawal_status_from_webhook(text, text, text) to scripe_app;
 
 create or replace function app.record_wallet_deposit_from_webhook(
   target_provider text, target_provider_account_id text, target_provider_reference text, amount_minor bigint, asset_code text, description text
@@ -140,4 +140,4 @@ end;
 $$;
 
 revoke all on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) from public;
-grant execute on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) to surge_app;
+grant execute on function app.record_wallet_deposit_from_webhook(text, text, text, bigint, text, text) to scripe_app;

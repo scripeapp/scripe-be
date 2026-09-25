@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto"; import type { Database } from "../../d
  * revenue so the entry always balances exactly to amountMinor. "cash"
  * lands on the Cash account; every other method (card/bank_transfer/
  * online) lands on Gateway Clearing, since none of those are actually
- * swept into Surge's own bank the moment they're captured.
+ * swept into Scripe's own bank the moment they're captured.
  */
 async function postCaptureJournal(context: DatabaseContext, businessId: string, userId: string, sourceId: string, method: string, amountMinor: number | string, assetCode: string, order: OrderSnapshot): Promise<void> {
   const amount = BigInt(amountMinor);
@@ -37,7 +37,7 @@ export class PaymentsService{constructor(private readonly database:Database){} a
     return withDatabaseContext(this.database, withIdentity(operation.requestId, operation.userId, operation.businessId), async (context) => {
       await authorization.requirePermission(context, operation.businessId, "payment.manage");
 
-      const reference = `surge_${randomUUID()}`;
+      const reference = `scripe_${randomUUID()}`;
       const gateway = getCheckoutGateway(input.gateway);
       const checkout = await gateway.initializeCheckout({
         amountMinor: String(input.amountMinor),

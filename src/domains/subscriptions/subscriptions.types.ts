@@ -1,7 +1,7 @@
 /**
- * API and domain types for the Surge plan, entitlement, invoice, payment,
+ * API and domain types for the Scripe plan, entitlement, invoice, payment,
  * and dunning domain. Database row types remain generated and separate.
- * This is Surge's own SaaS billing of its merchant customers, not a
+ * This is Scripe's own SaaS billing of its merchant customers, not a
  * merchant's own customer-facing product subscriptions.
  */
 

@@ -117,4 +117,4 @@ create policy stock_movements_read on app.stock_movements for select using (app.
 create policy stock_movements_insert on app.stock_movements for insert with check (app.has_business_permission("businessId", 'inventory.manage'));
 create policy stock_reservations_read on app.stock_reservations for select using (app.has_business_permission("businessId", 'inventory.read'));
 create policy stock_reservations_write on app.stock_reservations for all using (app.has_business_permission("businessId", 'inventory.reserve')) with check (app.has_business_permission("businessId", 'inventory.reserve'));
-grant select, insert, update on app.inventory_items, app.inventory_locations, app.stock_transactions, app.stock_balances, app.stock_movements, app.stock_reservations to surge_app;
+grant select, insert, update on app.inventory_items, app.inventory_locations, app.stock_transactions, app.stock_balances, app.stock_movements, app.stock_reservations to scripe_app;

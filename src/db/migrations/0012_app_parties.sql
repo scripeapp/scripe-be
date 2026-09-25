@@ -119,7 +119,7 @@ create policy customer_accounts_write on app.customer_accounts for all using (ap
 create policy supplier_accounts_read on app.supplier_accounts for select using (app.has_business_permission("businessId", 'party.read'));
 create policy supplier_accounts_write on app.supplier_accounts for all using (app.has_business_permission("businessId", 'party.manage')) with check (app.has_business_permission("businessId", 'party.manage'));
 
-grant select, insert, update on app.parties, app.party_contacts, app.party_addresses, app.customer_accounts, app.supplier_accounts to surge_app;
+grant select, insert, update on app.parties, app.party_contacts, app.party_addresses, app.customer_accounts, app.supplier_accounts to scripe_app;
 
 insert into app.permissions ("code", "description") values
   ('party.read', 'View business parties, customers, and suppliers'),

@@ -291,8 +291,8 @@ async function processDunningSubscription(context: DatabaseContext, subscription
     const graceDaysLeft = Math.max(0, Math.ceil((DUNNING_GRACE_PERIOD_MS - failedForMs) / (24 * 60 * 60 * 1000)));
     await emailSender.sendTransactional({
       to: email,
-      subject: "Action needed: your Surge subscription payment failed",
-      html: `<p>We couldn't process your latest Surge subscription payment.</p><p>Please update your payment method within ${graceDaysLeft} day(s) to avoid being downgraded to the free Starter plan.</p>`,
+      subject: "Action needed: your Scripe subscription payment failed",
+      html: `<p>We couldn't process your latest Scripe subscription payment.</p><p>Please update your payment method within ${graceDaysLeft} day(s) to avoid being downgraded to the free Starter plan.</p>`,
     });
   }
   await repository.recordReminderSent(context, subscription.businessId, subscription.subscriptionId, { reminderNumber: subscription.reminderCount + 1 });

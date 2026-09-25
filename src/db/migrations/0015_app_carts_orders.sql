@@ -80,5 +80,5 @@ create policy orders_create on app.orders for insert with check (app.has_busines
 create policy orders_update on app.orders for update using (app.has_business_permission("businessId", 'order.create')) with check (app.has_business_permission("businessId", 'order.create'));
 create policy order_lines_read on app.order_lines for select using (app.has_business_permission("businessId", 'order.read'));
 create policy order_lines_create on app.order_lines for insert with check (app.has_business_permission("businessId", 'order.create'));
-grant select, insert, update on app.carts, app.cart_lines, app.checkout_sessions, app.orders, app.order_lines to surge_app;
-grant delete on app.cart_lines to surge_app;
+grant select, insert, update on app.carts, app.cart_lines, app.checkout_sessions, app.orders, app.order_lines to scripe_app;
+grant delete on app.cart_lines to scripe_app;

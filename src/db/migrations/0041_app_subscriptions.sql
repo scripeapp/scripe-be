@@ -1,11 +1,11 @@
--- Subscriptions: Surge's own SaaS billing of its merchant customers (a
--- business subscribing to Surge's plus/pro plan) - not a merchant's own
+-- Subscriptions: Scripe's own SaaS billing of its merchant customers (a
+-- business subscribing to Scripe's plus/pro plan) - not a merchant's own
 -- customer-facing product subscriptions (that's src/services/subscription.
 -- service.ts, legacy's store_subscriptions/membership_content, which maps
 -- to the explicitly-excluded digital-product-entitlements area and is not
 -- touched here). Ported from src/services/business-subscription.service.ts
 -- (550 lines) and src/services/plan-limits.service.ts (365 lines),
--- verified against the live upgrade/billing UI (Surge-fe
+-- verified against the live upgrade/billing UI (Scripe-fe
 -- PlanAndBillings.tsx, ProUpgradeContext.tsx, ProFeatureGate.tsx - wired
 -- into nearly every dashboard feature area).
 --
@@ -31,8 +31,8 @@
 --     (businessSubscriptionExpiryJob -> downgradeToStarter) with no
 --     reminders in between. subscription_dunning_events plus a recurring
 --     jobs-domain sweep (subscriptions.dunning_check) turns this on for
---     real: reminder emails via shared/email.ts (Surge notifying a
---     merchant about its own Surge bill - not the communications domain,
+--     real: reminder emails via shared/email.ts (Scripe notifying a
+--     merchant about its own Scripe bill - not the communications domain,
 --     which is a business's outbound messaging to its own customers, a
 --     different audience) during a grace period, then an actual downgrade
 --     if it lapses. This is the reason subscriptions came after jobs, not
@@ -49,8 +49,8 @@
 -- those resources later - not invented enforcement against nothing.
 
 insert into app.permissions ("code", "description") values
-  ('subscription.read', 'View a business''s Surge subscription, usage, and invoices'),
-  ('subscription.manage', 'Change or cancel a business''s Surge subscription')
+  ('subscription.read', 'View a business''s Scripe subscription, usage, and invoices'),
+  ('subscription.manage', 'Change or cancel a business''s Scripe subscription')
 on conflict ("code") do nothing;
 
 insert into app.role_permissions ("roleId", "permissionId")
@@ -83,7 +83,7 @@ create policy platform_plans_write on app.platform_plans for all
   using (app.is_platform_administrator())
   with check (app.is_platform_administrator());
 
-grant select, insert, update on app.platform_plans to surge_app;
+grant select, insert, update on app.platform_plans to scripe_app;
 
 create table app.platform_plan_entitlements (
   "id" uuid primary key default gen_random_uuid(),
@@ -112,7 +112,7 @@ create policy platform_plan_entitlements_write on app.platform_plan_entitlements
   using (app.is_platform_administrator())
   with check (app.is_platform_administrator());
 
-grant select, insert, update on app.platform_plan_entitlements to surge_app;
+grant select, insert, update on app.platform_plan_entitlements to scripe_app;
 
 create table app.business_subscriptions (
   "id" uuid primary key default gen_random_uuid(),
@@ -148,7 +148,7 @@ create policy business_subscriptions_write on app.business_subscriptions for all
   using (app.has_business_permission("businessId", 'subscription.manage'))
   with check (app.has_business_permission("businessId", 'subscription.manage'));
 
-grant select, insert, update on app.business_subscriptions to surge_app;
+grant select, insert, update on app.business_subscriptions to scripe_app;
 
 create table app.subscription_invoices (
   "id" uuid primary key default gen_random_uuid(),
@@ -173,7 +173,7 @@ create policy subscription_invoices_read on app.subscription_invoices for select
 create policy subscription_invoices_insert on app.subscription_invoices for insert
   with check (app.has_business_permission("businessId", 'subscription.manage'));
 
-grant select, insert, update on app.subscription_invoices to surge_app;
+grant select, insert, update on app.subscription_invoices to scripe_app;
 
 create table app.subscription_payment_attempts (
   "id" uuid primary key default gen_random_uuid(),
@@ -192,7 +192,7 @@ create policy subscription_payment_attempts_read on app.subscription_payment_att
   using (app.has_business_permission("businessId", 'subscription.read'));
 create policy subscription_payment_attempts_insert on app.subscription_payment_attempts for insert with check (true);
 
-grant select, insert on app.subscription_payment_attempts to surge_app;
+grant select, insert on app.subscription_payment_attempts to scripe_app;
 
 create table app.subscription_dunning_events (
   "id" uuid primary key default gen_random_uuid(),
@@ -213,7 +213,7 @@ create policy subscription_dunning_events_read on app.subscription_dunning_event
   using (app.has_business_permission("businessId", 'subscription.read'));
 create policy subscription_dunning_events_insert on app.subscription_dunning_events for insert with check (true);
 
-grant select, insert on app.subscription_dunning_events to surge_app;
+grant select, insert on app.subscription_dunning_events to scripe_app;
 
 -- Seed the plan catalog and entitlements - real values ported from legacy's
 -- plan_limits table (20260115_add_business_subscriptions.sql), rebranded
@@ -221,8 +221,8 @@ grant select, insert on app.subscription_dunning_events to surge_app;
 -- even the ones nothing enforces yet (see this file's header comment).
 insert into app.platform_plans ("code", "name", "priceMonthlyMinor", "paystackPlanCode", "sortOrder") values
   ('starter', 'Starter', 0, null, 0),
-  ('plus', 'Plus', 400000, 'surge-plus', 1),
-  ('pro', 'Pro', 750000, 'surge-pro', 2);
+  ('plus', 'Plus', 400000, 'scripe-plus', 1),
+  ('pro', 'Pro', 750000, 'scripe-pro', 2);
 
 insert into app.platform_plan_entitlements ("planCode", "key", "kind", "limitValue") values
   ('starter', 'team_members', 'limit', 1),
@@ -299,7 +299,7 @@ end;
 $$;
 
 revoke all on function app.get_business_entitlement(uuid, text) from public;
-grant execute on function app.get_business_entitlement(uuid, text) to surge_app;
+grant execute on function app.get_business_entitlement(uuid, text) to scripe_app;
 
 -- ============================================================================
 -- Webhook-driven state transitions. Every one of these is called from the
@@ -359,7 +359,7 @@ end;
 $$;
 
 revoke all on function app.activate_business_subscription(uuid, text, text, text, text, timestamptz, bigint, text) from public;
-grant execute on function app.activate_business_subscription(uuid, text, text, text, text, timestamptz, bigint, text) to surge_app;
+grant execute on function app.activate_business_subscription(uuid, text, text, text, text, timestamptz, bigint, text) to scripe_app;
 
 -- A recurring (non-first) successful charge on an existing subscription,
 -- matched by Paystack's subscription_code rather than businessId (the
@@ -409,7 +409,7 @@ end;
 $$;
 
 revoke all on function app.record_recurring_subscription_payment(text, bigint, timestamptz, text) from public;
-grant execute on function app.record_recurring_subscription_payment(text, bigint, timestamptz, text) to surge_app;
+grant execute on function app.record_recurring_subscription_payment(text, bigint, timestamptz, text) to scripe_app;
 
 -- subscription.enable / subscription.disable / subscription.not_renew -
 -- a plain status transition on the business's current subscription, no
@@ -443,7 +443,7 @@ end;
 $$;
 
 revoke all on function app.set_business_subscription_status(uuid, text, timestamptz) from public;
-grant execute on function app.set_business_subscription_status(uuid, text, timestamptz) to surge_app;
+grant execute on function app.set_business_subscription_status(uuid, text, timestamptz) to scripe_app;
 
 -- invoice.payment_failed - marks the subscription past_due and records both
 -- the failed invoice/attempt and the dunning event the jobs-domain sweep
@@ -486,7 +486,7 @@ end;
 $$;
 
 revoke all on function app.record_subscription_payment_failure(uuid, bigint, text) from public;
-grant execute on function app.record_subscription_payment_failure(uuid, bigint, text) to surge_app;
+grant execute on function app.record_subscription_payment_failure(uuid, bigint, text) to scripe_app;
 
 -- ============================================================================
 -- Dunning sweep (jobs domain handler) - also anonymous-caller, and unlike the
@@ -524,7 +524,7 @@ as $$
 $$;
 
 revoke all on function app.list_past_due_subscriptions_for_dunning() from public;
-grant execute on function app.list_past_due_subscriptions_for_dunning() to surge_app;
+grant execute on function app.list_past_due_subscriptions_for_dunning() to scripe_app;
 
 -- The active owner's email for a reminder notification - same anonymous-
 -- caller gap as above, this time against business_memberships (self-select
@@ -544,4 +544,4 @@ as $$
 $$;
 
 revoke all on function app.find_business_owner_email(uuid) from public;
-grant execute on function app.find_business_owner_email(uuid) to surge_app;
+grant execute on function app.find_business_owner_email(uuid) to scripe_app;

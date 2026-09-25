@@ -27,7 +27,7 @@ function createAuth() {
   }
 
   return betterAuth({
-    appName: "Surge",
+    appName: "Scripe",
     baseURL: environment.BETTER_AUTH_URL,
     secret: environment.BETTER_AUTH_SECRET,
     database: {

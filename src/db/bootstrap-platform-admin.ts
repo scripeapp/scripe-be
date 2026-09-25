@@ -4,9 +4,9 @@
  * There is no API endpoint for this and there must never be one: every
  * platform.administrators route requires the caller to already be an active
  * administrator (see domains/platform/platform.service.ts), so the very
- * first grant has to happen out-of-band. This connects as surge_migrator
+ * first grant has to happen out-of-band. This connects as scripe_migrator
  * (schema owner, exempt from RLS by default) rather than the runtime
- * surge_app role - a deliberate, narrow exception to "runtime never connects
+ * scripe_app role - a deliberate, narrow exception to "runtime never connects
  * as a schema owner" for a script a human runs by hand, once, never as part
  * of request traffic.
  *
