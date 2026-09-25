@@ -217,7 +217,7 @@ grant select, insert on app.subscription_dunning_events to surge_app;
 
 -- Seed the plan catalog and entitlements - real values ported from legacy's
 -- plan_limits table (20260115_add_business_subscriptions.sql), rebranded
--- Hilaq -> Surge. Every legacy limit/feature key is seeded (queryable),
+-- to Scripe. Every legacy limit/feature key is seeded (queryable),
 -- even the ones nothing enforces yet (see this file's header comment).
 insert into app.platform_plans ("code", "name", "priceMonthlyMinor", "paystackPlanCode", "sortOrder") values
   ('starter', 'Starter', 0, null, 0),
