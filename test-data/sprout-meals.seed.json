@@ -1,0 +1,702 @@
+{
+  "_meta": {
+    "name": "Sprout Meals — end-to-end test business",
+    "description": "A complete, realistic fictional business for exercising the platform from Home → Store → Orders → Payments → Customers → Banking. Field names and enums mirror the backend create-schemas (scripe-be/src/domains/*/*.schemas.ts) so records can be driven through the real APIs.",
+    "generatedFor": "manual + scripted end-to-end testing",
+    "owner": { "name": "Abdulsalam Abodunrin", "email": "hilaqapp@gmail.com" }
+  },
+  "_conventions": {
+    "money": "All monetary values are integers in MINOR units of the asset (NGN kobo; 100 kobo = ₦1). ₦3,500 => 350000. A few schema fields expect the minor amount as a STRING (fixedAmountMinor, triggerSpendMinor, openingCashMinor, countedCashMinor) — those are quoted.",
+    "ids": "Every record has a human-readable `ref` (e.g. \"store_main\", \"prod_jollof\"). Real UUIDs are assigned by the DB on insert; cross-references use the `ref` values (e.g. product.categoryRefs -> category.ref). Resolve refs to UUIDs when seeding.",
+    "currency": "NGN",
+    "timezone": "Africa/Lagos",
+    "country": "NG",
+    "percentages": "Discount percentages use basis points (percentageBps): 10% = 1000, 100% = 10000."
+  },
+
+  "business": {
+    "ref": "biz_sprout",
+    "displayName": "Sprout Meals",
+    "website": "https://sproutmeals.ng",
+    "primaryVertical": "food-beverage",
+    "defaultCurrency": "NGN",
+    "timezone": "Africa/Lagos",
+    "addressLine1": "14 Admiralty Way",
+    "addressLine2": "Suite 3",
+    "city": "Lekki",
+    "state": "Lagos",
+    "postalCode": "106104",
+    "country": "NG"
+  },
+
+  "units": {
+    "_note": "The platform seeds a default unit catalogue (25 units grouped as Count/Weight/Volume/etc). These are the ones Sprout Meals actually uses; `isBase` marks the base unit of each measure family.",
+    "records": [
+      { "ref": "unit_piece", "name": "Piece", "symbol": "pc", "code": "piece", "isBase": true, "type": "count" },
+      { "ref": "unit_pack",  "name": "Pack",  "symbol": "pk", "code": "pack",  "isBase": false, "type": "count" },
+      { "ref": "unit_kg",    "name": "Kilogram", "symbol": "kg", "code": "kilogram", "isBase": true, "type": "weight" },
+      { "ref": "unit_g",     "name": "Gram", "symbol": "g", "code": "gram", "isBase": false, "type": "weight" },
+      { "ref": "unit_l",     "name": "Litre", "symbol": "L", "code": "litre", "isBase": true, "type": "volume" },
+      { "ref": "unit_ml",    "name": "Millilitre", "symbol": "ml", "code": "millilitre", "isBase": false, "type": "volume" }
+    ]
+  },
+
+  "stores": [
+    {
+      "ref": "store_main",
+      "name": "Sprout Meals",
+      "slug": "sprout-meals",
+      "description": "Healthy meal prep, bowls, smoothies and catering — delivered across Lagos.",
+      "isDefault": true,
+      "sellsOnline": true,
+      "sellsInPerson": true,
+      "contactEmail": "orders@sproutmeals.ng",
+      "contactPhone": "+2348030001122",
+      "timezone": "Africa/Lagos",
+      "locations": [
+        {
+          "ref": "loc_kitchen",
+          "name": "Central Kitchen",
+          "kind": "kitchen",
+          "status": "active",
+          "isDefault": true,
+          "addressLine1": "14 Admiralty Way",
+          "city": "Lekki",
+          "state": "Lagos",
+          "postalCode": "106104",
+          "countryCode": "NG",
+          "phone": "+2348030001122",
+          "timezone": "Africa/Lagos",
+          "prepTimeMinutes": 25,
+          "operationTypes": ["pickup", "delivery"],
+          "acceptingOrders": true,
+          "taxRate": 7.5,
+          "serviceChargeRates": { "delivery": 5 },
+          "manager": "Abdulsalam Abodunrin",
+          "format": "cloud_kitchen"
+        },
+        {
+          "ref": "loc_ikeja",
+          "name": "Ikeja Pickup Branch",
+          "kind": "branch",
+          "status": "active",
+          "isDefault": false,
+          "addressLine1": "27 Allen Avenue",
+          "city": "Ikeja",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "phone": "+2348030003344",
+          "timezone": "Africa/Lagos",
+          "prepTimeMinutes": 10,
+          "operationTypes": ["pickup", "dine_in"],
+          "acceptingOrders": true,
+          "taxRate": 7.5,
+          "serviceChargeRates": {},
+          "manager": "Ngozi Umeh"
+        },
+        {
+          "ref": "loc_warehouse",
+          "name": "Dry Store Warehouse",
+          "kind": "warehouse",
+          "status": "active",
+          "isDefault": false,
+          "addressLine1": "Plot 5 Amuwo Industrial Estate",
+          "city": "Amuwo-Odofin",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "operationTypes": [],
+          "acceptingOrders": false,
+          "taxRate": 0
+        }
+      ],
+      "channels": [
+        { "ref": "ch_storefront", "code": "storefront", "name": "Online Storefront", "kind": "storefront", "status": "active" },
+        { "ref": "ch_pos", "code": "pos_ikeja", "name": "Ikeja POS", "kind": "pos", "status": "active" },
+        { "ref": "ch_invoice", "code": "manual_invoice", "name": "Catering Invoices", "kind": "manual_invoice", "status": "active" }
+      ],
+      "registers": [
+        { "ref": "reg_ikeja_1", "locationRef": "loc_ikeja", "name": "Ikeja Front Counter", "status": "active" }
+      ],
+      "shifts": [
+        {
+          "ref": "shift_2026_09_25",
+          "registerRef": "reg_ikeja_1",
+          "openingCashMinor": "2000000",
+          "countedCashMinor": "4875000",
+          "notes": "Evening shift — cash reconciled, ₦0 variance.",
+          "cashMovements": [
+            { "ref": "cash_1", "type": "pay_in", "amountMinor": "500000", "reason": "Float top-up" },
+            { "ref": "cash_2", "type": "pay_out", "amountMinor": "150000", "reason": "Dispatch rider fuel" }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "categories": [
+    { "ref": "cat_bowls", "name": "Bowls", "slug": "bowls", "parentRef": null, "description": "Signature grain and protein bowls.", "sortOrder": 1 },
+    { "ref": "cat_smoothies", "name": "Smoothies & Juices", "slug": "smoothies-juices", "parentRef": null, "description": "Cold-pressed and blended.", "sortOrder": 2 },
+    { "ref": "cat_plans", "name": "Meal Plans", "slug": "meal-plans", "parentRef": null, "description": "Weekly subscriptions.", "sortOrder": 3 },
+    { "ref": "cat_catering", "name": "Catering", "slug": "catering", "parentRef": null, "description": "Events and corporate catering.", "sortOrder": 4 },
+    { "ref": "cat_retail", "name": "Retail", "slug": "retail", "parentRef": null, "description": "Branded merchandise and packaged goods.", "sortOrder": 5 },
+    { "ref": "cat_bowls_grain", "name": "Grain Bowls", "slug": "grain-bowls", "parentRef": "cat_bowls", "description": "Rice and grain based bowls.", "sortOrder": 1 }
+  ],
+
+  "modifierGroups": [
+    {
+      "ref": "mg_protein",
+      "storeRef": "store_main",
+      "name": "Choose your protein",
+      "description": "Pick one protein for your bowl.",
+      "selectionMode": "single",
+      "minSelections": 1,
+      "maxSelections": 1,
+      "kind": "modifier",
+      "options": [
+        { "ref": "opt_chicken", "name": "Grilled Chicken", "priceAdjustmentMinor": 0, "isDefault": true, "sortOrder": 1 },
+        { "ref": "opt_beef", "name": "Peppered Beef", "priceAdjustmentMinor": 50000, "isDefault": false, "sortOrder": 2 },
+        { "ref": "opt_fish", "name": "Grilled Fish", "priceAdjustmentMinor": 80000, "isDefault": false, "sortOrder": 3 },
+        { "ref": "opt_tofu", "name": "Tofu (Vegan)", "priceAdjustmentMinor": 30000, "isDefault": false, "sortOrder": 4 }
+      ]
+    },
+    {
+      "ref": "mg_extras",
+      "storeRef": "store_main",
+      "name": "Add extras",
+      "description": "Load up your bowl.",
+      "selectionMode": "multiple",
+      "minSelections": 0,
+      "maxSelections": 5,
+      "kind": "addon",
+      "options": [
+        { "ref": "opt_plantain", "name": "Fried Plantain", "priceAdjustmentMinor": 70000, "isDefault": false, "sortOrder": 1 },
+        { "ref": "opt_sauce", "name": "Extra Pepper Sauce", "priceAdjustmentMinor": 20000, "isDefault": false, "sortOrder": 2 },
+        { "ref": "opt_egg", "name": "Boiled Egg", "priceAdjustmentMinor": 30000, "isDefault": false, "sortOrder": 3 },
+        { "ref": "opt_avocado", "name": "Avocado", "priceAdjustmentMinor": 100000, "isDefault": false, "sortOrder": 4 }
+      ]
+    }
+  ],
+
+  "products": [
+    {
+      "ref": "prod_jollof",
+      "storeRef": "store_main",
+      "name": "Smoky Jollof Rice Bowl",
+      "slug": "smoky-jollof-rice-bowl",
+      "description": "Party-style smoky jollof with your choice of protein and extras.",
+      "productType": "menu",
+      "status": "active",
+      "isSellable": true,
+      "trackInventory": false,
+      "allowBackorder": false,
+      "categoryRefs": ["cat_bowls", "cat_bowls_grain"],
+      "modifierGroupRefs": ["mg_protein", "mg_extras"],
+      "variants": [
+        { "ref": "var_jollof_reg", "name": "Regular", "sku": "JOL-REG", "isDefault": true, "unitRef": "unit_piece", "optionValues": { "size": "Regular" } },
+        { "ref": "var_jollof_lrg", "name": "Large", "sku": "JOL-LRG", "isDefault": false, "unitRef": "unit_piece", "optionValues": { "size": "Large" } }
+      ]
+    },
+    {
+      "ref": "prod_detox",
+      "storeRef": "store_main",
+      "name": "Green Detox Smoothie",
+      "slug": "green-detox-smoothie",
+      "description": "Spinach, pineapple, ginger and lime. Cold-pressed daily.",
+      "productType": "menu",
+      "status": "active",
+      "isSellable": true,
+      "trackInventory": true,
+      "allowBackorder": false,
+      "categoryRefs": ["cat_smoothies"],
+      "variants": [
+        { "ref": "var_detox_330", "name": "330ml", "sku": "DTX-330", "isDefault": true, "unitRef": "unit_ml", "optionValues": { "size": "330ml" } },
+        { "ref": "var_detox_500", "name": "500ml", "sku": "DTX-500", "isDefault": false, "unitRef": "unit_ml", "optionValues": { "size": "500ml" } }
+      ]
+    },
+    {
+      "ref": "prod_plan",
+      "storeRef": "store_main",
+      "name": "5-Day Weekday Meal Plan",
+      "slug": "5-day-weekday-meal-plan",
+      "description": "Lunch delivered Mon–Fri. Rotating menu, dietitian-designed.",
+      "productType": "service",
+      "status": "active",
+      "isSellable": true,
+      "trackInventory": false,
+      "categoryRefs": ["cat_plans"],
+      "variants": [
+        { "ref": "var_plan_std", "name": "Standard", "sku": "PLN-STD", "isDefault": true, "unitRef": "unit_pack", "optionValues": { "tier": "Standard" } },
+        { "ref": "var_plan_pro", "name": "High-Protein", "sku": "PLN-PRO", "isDefault": false, "unitRef": "unit_pack", "optionValues": { "tier": "High-Protein" } }
+      ]
+    },
+    {
+      "ref": "prod_catering",
+      "storeRef": "store_main",
+      "name": "Corporate Catering (per head)",
+      "slug": "corporate-catering-per-head",
+      "description": "Buffet catering for corporate events. Minimum 20 guests.",
+      "productType": "service",
+      "status": "active",
+      "isSellable": true,
+      "trackInventory": false,
+      "categoryRefs": ["cat_catering"],
+      "variants": [
+        { "ref": "var_catering_head", "name": "Per Guest", "sku": "CAT-HEAD", "isDefault": true, "unitRef": "unit_piece" }
+      ]
+    },
+    {
+      "ref": "prod_bottle",
+      "storeRef": "store_main",
+      "name": "Sprout Branded Water Bottle",
+      "slug": "sprout-branded-water-bottle",
+      "description": "750ml reusable steel bottle.",
+      "productType": "physical",
+      "status": "active",
+      "isSellable": true,
+      "trackInventory": true,
+      "allowBackorder": true,
+      "categoryRefs": ["cat_retail"],
+      "variants": [
+        { "ref": "var_bottle", "name": "Default", "sku": "BOTL-750", "isDefault": true, "unitRef": "unit_piece" }
+      ]
+    }
+  ],
+
+  "prices": [
+    { "ref": "price_jollof_reg", "productVariantRef": "var_jollof_reg", "assetCode": "NGN", "amountMinor": 350000, "compareAtMinor": 400000, "locationRef": null },
+    { "ref": "price_jollof_lrg", "productVariantRef": "var_jollof_lrg", "assetCode": "NGN", "amountMinor": 500000, "locationRef": null },
+    { "ref": "price_detox_330", "productVariantRef": "var_detox_330", "assetCode": "NGN", "amountMinor": 250000, "locationRef": null },
+    { "ref": "price_detox_500", "productVariantRef": "var_detox_500", "assetCode": "NGN", "amountMinor": 350000, "locationRef": null },
+    { "ref": "price_plan_std", "productVariantRef": "var_plan_std", "assetCode": "NGN", "amountMinor": 2500000, "locationRef": null },
+    { "ref": "price_plan_pro", "productVariantRef": "var_plan_pro", "assetCode": "NGN", "amountMinor": 3200000, "locationRef": null },
+    { "ref": "price_catering", "productVariantRef": "var_catering_head", "assetCode": "NGN", "amountMinor": 800000, "locationRef": null },
+    { "ref": "price_bottle", "productVariantRef": "var_bottle", "assetCode": "NGN", "amountMinor": 1500000, "compareAtMinor": 1800000, "locationRef": null }
+  ],
+
+  "discounts": [
+    {
+      "ref": "disc_welcome",
+      "kind": "code",
+      "name": "Welcome 10%",
+      "code": "WELCOME10",
+      "type": "percentage",
+      "percentageBps": 1000,
+      "isActive": true,
+      "maxUsage": 500,
+      "oneUsePerCustomer": true,
+      "appliesTo": "all",
+      "showOnStorefront": true,
+      "startsAt": "2026-09-01T00:00:00.000Z",
+      "expiresAt": "2026-12-31T23:59:59.000Z"
+    },
+    {
+      "ref": "disc_spend5k",
+      "kind": "automatic",
+      "name": "₦1,000 off orders over ₦5,000",
+      "type": "fixed",
+      "fixedAmountMinor": "100000",
+      "isActive": true,
+      "trigger": "spend_threshold",
+      "triggerSpendMinor": "500000",
+      "allowCodeOnTop": false,
+      "showOnStorefront": true
+    },
+    {
+      "ref": "disc_bowl_bogo",
+      "kind": "automatic",
+      "name": "Buy 3 bowls, 15% off",
+      "type": "percentage",
+      "percentageBps": 1500,
+      "isActive": true,
+      "trigger": "quantity_bought",
+      "triggerQuantity": 3,
+      "appliesTo": "specific_products",
+      "productRefs": ["prod_jollof"],
+      "showOnStorefront": true
+    }
+  ],
+
+  "inventory": {
+    "items": [
+      { "ref": "inv_rice", "name": "Long Grain Rice", "sku": "RAW-RICE", "unitRef": "unit_kg", "trackedAtRef": "loc_kitchen" },
+      { "ref": "inv_chicken", "name": "Chicken Breast", "sku": "RAW-CHKN", "unitRef": "unit_kg", "trackedAtRef": "loc_kitchen" },
+      { "ref": "inv_spinach", "name": "Fresh Spinach", "sku": "RAW-SPIN", "unitRef": "unit_kg", "trackedAtRef": "loc_kitchen" },
+      { "ref": "inv_detox_330", "name": "Green Detox 330ml (finished)", "sku": "DTX-330", "unitRef": "unit_piece", "trackedAtRef": "loc_kitchen" },
+      { "ref": "inv_bottle", "name": "Branded Water Bottle", "sku": "BOTL-750", "unitRef": "unit_piece", "trackedAtRef": "loc_warehouse" }
+    ],
+    "movements": [
+      { "ref": "mv_1", "inventoryItemRef": "inv_rice", "inventoryLocationRef": "loc_kitchen", "quantity": 100, "type": "receipt", "reason": "PO-2026-014 delivery", "unitCostMinor": 180000, "idempotencyKey": "mv-rice-receipt-014" },
+      { "ref": "mv_2", "inventoryItemRef": "inv_chicken", "inventoryLocationRef": "loc_kitchen", "quantity": 40, "type": "receipt", "reason": "PO-2026-014 delivery", "unitCostMinor": 320000, "idempotencyKey": "mv-chkn-receipt-014" },
+      { "ref": "mv_3", "inventoryItemRef": "inv_detox_330", "inventoryLocationRef": "loc_kitchen", "quantity": 60, "type": "count", "reason": "Opening production run", "idempotencyKey": "mv-detox-count-0925" },
+      { "ref": "mv_4", "inventoryItemRef": "inv_detox_330", "inventoryLocationRef": "loc_kitchen", "quantity": -1, "type": "sale", "reason": "Order ORD-1002", "idempotencyKey": "mv-detox-sale-1002" },
+      { "ref": "mv_5", "inventoryItemRef": "inv_spinach", "inventoryLocationRef": "loc_kitchen", "quantity": -2, "type": "waste", "reason": "Spoilage — end of day", "idempotencyKey": "mv-spin-waste-0925" }
+    ],
+    "counts": [
+      {
+        "ref": "count_0925",
+        "inventoryLocationRef": "loc_kitchen",
+        "status": "closed",
+        "notes": "Weekly stock count",
+        "lines": [
+          { "inventoryItemRef": "inv_rice", "countedQuantity": 92 },
+          { "inventoryItemRef": "inv_chicken", "countedQuantity": 33 },
+          { "inventoryItemRef": "inv_spinach", "countedQuantity": 6 }
+        ]
+      }
+    ],
+    "transfers": [
+      {
+        "ref": "xfer_1",
+        "fromLocationRef": "loc_kitchen",
+        "toLocationRef": "loc_ikeja",
+        "status": "completed",
+        "lines": [
+          { "inventoryItemRef": "inv_detox_330", "quantity": 24 }
+        ]
+      }
+    ]
+  },
+
+  "vendors": [
+    {
+      "ref": "sup_freshfarms",
+      "kind": "organization",
+      "displayName": "Fresh Farms Produce",
+      "legalName": "Fresh Farms Agro Ltd",
+      "status": "active",
+      "roles": ["supplier"],
+      "supplierAccount": {
+        "code": "SUP-001",
+        "paymentTerms": "Net 30",
+        "taxId": "TIN-20481123",
+        "contactPerson": "Emeka Obi",
+        "category": "Produce",
+        "website": "https://freshfarms.ng",
+        "bankName": "Guaranty Trust Bank",
+        "bankCode": "058",
+        "accountNumber": "0123456789",
+        "accountName": "Fresh Farms Agro Ltd",
+        "notes": "Delivers Tue & Fri. Rice, vegetables, tubers.",
+        "status": "active"
+      },
+      "contacts": [
+        { "kind": "email", "value": "sales@freshfarms.ng", "label": "Sales", "isPrimary": true },
+        { "kind": "phone", "value": "+2348021110000", "label": "WhatsApp", "isPrimary": false }
+      ],
+      "addresses": [
+        { "kind": "office", "line1": "Km 12 Ibadan Expressway", "city": "Ibadan", "state": "Oyo", "countryCode": "NG", "isDefault": true }
+      ]
+    },
+    {
+      "ref": "sup_proteinplus",
+      "kind": "organization",
+      "displayName": "Protein Plus Ltd",
+      "legalName": "Protein Plus Foods Ltd",
+      "status": "active",
+      "roles": ["supplier"],
+      "supplierAccount": {
+        "code": "SUP-002",
+        "paymentTerms": "Net 14",
+        "contactPerson": "Aisha Bello",
+        "category": "Protein",
+        "bankName": "Access Bank",
+        "bankCode": "044",
+        "accountNumber": "0987654321",
+        "accountName": "Protein Plus Foods Ltd",
+        "notes": "Chicken, fish, beef. Cold-chain delivery.",
+        "status": "active"
+      },
+      "contacts": [
+        { "kind": "phone", "value": "+2348055559999", "label": "Orders", "isPrimary": true }
+      ]
+    }
+  ],
+
+  "customers": [
+    {
+      "ref": "cust_chidinma",
+      "kind": "person",
+      "displayName": "Chidinma Okafor",
+      "status": "active",
+      "roles": ["customer"],
+      "customerAccount": { "acquisitionChannel": "instagram", "lifecycleState": "active" },
+      "contacts": [
+        { "kind": "email", "value": "chidinma.okafor@example.com", "label": "Personal", "isPrimary": true },
+        { "kind": "phone", "value": "+2348060001111", "label": "Mobile", "isPrimary": false }
+      ],
+      "addresses": [
+        { "kind": "shipping", "label": "Home", "line1": "5 Freedom Way", "city": "Lekki", "state": "Lagos", "countryCode": "NG", "isDefault": true }
+      ]
+    },
+    {
+      "ref": "cust_tunde",
+      "kind": "person",
+      "displayName": "Tunde Balogun",
+      "status": "active",
+      "roles": ["customer"],
+      "customerAccount": { "acquisitionChannel": "referral", "lifecycleState": "active" },
+      "contacts": [
+        { "kind": "phone", "value": "+2348070002222", "label": "Mobile", "isPrimary": true }
+      ],
+      "addresses": [
+        { "kind": "shipping", "label": "Office", "line1": "22 Adeola Odeku St", "city": "Victoria Island", "state": "Lagos", "countryCode": "NG", "isDefault": true }
+      ]
+    },
+    {
+      "ref": "cust_techhub",
+      "kind": "organization",
+      "displayName": "Lagos Tech Hub",
+      "legalName": "Lagos Tech Hub Ltd",
+      "status": "active",
+      "roles": ["customer"],
+      "customerAccount": { "acquisitionChannel": "corporate_outreach", "lifecycleState": "active" },
+      "contacts": [
+        { "kind": "email", "value": "ops@lagostechhub.com", "label": "Operations", "isPrimary": true }
+      ],
+      "addresses": [
+        { "kind": "billing", "label": "HQ", "line1": "1 Yaba Innovation Rd", "city": "Yaba", "state": "Lagos", "countryCode": "NG", "isDefault": true }
+      ]
+    }
+  ],
+
+  "purchaseOrders": [
+    {
+      "ref": "po_014",
+      "supplierRef": "sup_freshfarms",
+      "storeRef": "store_main",
+      "orderNumber": "PO-2026-014",
+      "status": "received",
+      "expectedAt": "2026-09-24T09:00:00.000Z",
+      "notes": "Weekly produce restock.",
+      "lines": [
+        { "ref": "pol_1", "inventoryItemRef": "inv_rice", "quantityOrdered": 100, "unitCostMinor": 180000 },
+        { "ref": "pol_2", "inventoryItemRef": "inv_spinach", "quantityOrdered": 15, "unitCostMinor": 120000 }
+      ],
+      "receipts": [
+        {
+          "ref": "rcpt_014",
+          "inventoryLocationRef": "loc_kitchen",
+          "idempotencyKey": "rcpt-po-014",
+          "lines": [
+            { "purchaseOrderLineRef": "pol_1", "inventoryItemRef": "inv_rice", "quantityReceived": 100, "quantityRejected": 0, "unitCostMinor": 180000 },
+            { "purchaseOrderLineRef": "pol_2", "inventoryItemRef": "inv_spinach", "quantityReceived": 13, "quantityRejected": 2, "unitCostMinor": 120000 }
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "po_015",
+      "supplierRef": "sup_proteinplus",
+      "storeRef": "store_main",
+      "orderNumber": "PO-2026-015",
+      "status": "sent",
+      "expectedAt": "2026-09-27T09:00:00.000Z",
+      "notes": "Chicken + fish for the weekend.",
+      "lines": [
+        { "ref": "pol_3", "inventoryItemRef": "inv_chicken", "quantityOrdered": 40, "unitCostMinor": 320000 }
+      ],
+      "receipts": []
+    }
+  ],
+
+  "bookings": {
+    "_note": "Bookings back the scheduling of `service` products (catering, meal-plan starts). Each references a service product variant + customer + slot.",
+    "records": [
+      {
+        "ref": "book_catering_techhub",
+        "productRef": "prod_catering",
+        "variantRef": "var_catering_head",
+        "customerRef": "cust_techhub",
+        "guests": 40,
+        "scheduledFor": "2026-10-03T12:00:00.000Z",
+        "locationRef": "loc_kitchen",
+        "status": "confirmed",
+        "notes": "Company town-hall buffet. Delivery + setup at Yaba HQ."
+      },
+      {
+        "ref": "book_plan_chidinma",
+        "productRef": "prod_plan",
+        "variantRef": "var_plan_pro",
+        "customerRef": "cust_chidinma",
+        "scheduledFor": "2026-09-29T00:00:00.000Z",
+        "status": "confirmed",
+        "notes": "High-protein plan starts Monday; deliver 11:30 daily."
+      }
+    ]
+  },
+
+  "orders": [
+    {
+      "ref": "ord_1001_online",
+      "orderNumber": "ORD-1001",
+      "channelRef": "ch_storefront",
+      "storeRef": "store_main",
+      "customerRef": "cust_chidinma",
+      "status": "placed",
+      "currency": "NGN",
+      "fulfillment": { "method": "delivery", "locationRef": "loc_kitchen", "address": "5 Freedom Way, Lekki, Lagos" },
+      "discountCode": "WELCOME10",
+      "lines": [
+        { "ref": "ol_1", "productVariantRef": "var_jollof_lrg", "quantity": 2, "unitPriceMinor": 500000, "selectedModifiers": { "mg_protein": ["opt_beef"], "mg_extras": ["opt_plantain", "opt_egg"] } },
+        { "ref": "ol_2", "productVariantRef": "var_detox_330", "quantity": 2, "unitPriceMinor": 250000, "selectedModifiers": {} }
+      ],
+      "totals": { "subtotalMinor": 1700000, "discountMinor": 170000, "taxMinor": 114750, "deliveryMinor": 150000, "grandTotalMinor": 1794750 },
+      "paymentRef": "pay_1001"
+    },
+    {
+      "ref": "ord_1002_pos",
+      "orderNumber": "ORD-1002",
+      "channelRef": "ch_pos",
+      "storeRef": "store_main",
+      "customerRef": null,
+      "status": "fulfilled",
+      "currency": "NGN",
+      "fulfillment": { "method": "pickup", "locationRef": "loc_ikeja" },
+      "lines": [
+        { "ref": "ol_3", "productVariantRef": "var_jollof_reg", "quantity": 1, "unitPriceMinor": 350000, "selectedModifiers": { "mg_protein": ["opt_chicken"] } },
+        { "ref": "ol_4", "productVariantRef": "var_detox_330", "quantity": 1, "unitPriceMinor": 250000, "selectedModifiers": {} }
+      ],
+      "totals": { "subtotalMinor": 600000, "discountMinor": 0, "taxMinor": 45000, "grandTotalMinor": 645000 },
+      "paymentRef": "pay_1002"
+    },
+    {
+      "ref": "ord_1003_catering",
+      "orderNumber": "ORD-1003",
+      "channelRef": "ch_invoice",
+      "storeRef": "store_main",
+      "customerRef": "cust_techhub",
+      "status": "placed",
+      "currency": "NGN",
+      "bookingRef": "book_catering_techhub",
+      "fulfillment": { "method": "delivery", "locationRef": "loc_kitchen", "address": "1 Yaba Innovation Rd, Yaba, Lagos" },
+      "lines": [
+        { "ref": "ol_5", "productVariantRef": "var_catering_head", "quantity": 40, "unitPriceMinor": 800000, "selectedModifiers": {} }
+      ],
+      "totals": { "subtotalMinor": 32000000, "discountMinor": 0, "taxMinor": 2400000, "grandTotalMinor": 34400000 },
+      "paymentRef": "pay_1003"
+    },
+    {
+      "ref": "ord_1004_refunded",
+      "orderNumber": "ORD-1004",
+      "channelRef": "ch_storefront",
+      "storeRef": "store_main",
+      "customerRef": "cust_tunde",
+      "status": "refunded",
+      "currency": "NGN",
+      "fulfillment": { "method": "delivery", "locationRef": "loc_kitchen", "address": "22 Adeola Odeku St, Victoria Island, Lagos" },
+      "lines": [
+        { "ref": "ol_6", "productVariantRef": "var_plan_std", "quantity": 1, "unitPriceMinor": 2500000, "selectedModifiers": {} }
+      ],
+      "totals": { "subtotalMinor": 2500000, "discountMinor": 0, "taxMinor": 187500, "grandTotalMinor": 2687500 },
+      "paymentRef": "pay_1004",
+      "return": { "ref": "ret_1004", "reason": "Customer travelling, cancelled plan", "status": "refunded", "refundAmountMinor": 2687500 }
+    }
+  ],
+
+  "payments": [
+    { "ref": "pay_1001", "orderRef": "ord_1001_online", "method": "online", "gateway": "paystack", "assetCode": "NGN", "amountMinor": 1794750, "status": "captured", "email": "chidinma.okafor@example.com", "externalReference": "PSK_ref_8891", "idempotencyKey": "pay-1001-online" },
+    { "ref": "pay_1002", "orderRef": "ord_1002_pos", "method": "cash", "assetCode": "NGN", "amountMinor": 645000, "status": "captured", "idempotencyKey": "pay-1002-cash" },
+    { "ref": "pay_1003", "orderRef": "ord_1003_catering", "method": "bank_transfer", "assetCode": "NGN", "amountMinor": 34400000, "status": "pending", "externalReference": "INV-1003-TRF", "idempotencyKey": "pay-1003-transfer" },
+    { "ref": "pay_1004", "orderRef": "ord_1004_refunded", "method": "online", "gateway": "paystack", "assetCode": "NGN", "amountMinor": 2687500, "status": "refunded", "externalReference": "PSK_ref_8907", "idempotencyKey": "pay-1004-online" }
+  ],
+
+  "banking": {
+    "kyb": {
+      "ref": "kyb_sprout",
+      "businessType": "limited_liability",
+      "registeredBusinessName": "Sprout Meals Ltd",
+      "registrationNumber": "RC1345678",
+      "taxIdentificationNumber": "20481123-0001",
+      "dateOfRegistration": "2023-04-18",
+      "website": "https://sproutmeals.ng",
+      "description": "Healthy meal preparation, delivery and corporate catering.",
+      "businessCategory": "Food & Beverage",
+      "annualRevenue": "₦40,000,000 - ₦80,000,000",
+      "address": {
+        "streetAddress": "14 Admiralty Way",
+        "apartment": "Suite 3",
+        "city": "Lekki",
+        "state": "Lagos",
+        "postalCode": "106104",
+        "countryCode": "NG"
+      },
+      "directors": [
+        {
+          "ref": "dir_abdulsalam",
+          "firstName": "Abdulsalam",
+          "lastName": "Abodunrin",
+          "isPrimary": true,
+          "bvn": "22190000011",
+          "dateOfBirth": "1992-07-14",
+          "phoneNumber": "+2348030001122",
+          "email": "hilaqapp@gmail.com",
+          "idType": "nin",
+          "idNumber": "12345678901",
+          "address": { "streetAddress": "14 Admiralty Way", "city": "Lekki", "state": "Lagos", "postalCode": "106104", "countryCode": "NG" }
+        },
+        {
+          "ref": "dir_ngozi",
+          "firstName": "Ngozi",
+          "lastName": "Umeh",
+          "isPrimary": false,
+          "bvn": "22190000022",
+          "dateOfBirth": "1990-02-03",
+          "phoneNumber": "+2348030003344",
+          "idType": "nin",
+          "idNumber": "10987654321",
+          "address": { "streetAddress": "27 Allen Avenue", "city": "Ikeja", "state": "Lagos", "countryCode": "NG" }
+        }
+      ],
+      "certificateOfIncorporationUploadRef": "upload_cac_cert",
+      "statusReportUploadRef": "upload_cac_status",
+      "proofOfAddressUploadRef": "upload_utility_bill",
+      "_uploads_note": "Upload IDs must reference real records created via the uploads domain before KYB submission. Placeholders here are refs to swap for uploaded-file UUIDs."
+    },
+    "virtualAccount": {
+      "ref": "va_sprout",
+      "status": "active",
+      "provider": "anchor",
+      "bankName": "Providus Bank",
+      "accountNumber": "9901234567",
+      "accountName": "Sprout Meals Ltd",
+      "currency": "NGN"
+    },
+    "wallet": {
+      "ref": "wallet_sprout",
+      "currency": "NGN",
+      "availableBalanceMinor": 33900000,
+      "transactions": [
+        { "ref": "wtx_1", "type": "credit", "source": "order_settlement", "amountMinor": 1794750, "reference": "SETTLE-ORD-1001", "status": "completed", "narration": "Paystack settlement — ORD-1001" },
+        { "ref": "wtx_2", "type": "credit", "source": "order_settlement", "amountMinor": 645000, "reference": "SETTLE-ORD-1002", "status": "completed", "narration": "POS cash lodgement — ORD-1002" },
+        { "ref": "wtx_3", "type": "debit", "source": "withdrawal", "amountMinor": 500000, "reference": "WD-2026-0001", "status": "completed", "narration": "Owner payout" },
+        { "ref": "wtx_4", "type": "debit", "source": "supplier_payment", "amountMinor": 2100000, "reference": "PAY-SUP-001", "status": "completed", "narration": "Fresh Farms — PO-2026-014" }
+      ]
+    },
+    "withdrawals": [
+      {
+        "ref": "wd_0001",
+        "amountMinor": 500000,
+        "status": "completed",
+        "beneficiary": {
+          "bankName": "Guaranty Trust Bank",
+          "bankCode": "058",
+          "accountNumber": "0011223344",
+          "accountName": "Abdulsalam Abodunrin"
+        },
+        "narration": "Owner payout"
+      }
+    ]
+  },
+
+  "testFlows": [
+    "Home/onboarding: create business (name, website, address) -> lands on dashboard.",
+    "Store setup: create store_main -> locations -> channels -> register -> open shift.",
+    "Catalogue: create categories -> units in use -> modifier groups/options -> products + variants -> prices.",
+    "Discounts: WELCOME10 (code), spend-threshold auto, quantity auto -> verify totals on ord_1001.",
+    "Inventory: receive PO-2026-014 -> stock count -> transfer to Ikeja -> waste adjustment.",
+    "Customers & vendors: create the 3 customers and 2 suppliers with contacts/addresses.",
+    "Orders: place ord_1001 (online+discount+delivery), ord_1002 (POS pickup cash), ord_1003 (catering invoice), refund ord_1004.",
+    "Payments: paystack checkout for ord_1001, cash capture for ord_1002, pending transfer for ord_1003, refund ord_1004.",
+    "Banking: submit KYB -> request virtual account -> observe order settlements as wallet credits -> withdrawal."
+  ]
+}
