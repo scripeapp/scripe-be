@@ -84,6 +84,7 @@ function toBusiness(row: BusinessListRow): Business {
     timezone: row.timezone,
     primaryVertical: row.primaryVertical,
     createdBy: row.createdBy,
+    website: row.website,
     addressLine1: row.addressLine1,
     addressLine2: row.addressLine2,
     city: row.city,

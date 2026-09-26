@@ -15,6 +15,15 @@ export const createBusinessSchema = z.object({
 export const updateBusinessSchema = createBusinessSchema
   .partial()
   .extend({
+    website: z
+      .string()
+      .trim()
+      .max(2048)
+      .refine(
+        (value) => value === "" || /^https?:\/\//i.test(value),
+        "Website must start with http:// or https://",
+      )
+      .optional(),
     addressLine1: z.string().trim().min(1).max(200).nullable().optional(),
     addressLine2: z.string().trim().min(1).max(200).nullable().optional(),
     city: z.string().trim().min(1).max(100).nullable().optional(),

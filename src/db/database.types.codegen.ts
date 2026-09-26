@@ -271,6 +271,7 @@ export interface Businesses {
   status: Generated<string>;
   timezone: Generated<string>;
   updatedAt: Generated<Timestamp>;
+  website: Generated<string>;
 }
 
 export interface BusinessInvitations {
