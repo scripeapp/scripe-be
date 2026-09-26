@@ -1,4 +1,4 @@
--- Restores 0053's single-director and settlement columns (primary director
+-- Restores 0054's single-director and settlement columns (primary director
 -- copied back) and its document lookup function.
 
 alter table app.banking_profiles
