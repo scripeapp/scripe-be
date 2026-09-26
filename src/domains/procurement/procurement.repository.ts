@@ -94,7 +94,7 @@ export async function listPurchaseOrders(c: DatabaseContext, businessId: string,
   if (f.storeId) clauses.push(sql`po."storeId" = ${f.storeId}::uuid`);
   if (f.supplierAccountId) clauses.push(sql`po."supplierAccountId" = ${f.supplierAccountId}::uuid`);
   if (f.status) clauses.push(sql`po."status" = ${f.status}`);
-  if (f.search) clauses.push(sql`(po."orderNumber" ilike ${`%${f.search}%`} or s."name" ilike ${`%${f.search}%`})`);
+  if (f.search) clauses.push(sql`(po."orderNumber" ilike ${`%${f.search}%`} or sp."displayName" ilike ${`%${f.search}%`})`);
 
   const whereClause = sql.join(clauses, sql` and `);
   const page = f.page ?? 1;
@@ -105,6 +105,7 @@ export async function listPurchaseOrders(c: DatabaseContext, businessId: string,
     select count(*)::text as "count"
     from app.purchase_orders po
     left join app.supplier_accounts s on s."id" = po."supplierAccountId" and s."businessId" = po."businessId"
+    left join app.parties sp on sp."id" = s."partyId" and sp."businessId" = s."businessId"
     where ${whereClause}
   `.execute(c.transaction);
   const total = Number(countResult.rows[0]?.count ?? 0);
@@ -123,7 +124,7 @@ export async function listPurchaseOrders(c: DatabaseContext, businessId: string,
       po."createdBy",
       po."createdAt"::text as "createdAt",
       po."updatedAt"::text as "updatedAt",
-      s."name" as "supplierName",
+      sp."displayName" as "supplierName",
       st."name" as "storeName",
       coalesce((
         select count(*)::int
@@ -137,6 +138,7 @@ export async function listPurchaseOrders(c: DatabaseContext, businessId: string,
       ), '0') as "totalMinor"
     from app.purchase_orders po
     left join app.supplier_accounts s on s."id" = po."supplierAccountId" and s."businessId" = po."businessId"
+    left join app.parties sp on sp."id" = s."partyId" and sp."businessId" = s."businessId"
     left join app.stores st on st."id" = po."storeId" and st."businessId" = po."businessId"
     where ${whereClause}
     order by po."createdAt" desc
@@ -161,7 +163,7 @@ export async function findPurchaseOrderById(c: DatabaseContext, businessId: stri
       po."createdBy",
       po."createdAt"::text as "createdAt",
       po."updatedAt"::text as "updatedAt",
-      s."name" as "supplierName",
+      sp."displayName" as "supplierName",
       st."name" as "storeName",
       coalesce((
         select count(*)::int
@@ -175,6 +177,7 @@ export async function findPurchaseOrderById(c: DatabaseContext, businessId: stri
       ), '0') as "totalMinor"
     from app.purchase_orders po
     left join app.supplier_accounts s on s."id" = po."supplierAccountId" and s."businessId" = po."businessId"
+    left join app.parties sp on sp."id" = s."partyId" and sp."businessId" = s."businessId"
     left join app.stores st on st."id" = po."storeId" and st."businessId" = po."businessId"
     where po."id" = ${orderId}::uuid and po."businessId" = ${businessId}::uuid
     limit 1

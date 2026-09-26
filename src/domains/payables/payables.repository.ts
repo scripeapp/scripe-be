@@ -43,7 +43,7 @@ export async function listBills(c: DatabaseContext, businessId: string, f: ListB
   const clauses: RawBuilder<unknown>[] = [sql`b."businessId" = ${businessId}::uuid`];
   if (f.status) clauses.push(sql`b."status" = ${f.status}`);
   if (f.supplierAccountId) clauses.push(sql`b."supplierAccountId" = ${f.supplierAccountId}::uuid`);
-  if (f.search) clauses.push(sql`(b."billNumber" ilike ${`%${f.search}%`} or s."name" ilike ${`%${f.search}%`})`);
+  if (f.search) clauses.push(sql`(b."billNumber" ilike ${`%${f.search}%`} or sp."displayName" ilike ${`%${f.search}%`})`);
 
   const whereClause = sql.join(clauses, sql` and `);
   const page = f.page ?? 1;
@@ -54,6 +54,7 @@ export async function listBills(c: DatabaseContext, businessId: string, f: ListB
     select count(*)::text as "count"
     from app.bills b
     left join app.supplier_accounts s on s."id" = b."supplierAccountId" and s."businessId" = b."businessId"
+    left join app.parties sp on sp."id" = s."partyId" and sp."businessId" = s."businessId"
     where ${whereClause}
   `.execute(c.transaction);
   const total = Number(countResult.rows[0]?.count ?? 0);
@@ -77,7 +78,7 @@ export async function listBills(c: DatabaseContext, businessId: string, f: ListB
       b."createdBy",
       b."createdAt"::text as "createdAt",
       b."updatedAt"::text as "updatedAt",
-      s."name" as "supplierName",
+      sp."displayName" as "supplierName",
       coalesce((
         select count(*)::int
         from app.bill_lines bl
@@ -85,6 +86,7 @@ export async function listBills(c: DatabaseContext, businessId: string, f: ListB
       ), 0) as "itemsCount"
     from app.bills b
     left join app.supplier_accounts s on s."id" = b."supplierAccountId" and s."businessId" = b."businessId"
+    left join app.parties sp on sp."id" = s."partyId" and sp."businessId" = s."businessId"
     where ${whereClause}
     order by b."createdAt" desc
     limit ${pageSize} offset ${offset}
@@ -113,7 +115,7 @@ export async function findBillById(c: DatabaseContext, businessId: string, billI
       b."createdBy",
       b."createdAt"::text as "createdAt",
       b."updatedAt"::text as "updatedAt",
-      s."name" as "supplierName",
+      sp."displayName" as "supplierName",
       coalesce((
         select count(*)::int
         from app.bill_lines bl
@@ -121,6 +123,7 @@ export async function findBillById(c: DatabaseContext, businessId: string, billI
       ), 0) as "itemsCount"
     from app.bills b
     left join app.supplier_accounts s on s."id" = b."supplierAccountId" and s."businessId" = b."businessId"
+    left join app.parties sp on sp."id" = s."partyId" and sp."businessId" = s."businessId"
     where b."id" = ${billId}::uuid and b."businessId" = ${businessId}::uuid
     limit 1
   `.execute(c.transaction);

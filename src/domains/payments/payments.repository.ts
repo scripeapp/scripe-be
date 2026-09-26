@@ -144,10 +144,18 @@ export async function listPayments(
       o."orderNumber",
       o."totalMinor"::text as "orderTotalMinor",
       coalesce(pt."displayName", '') as "customerName",
-      coalesce(pt."email", '') as "customerEmail"
+      coalesce(pc."value", '') as "customerEmail"
     from app.payments p
     left join app.orders o on o."id" = p."orderId" and o."businessId" = p."businessId"
     left join app.parties pt on pt."id" = o."customerPartyId" and pt."businessId" = p."businessId"
+    left join lateral (
+      select "value"
+      from app.party_contacts
+      where "partyId" = pt."id" and "businessId" = pt."businessId"
+        and "kind" = 'email' and "status" = 'active'
+      order by "isPrimary" desc
+      limit 1
+    ) pc on true
     where p."businessId" = ${businessId}::uuid
       and (${filter.orderId ?? null}::uuid is null or p."orderId" = ${filter.orderId ?? null}::uuid)
       and (${filter.status ?? null}::text is null or p."status" = ${filter.status ?? null})
@@ -193,10 +201,18 @@ export async function findPaymentById(
       o."orderNumber",
       o."totalMinor"::text as "orderTotalMinor",
       coalesce(pt."displayName", '') as "customerName",
-      coalesce(pt."email", '') as "customerEmail"
+      coalesce(pc."value", '') as "customerEmail"
     from app.payments p
     left join app.orders o on o."id" = p."orderId" and o."businessId" = p."businessId"
     left join app.parties pt on pt."id" = o."customerPartyId" and pt."businessId" = p."businessId"
+    left join lateral (
+      select "value"
+      from app.party_contacts
+      where "partyId" = pt."id" and "businessId" = pt."businessId"
+        and "kind" = 'email' and "status" = 'active'
+      order by "isPrimary" desc
+      limit 1
+    ) pc on true
     where p."businessId" = ${businessId}::uuid
       and p."id" = ${paymentId}::uuid
   `.execute(c.transaction)).rows[0];
