@@ -58,6 +58,7 @@ export async function updateBusiness(context: DatabaseContext, businessId: strin
   if (input.defaultCurrency !== undefined) fields.push(sql`"defaultCurrency"=${input.defaultCurrency}`);
   if (input.timezone !== undefined) fields.push(sql`"timezone"=${input.timezone}`);
   if (input.primaryVertical !== undefined) fields.push(sql`"primaryVertical"=${input.primaryVertical}`);
+  if (input.website !== undefined) fields.push(sql`"website"=${input.website}`);
   if (input.addressLine1 !== undefined) fields.push(sql`"addressLine1"=${input.addressLine1}`);
   if (input.addressLine2 !== undefined) fields.push(sql`"addressLine2"=${input.addressLine2}`);
   if (input.city !== undefined) fields.push(sql`"city"=${input.city}`);
