@@ -43,8 +43,66 @@ function periodStart(period: (typeof PERIODS)[number]): Date | null {
   }
 }
 
+const storeAnalyticsQuerySchema = z.object({
+  business_id: z.string().uuid(),
+  store_id: z.string().uuid(),
+  branch_id: z.string().uuid().optional(),
+});
+
+const POS_RANGES = ["7d", "30d", "all"] as const;
+const posAnalyticsQuerySchema = z.object({
+  business_id: z.string().uuid(),
+  store_id: z.string().uuid(),
+  range: z.enum(POS_RANGES).default("30d"),
+});
+
+function posRangeStart(range: (typeof POS_RANGES)[number]): Date | null {
+  if (range === "all") return null;
+  const start = new Date();
+  start.setDate(start.getDate() - (range === "7d" ? 7 : 30));
+  return start;
+}
+
 export class DashboardController {
   constructor(private readonly service: DashboardService) {}
+
+  readonly storeAnalytics = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { userId } = requireAuthContext(request);
+      const { business_id, store_id, branch_id } = storeAnalyticsQuerySchema.parse(request.query);
+      const data = await this.service.storeAnalytics(
+        { userId, requestId: request.requestId, businessId: business_id },
+        store_id,
+        branch_id ?? null,
+      );
+      ApiResponse.success(response, data);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  readonly posAnalytics = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { userId } = requireAuthContext(request);
+      const { business_id, store_id, range } = posAnalyticsQuerySchema.parse(request.query);
+      const data = await this.service.posAnalytics(
+        { userId, requestId: request.requestId, businessId: business_id },
+        store_id,
+        posRangeStart(range),
+      );
+      ApiResponse.success(response, data);
+    } catch (error) {
+      next(error);
+    }
+  };
 
   readonly stats = async (
     request: Request,

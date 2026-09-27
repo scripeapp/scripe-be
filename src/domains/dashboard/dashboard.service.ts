@@ -5,7 +5,7 @@ import { withIdentity } from "../../db/principal.js";
 import { AppError } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
 import * as repo from "./dashboard.repository.js";
-import type { DashboardStats } from "./dashboard.repository.js";
+import type { DashboardStats, PosAnalytics, StoreAnalytics } from "./dashboard.repository.js";
 
 export interface DashboardOperation {
   readonly userId: string;
@@ -24,6 +24,28 @@ export class DashboardService {
     return this.run(operation, async (context) => {
       await authorization.requirePermission(context, operation.businessId, "order.read");
       return repo.getStats(context, operation.businessId, currency, since);
+    });
+  }
+
+  async storeAnalytics(
+    operation: DashboardOperation,
+    storeId: string,
+    branchId: string | null,
+  ): Promise<StoreAnalytics> {
+    return this.run(operation, async (context) => {
+      await authorization.requirePermission(context, operation.businessId, "order.read");
+      return repo.getStoreAnalytics(context, operation.businessId, storeId, branchId);
+    });
+  }
+
+  async posAnalytics(
+    operation: DashboardOperation,
+    storeId: string,
+    since: Date | null,
+  ): Promise<PosAnalytics> {
+    return this.run(operation, async (context) => {
+      await authorization.requirePermission(context, operation.businessId, "order.read");
+      return repo.getPosAnalytics(context, operation.businessId, storeId, since);
     });
   }
 

@@ -16,6 +16,8 @@ import { createAuditRouter } from "./domains/audit/audit.routes.js";
 import { createUploadsRouter } from "./domains/uploads/uploads.routes.js";
 import { createBusinessesRouter } from "./domains/businesses/businesses.routes.js";
 import { createDashboardRouter } from "./domains/dashboard/dashboard.routes.js";
+import { createBookingsRouter } from "./domains/bookings/bookings.routes.js";
+import { createSchedulingRouter } from "./domains/scheduling/scheduling.routes.js";
 import { createAuthorizationRouter } from "./domains/authorization/authorization.routes.js";
 import { createStoresRouter } from "./domains/stores/stores.routes.js";
 import { createPartiesRouter } from "./domains/parties/parties.routes.js";
@@ -86,6 +88,8 @@ export function createApp(): Express {
   app.use(createUploadsRouter());
   app.use(createBusinessesRouter());
   app.use(createDashboardRouter());
+  app.use(createBookingsRouter());
+  app.use(createSchedulingRouter());
   app.use(createAuthorizationRouter());
   app.use(createStoresRouter());
   app.use(createPartiesRouter());
