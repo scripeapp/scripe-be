@@ -16,6 +16,7 @@ export function createSchedulingRouter(): Router {
   router.delete("/api/availability/:id", requireAuth, controller.deleteAvailability);
 
   // Bookable event types.
+  router.get("/api/scheduling/bookings", requireAuth, controller.listBookings);
   router.get("/api/scheduling/event-types", requireAuth, controller.listEventTypes);
   router.post("/api/scheduling/event-types", requireAuth, controller.createEventType);
   router.patch("/api/scheduling/event-types/:id", requireAuth, controller.updateEventType);

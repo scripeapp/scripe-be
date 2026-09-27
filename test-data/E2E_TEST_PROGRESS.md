@@ -47,14 +47,16 @@ Tracking doc so anyone can continue from where testing stopped. Test data: [`spr
   - `GET/POST /api/scheduling/event-types`, `PATCH/DELETE /api/scheduling/event-types/:id` — verified (create Haircut 45min slug=haircut pay=500000, list).
 - Responses match the FE `AvailabilityProfile` / `EventType` snake_case shapes.
 
-## 🔴 Blocker for the Bookings SCREEN — frontend restore is incomplete
-The 4 restored files (`BookingsManager`, `AvailabilityView`, `EventTypeList`, `AvailabilitySelector`) import **9 files that were deleted and NOT restored**, so the screen cannot compile regardless of the backend:
+## Scheduling FE query layer ✅ built & clean
+`queries/scheduling/{queryKeys,api,hooks}.ts` — built against the new endpoints, **zero type errors**. Exports the surface the components import: `useSchedulingAvailabilityQuery`, `useSchedulingEventTypesQuery`, `useSchedulingBookingsQuery`, `useSeedSchedulingDefaultsMutation`, `type SchedulingBooking`, `schedulingKeys`. Also added `GET /api/scheduling/bookings` (returns `[]` — appointment persistence is a later step) so the hook resolves 200, not 404.
+
+## 🔴 Remaining blocker — 7 pure-UI files still missing from the restore (down from 9)
+The restored components still import UI files that were deleted and NOT restored (I can't recreate these to spec — they're complex drawers/forms/lists with no source available):
 - `Store/Scheduling/EventTypeDetailsDrawer`, `Store/Scheduling/EventTypeForm`
 - `Store/AvailabilityList`, `Store/AvailabilityDetails`, `Store/AvailabilityFormModal`
-- `queries/scheduling/hooks`, `queries/scheduling/queryKeys`
 - `contexts/ProUpgradeContext`, `components/Pro/ProFeatureGate`
-Plus two that EXIST but at the wrong path (BookingsManager imports them from subfolders): `Store/EventTypeList` → `Store/Scheduling/EventTypeList`, `Store/AvailabilityView` → `Store/Availability/AvailabilityView`.
-**Action for whoever continues:** restore those 9 files from the same source the other 4 came from, then the components compile against the now-complete backend. Target grouping: a `Store/Booking/` (or `Scheduling/` + `Availability/`) folder. Then wire `BookingsManager` into the Store→Bookings nav (`config/navigation.tsx` sub `bookings`), which currently falls back to the store overview.
+Plus two that EXIST but need MOVING (BookingsManager imports them from subfolders): `Store/EventTypeList` → `Store/Scheduling/EventTypeList`, `Store/AvailabilityView` → `Store/Availability/AvailabilityView`.
+**To finish:** restore those 7 files from the same source the other 4 came from. Then the components compile against the (now complete) backend + query layer — remaining tsc errors are confined to `AvailabilityView`, `BookingsManager`, `EventTypeList` and are entirely these missing imports. Then: group into `Store/Booking/` and wire `BookingsManager` into the Store→Bookings nav (`config/navigation.tsx` sub `bookings`).
 - **[Bookings — Figma spec]** service creation → uses booking component: https://www.figma.com/design/mHjpXjEKSUPSMwFnYfo8gh/Scripe?node-id=2092-118809&m=dev
 - **[Purchase orders — UX] "Add new product" in the PO line-item search navigates away** to the full 7-step product wizard, abandoning the in-progress PO. To add a PO line you need an existing purchasable item; there's no lightweight inline "add item" that keeps you on the PO. Backend is fine (create/list verified). _Frontend UX improvement, not a backend gap._ **Figma spec:** https://www.figma.com/design/mHjpXjEKSUPSMwFnYfo8gh/Scripe?node-id=4415-139423&m=dev — use this to align the PO screen / inline add-item flow.
 - **[Units] `app.units` DB table is unused by the UI** — the Units page renders a static frontend catalogue (`utils/units.buildUnitFallback`) rather than the DB table. Cosmetic/architectural; not user-facing. _No action._

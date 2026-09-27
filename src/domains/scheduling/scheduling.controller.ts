@@ -51,6 +51,14 @@ export class SchedulingController {
     this.service.listEventTypes(this.userId(request), request.requestId, requireBusinessId(request)),
   );
 
+  // Event-type appointments. Persistence is not wired yet (the storefront
+  // scheduling-checkout is a later step), so this returns an empty list rather
+  // than 404 — the Bookings screen renders its empty state cleanly.
+  readonly listBookings = this.handle(async (request) => {
+    requireBusinessId(request);
+    return [] as unknown[];
+  });
+
   readonly createEventType = this.handle(async (request) =>
     this.service.createEventType(this.userId(request), request.requestId, requireBusinessId(request), request.body ?? {}),
     201,
