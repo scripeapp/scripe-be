@@ -22,6 +22,8 @@ import { createAuthorizationRouter } from "./domains/authorization/authorization
 import { createStoresRouter } from "./domains/stores/stores.routes.js";
 import { createPartiesRouter } from "./domains/parties/parties.routes.js";
 import { createProductsRouter } from "./domains/products/products.routes.js";
+import { createServiceSettingsRouter } from "./domains/service-settings/service-settings.routes.js";
+import { createStaffRouter } from "./domains/staff/staff.routes.js";
 import { createPricingRouter } from "./domains/pricing/pricing.routes.js";
 import { createInventoryRouter } from "./domains/inventory/inventory.routes.js";
 import { createCartsRouter } from "./domains/carts/carts.routes.js";
@@ -94,6 +96,8 @@ export function createApp(): Express {
   app.use(createStoresRouter());
   app.use(createPartiesRouter());
   app.use(createProductsRouter());
+  app.use(createServiceSettingsRouter());
+  app.use(createStaffRouter());
   app.use(createPricingRouter());
   app.use(createInventoryRouter());
   app.use(createCartsRouter());

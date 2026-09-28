@@ -159,20 +159,75 @@ export interface AuditEvents {
   userAgent: string | null;
 }
 
-export interface BankingProfiles {
+export interface AvailabilityProfiles {
   businessId: string;
-  bvn: string | null;
   createdAt: Generated<Timestamp>;
+  data: Generated<Json>;
+  id: Generated<string>;
+  name: string;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface BankingKybDirectors {
+  businessId: string;
+  bvn: string;
+  createdAt: Generated<Timestamp>;
+  dateOfBirth: string;
+  email: string;
+  firstName: string;
+  fullName: string;
+  id: Generated<string>;
+  idDocumentUploadId: string;
+  idNumber: string;
+  idType: string;
+  isPrimary: Generated<boolean>;
+  lastName: string;
+  middleName: string | null;
+  phone: string;
+  position: number;
+}
+
+export interface BankingKycAttempts {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  userId: string;
+}
+
+export interface BankingProfiles {
+  annualRevenue: string | null;
+  businessAddress: Json | null;
+  businessCategory: string | null;
+  businessId: string;
+  businessType: Generated<string | null>;
+  bvn: string | null;
+  certificateOfIncorporationUploadId: string | null;
+  createdAt: Generated<Timestamp>;
+  dateOfRegistration: Timestamp | null;
+  description: string | null;
   email: string | null;
   firstName: string | null;
+  kybReviewedAt: Timestamp | null;
+  kybReviewedBy: string | null;
+  kybReviewNotes: string | null;
   kycFailureReason: string | null;
   kycStatus: Generated<string>;
   kycSubmittedAt: Timestamp | null;
   kycVerifiedAt: Timestamp | null;
   lastName: string | null;
+  notificationEmail: string | null;
   phone: string | null;
+  proofOfAddressUploadId: string | null;
   providerCustomerCode: string | null;
+  providerCustomerType: string | null;
+  registeredBusinessName: string | null;
+  registrationNumber: string | null;
+  statusReportUploadId: string | null;
+  taxIdentificationNumber: string | null;
   updatedAt: Generated<Timestamp>;
+  website: string | null;
 }
 
 export interface BeneficialOwners {
@@ -251,6 +306,33 @@ export interface Bills {
   supplierAccountId: string | null;
   taxMinor: Generated<Int8>;
   totalMinor: Int8;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Bookings {
+  bookingDate: Timestamp;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  customerEmail: string | null;
+  customerName: string | null;
+  customerPartyId: string | null;
+  customerPhone: string | null;
+  declineReason: string | null;
+  durationMinutes: number | null;
+  endTime: string;
+  expiresAt: Timestamp | null;
+  id: Generated<string>;
+  initiatedBy: string | null;
+  locationDetails: string | null;
+  locationType: string | null;
+  orderId: string | null;
+  productId: string;
+  requiresApproval: Generated<boolean>;
+  rescheduledFrom: Timestamp | null;
+  startTime: string;
+  status: Generated<string>;
+  storeId: string;
+  timezone: Generated<string>;
   updatedAt: Generated<Timestamp>;
 }
 
@@ -679,6 +761,18 @@ export interface Discounts {
   usageCount: Generated<number>;
 }
 
+export interface EventTypes {
+  availabilityProfileId: string | null;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  data: Generated<Json>;
+  id: Generated<string>;
+  isActive: Generated<boolean>;
+  slug: string;
+  title: string;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface FiscalDocuments {
   businessId: string;
   createdBy: string | null;
@@ -822,6 +916,7 @@ export interface LedgerAccounts {
 }
 
 export interface Locations {
+  acceptingOrders: Generated<boolean>;
   addressLine1: string | null;
   addressLine2: string | null;
   archivedAt: Timestamp | null;
@@ -830,18 +925,23 @@ export interface Locations {
   city: string | null;
   countryCode: Generated<string>;
   createdAt: Generated<Timestamp>;
+  format: string | null;
   id: Generated<string>;
   isDefault: Generated<boolean>;
   kind: Generated<string>;
   latitude: Numeric | null;
   longitude: Numeric | null;
+  manager: string | null;
   name: string;
+  operationTypes: Generated<string[]>;
   phone: string | null;
   postalCode: string | null;
   prepTimeMinutes: number | null;
+  serviceChargeRates: Generated<Json>;
   state: string | null;
   status: Generated<string>;
   storeId: string;
+  taxRate: Generated<Numeric>;
   timezone: Generated<string>;
   updatedAt: Generated<Timestamp>;
 }
@@ -853,22 +953,31 @@ export interface MembershipRoles {
 }
 
 export interface ModifierGroups {
+  branchIds: string[] | null;
   businessId: string;
   createdAt: Generated<Timestamp>;
+  description: Generated<string>;
   id: Generated<string>;
+  kind: Generated<string>;
   maxSelections: number | null;
   minSelections: Generated<number>;
   name: string;
   selectionMode: Generated<string>;
+  sortOrder: Generated<number>;
   status: Generated<string>;
+  storeId: string;
   updatedAt: Generated<Timestamp>;
 }
 
 export interface ModifierOptions {
+  branchIds: string[] | null;
   businessId: string;
   createdAt: Generated<Timestamp>;
+  extraDurationMinutes: Generated<number>;
   groupId: string;
   id: Generated<string>;
+  isAvailable: Generated<boolean>;
+  isDefault: Generated<boolean>;
   name: string;
   priceAdjustmentMinor: Generated<Int8>;
   sortOrder: Generated<number>;
@@ -1181,6 +1290,23 @@ export interface Products {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface ProductServiceSettings {
+  bufferAfterMinutes: Generated<number>;
+  bufferBeforeMinutes: Generated<number>;
+  businessId: string;
+  cancellationWindowMin: Generated<number>;
+  createdAt: Generated<Timestamp>;
+  depositRule: Generated<Json>;
+  durationMinutes: number;
+  locationType: Generated<string>;
+  maxAdvanceDays: Generated<number>;
+  minNoticeMinutes: Generated<number>;
+  productId: string;
+  requiresApproval: Generated<boolean>;
+  slotIntervalMinutes: Generated<number>;
+  updatedAt: Generated<Timestamp>;
+}
+
 export interface ProductVariants {
   archivedAt: Timestamp | null;
   businessId: string;
@@ -1344,6 +1470,51 @@ export interface SalesChannels {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface ScheduleExceptions {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  endsAt: Timestamp;
+  id: Generated<string>;
+  kind: string;
+  locationId: string | null;
+  reason: string | null;
+  staffId: string | null;
+  startsAt: Timestamp;
+}
+
+export interface StaffProfiles {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  displayName: string;
+  id: Generated<string>;
+  isBookable: Generated<boolean>;
+  membershipId: string | null;
+  partyId: string | null;
+  photoUploadId: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface StaffSchedules {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  endTime: string;
+  id: Generated<string>;
+  locationId: string;
+  staffId: string;
+  startTime: string;
+  weekday: number;
+}
+
+export interface StaffServices {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  durationOverrideMinutes: number | null;
+  id: Generated<string>;
+  productId: string;
+  staffId: string;
+  variantId: string | null;
+}
+
 export interface StockBalances {
   businessId: string;
   id: Generated<string>;
@@ -1351,6 +1522,31 @@ export interface StockBalances {
   inventoryLocationId: string;
   onHand: Generated<Numeric>;
   reserved: Generated<Numeric>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface StockCountLines {
+  businessId: string;
+  countedQuantity: Numeric;
+  countId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  inventoryItemId: string;
+  systemQuantity: Numeric;
+}
+
+export interface StockCounts {
+  appliedAt: Timestamp | null;
+  businessId: string;
+  countDate: Generated<Timestamp>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  id: Generated<string>;
+  inventoryLocationId: string;
+  notes: Generated<string>;
+  reference: string;
+  scope: Generated<string>;
+  status: Generated<string>;
   updatedAt: Generated<Timestamp>;
 }
 
@@ -1388,6 +1584,32 @@ export interface StockTransactions {
   reason: string;
   requestId: string;
   type: string;
+}
+
+export interface StockTransferLines {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  inventoryItemId: string;
+  quantity: Numeric;
+  quantityReceived: Generated<Numeric>;
+  transferId: string;
+  unitCostMinor: Int8 | null;
+}
+
+export interface StockTransfers {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  fromInventoryLocationId: string;
+  id: Generated<string>;
+  notes: Generated<string>;
+  receivedAt: Timestamp | null;
+  reference: string;
+  sentAt: Timestamp | null;
+  status: Generated<string>;
+  toInventoryLocationId: string;
+  updatedAt: Generated<Timestamp>;
 }
 
 export interface Stores {
@@ -1444,15 +1666,23 @@ export interface SubscriptionPaymentAttempts {
 }
 
 export interface SupplierAccounts {
+  accountName: string | null;
+  accountNumber: string | null;
+  bankCode: string | null;
+  bankName: string | null;
   businessId: string;
+  category: string | null;
   code: string | null;
+  contactPerson: string | null;
   createdAt: Generated<Timestamp>;
   id: Generated<string>;
+  notes: Generated<string>;
   partyId: string;
   paymentTerms: Generated<string>;
   status: Generated<string>;
   taxId: string | null;
   updatedAt: Generated<Timestamp>;
+  website: string | null;
 }
 
 export interface SupplierProducts {
@@ -1741,12 +1971,16 @@ export interface DB {
   approval_workflow_submitters: ApprovalWorkflowSubmitters;
   approval_workflows: ApprovalWorkflows;
   audit_events: AuditEvents;
+  availability_profiles: AvailabilityProfiles;
+  banking_kyb_directors: BankingKybDirectors;
+  banking_kyc_attempts: BankingKycAttempts;
   banking_profiles: BankingProfiles;
   beneficial_owners: BeneficialOwners;
   beneficiaries: Beneficiaries;
   bill_lines: BillLines;
   bill_payment_allocations: BillPaymentAllocations;
   bills: Bills;
+  bookings: Bookings;
   business_invitations: BusinessInvitations;
   business_legal_profiles: BusinessLegalProfiles;
   business_memberships: BusinessMemberships;
@@ -1778,6 +2012,7 @@ export interface DB {
   delivery_zones: DeliveryZones;
   discount_redemptions: DiscountRedemptions;
   discounts: Discounts;
+  event_types: EventTypes;
   fiscal_documents: FiscalDocuments;
   fulfillment_lines: FulfillmentLines;
   fulfillments: Fulfillments;
@@ -1816,6 +2051,7 @@ export interface DB {
   product_location_settings: ProductLocationSettings;
   product_modifier_groups: ProductModifierGroups;
   product_prices: ProductPrices;
+  product_service_settings: ProductServiceSettings;
   product_variants: ProductVariants;
   products: Products;
   provider_events: ProviderEvents;
@@ -1830,10 +2066,18 @@ export interface DB {
   role_permissions: RolePermissions;
   roles: Roles;
   sales_channels: SalesChannels;
+  schedule_exceptions: ScheduleExceptions;
+  staff_profiles: StaffProfiles;
+  staff_schedules: StaffSchedules;
+  staff_services: StaffServices;
   stock_balances: StockBalances;
+  stock_count_lines: StockCountLines;
+  stock_counts: StockCounts;
   stock_movements: StockMovements;
   stock_reservations: StockReservations;
   stock_transactions: StockTransactions;
+  stock_transfer_lines: StockTransferLines;
+  stock_transfers: StockTransfers;
   stores: Stores;
   subscription_dunning_events: SubscriptionDunningEvents;
   subscription_invoices: SubscriptionInvoices;
