@@ -15,4 +15,29 @@ describe("pricing domain", () => {
     const resolved = await request(server.baseUrl, `${base}/prices/resolve?productVariantId=${product.variants[0]!.id}&assetCode=NGN`, { method: "GET", cookie }); expect(resolved.status).toBe(200); expect((resolved.body as { data: { price: { amountMinor: string } } }).data.price.amountMinor).toBe("150000");
   });
   it("rejects invalid monetary inputs", async () => { const cookie = await actor("Invalid Pricing"); const b = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie, body: JSON.stringify({ displayName: "Invalid Pricing Market" }) }); const id = (b.body as { data: { business: { id: string } } }).data.business.id; expect((await request(server.baseUrl, `/api/businesses/${id}/prices`, { method: "POST", cookie, body: JSON.stringify({ productVariantId: randomUUID(), assetCode: "usd", amountMinor: -1 }) })).status).toBe(400); });
+  it("saves and reads a product's per-branch availability, price and stock", async () => {
+    const cookie = await actor("Branch Settings Owner");
+    const business = ((await request(server.baseUrl, "/api/businesses", { method: "POST", cookie, body: JSON.stringify({ displayName: "Branch Settings Market" }) })).body as { data: { business: { id: string; defaultStore: { id: string } } } }).data.business;
+    const base = `/api/businesses/${business.id}`;
+    const product = ((await request(server.baseUrl, `${base}/products`, { method: "POST", cookie, body: JSON.stringify({ storeId: business.defaultStore.id, name: "Jollof", trackInventory: true }) })).body as { data: { product: { id: string; variants: { id: string }[] } } }).data.product;
+    const variantId = product.variants[0]!.id;
+    const branch = ((await request(server.baseUrl, `${base}/stores/${business.defaultStore.id}/locations`, { method: "POST", cookie, body: JSON.stringify({ name: "Lekki", kind: "branch", countryCode: "NG", timezone: "Africa/Lagos", businessHours: {} }) })).body as { data: { location: { id: string } } }).data.location;
+    const settingsUrl = `${base}/products/${product.id}/branch-settings`;
+
+    const saved = await request(server.baseUrl, settingsUrl, { method: "PUT", cookie, body: JSON.stringify({ branches: [{ locationId: branch.id, isAvailable: true, leadTimeMinutes: 90, priceMinor: 250000, stock: { [variantId]: 12 } }] }) });
+    expect(saved.status).toBe(200);
+    expect((saved.body as { data: { branches: unknown[] } }).data.branches).toEqual([{ locationId: branch.id, isAvailable: true, leadTimeMinutes: 90, priceMinor: "250000", stock: { [variantId]: "12" } }]);
+
+    // Saving again replaces the branch price rather than colliding with it, and counts stock down.
+    await request(server.baseUrl, settingsUrl, { method: "PUT", cookie, body: JSON.stringify({ branches: [{ locationId: branch.id, isAvailable: false, leadTimeMinutes: null, priceMinor: null, stock: { [variantId]: 5 } }] }) });
+    const read = await request(server.baseUrl, settingsUrl, { cookie });
+    expect(read.status).toBe(200);
+    expect((read.body as { data: { branches: unknown[] } }).data.branches).toEqual([{ locationId: branch.id, isAvailable: false, leadTimeMinutes: null, priceMinor: null, stock: { [variantId]: "5" } }]);
+  });
+
+  it("returns 404 for another business's product", async () => {
+    const cookie = await actor("Branch Settings Stranger");
+    const business = ((await request(server.baseUrl, "/api/businesses", { method: "POST", cookie, body: JSON.stringify({ displayName: "Stranger Market" }) })).body as { data: { business: { id: string } } }).data.business;
+    expect((await request(server.baseUrl, `/api/businesses/${business.id}/products/${randomUUID()}/branch-settings`, { cookie })).status).toBe(404);
+  });
 });
