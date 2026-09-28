@@ -116,7 +116,7 @@ describe("businesses domain", () => {
     const listBranches = async () =>
       (await request(server.baseUrl, branchesPath, { cookie: owner.cookies })).body as { data: { locations: { name: string; isDefault: boolean; addressLine1: string | null; city: string | null }[] } };
 
-    expect((await listBranches()).data.locations).toEqual([expect.objectContaining({ name: "Harbour Salon", isDefault: true, addressLine1: null })]);
+    expect((await listBranches()).data.locations).toEqual([expect.objectContaining({ name: "Harbour Salon", isDefault: true, operationTypes: ["pickup"], addressLine1: null })]);
 
     // Onboarding's "Preferred address" is saved on the business; HQ picks it up.
     const withAddress = await request(server.baseUrl, `/api/businesses/${business.id}`, {

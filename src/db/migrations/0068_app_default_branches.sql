@@ -4,14 +4,15 @@
 -- the delivery pickup address, staff hours - always have somewhere to attach.
 -- This backfills every store that has no live branch yet. A business's
 -- default store also takes the business's address, when it has one; other
--- stores' branches start without an address.
+-- stores' branches start without an address. Backfilled branches offer
+-- pickup only, the same as createDefaultBranch.
 
 insert into app.locations (
-  "businessId", "storeId", "name", "kind", "status", "isDefault", "countryCode", "timezone",
+  "businessId", "storeId", "name", "kind", "status", "isDefault", "countryCode", "timezone", "operationTypes",
   "addressLine1", "addressLine2", "city", "state", "postalCode"
 )
 select
-  store."businessId", store."id", business."displayName", 'branch', 'active', true, 'NG', store."timezone",
+  store."businessId", store."id", business."displayName", 'branch', 'active', true, 'NG', store."timezone", array['pickup'],
   case when store."isDefault" then nullif(trim(business."addressLine1"), '') end,
   case when store."isDefault" and nullif(trim(business."addressLine1"), '') is not null then business."addressLine2" end,
   case when store."isDefault" and nullif(trim(business."addressLine1"), '') is not null then business."city" end,

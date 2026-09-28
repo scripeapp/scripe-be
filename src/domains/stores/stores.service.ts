@@ -39,7 +39,7 @@ import type {
  * branch: the business can rename it, fill in its address, or add more.
  * Called when a business is created (for its default store) and whenever a
  * store is created; stores that predate this were backfilled by migration
- * 0061.
+ * 0068.
  */
 export async function createDefaultBranch(
   context: DatabaseContext,
@@ -59,6 +59,9 @@ export async function createDefaultBranch(
       countryCode: "NG",
       timezone: fields.timezone,
       businessHours: {},
+      // Pickup is the one channel every business can offer from day one;
+      // dine-in, delivery and curbside are switched on from Locations.
+      operationTypes: ["pickup"],
       addressLine1: fields.address?.addressLine1 ?? null,
       addressLine2: fields.address?.addressLine2 ?? null,
       city: fields.address?.city ?? null,
