@@ -114,6 +114,12 @@ describe("stores domain", () => {
     );
     expect(secondStore.isDefault).toBe(true);
 
+    // Every store starts with one default branch named after the business.
+    const secondStoreBranches = await request(server.baseUrl, `${base}/${secondStore.id}/locations`, { cookie: owner.cookies });
+    expect(entity<{ name: string; isDefault: boolean }[]>(secondStoreBranches, "locations")).toEqual([
+      expect.objectContaining({ name: "Marina Market", isDefault: true }),
+    ]);
+
     const unsetDefault = await request(
       server.baseUrl,
       `${base}/${secondStore.id}`,
@@ -138,6 +144,10 @@ describe("stores domain", () => {
       expect.objectContaining({ id: business.defaultStore.id, isDefault: true }),
     ]);
 
+    const initialBranches = await request(server.baseUrl, `${base}/${business.defaultStore.id}/locations`, { cookie: owner.cookies });
+    const [headquarters] = entity<{ id: string; name: string; isDefault: boolean }[]>(initialBranches, "locations");
+    expect(headquarters).toMatchObject({ name: "Marina Market", isDefault: true });
+
     const locationResponse = await request(
       server.baseUrl,
       `${base}/${business.defaultStore.id}/locations`,
@@ -147,6 +157,7 @@ describe("stores domain", () => {
         body: JSON.stringify({
           name: "Lekki Branch",
           kind: "branch",
+          isDefault: true,
           addressLine1: "1 Admiralty Way",
           city: "Lagos",
           state: "Lagos",
@@ -170,6 +181,8 @@ describe("stores domain", () => {
       format: string | null;
     }>(locationResponse, "location");
     expect(location.isDefault).toBe(true);
+    const branchesAfter = await request(server.baseUrl, `${base}/${business.defaultStore.id}/locations`, { cookie: owner.cookies });
+    expect(entity<{ id: string; isDefault: boolean }[]>(branchesAfter, "locations").find((branch) => branch.id === headquarters!.id)?.isDefault).toBe(false);
     expect(location).toMatchObject({
       operationTypes: ["dine_in", "pickup"],
       acceptingOrders: true,

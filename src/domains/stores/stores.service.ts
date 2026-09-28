@@ -1,5 +1,5 @@
 import type { Database } from "../../db/database.types.js";
-import { withDatabaseContext } from "../../db/database-context.js";
+import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { anonymousPrincipal, withIdentity } from "../../db/principal.js";
 import {
@@ -8,6 +8,7 @@ import {
   notFoundError,
 } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
+import * as businessesRepository from "../businesses/businesses.repository.js";
 import { listPublicCategories, listPublicProducts, listPublicProductsByIds, getPublicProduct } from "../products/products.service.js";
 import type { Category, PublicProduct } from "../products/products.types.js";
 import { findPublicOrderByReference } from "../orders/orders.repository.js";
@@ -30,6 +31,56 @@ import type {
   StoreRow,
   StoreUpdateInput,
 } from "./stores.types.js";
+
+/**
+ * Every store starts with one default branch named after the business, so
+ * location-scoped features (stock, per-branch prices, the delivery pickup
+ * address, staff hours) always have somewhere to attach. It's an ordinary
+ * branch: the business can rename it, fill in its address, or add more.
+ * Called when a business is created (for its default store) and whenever a
+ * store is created; stores that predate this were backfilled by migration
+ * 0061.
+ */
+export async function createDefaultBranch(
+  context: DatabaseContext,
+  businessId: string,
+  storeId: string,
+  fields: { name: string; timezone: string; address?: BranchAddress | null },
+): Promise<void> {
+  await repository.createLocation(
+    context,
+    businessId,
+    storeId,
+    {
+      name: fields.name,
+      kind: "branch",
+      status: "active",
+      isDefault: true,
+      countryCode: "NG",
+      timezone: fields.timezone,
+      businessHours: {},
+      addressLine1: fields.address?.addressLine1 ?? null,
+      addressLine2: fields.address?.addressLine2 ?? null,
+      city: fields.address?.city ?? null,
+      state: fields.address?.state ?? null,
+      postalCode: fields.address?.postalCode ?? null,
+    },
+    true,
+  );
+}
+
+export interface BranchAddress {
+  readonly addressLine1: string;
+  readonly addressLine2: string | null;
+  readonly city: string | null;
+  readonly state: string | null;
+  readonly postalCode: string | null;
+}
+
+/** See repository.fillDefaultBranchAddress — only fills a default branch that has no address yet. */
+export async function fillDefaultBranchAddress(context: DatabaseContext, businessId: string, address: BranchAddress): Promise<void> {
+  await repository.fillDefaultBranchAddress(context, businessId, address);
+}
 
 export class StoresService {
   constructor(private readonly database: Database) {}
@@ -173,15 +224,21 @@ export class StoresService {
       const isDefault = stores.length === 0 || input.isDefault;
       if (isDefault)
         await repository.clearDefaultStore(context, operation.businessId);
-      return toStore(
-        await repository.createStore(
-          context,
-          operation.businessId,
-          operation.userId,
-          input,
-          isDefault,
-        ),
+      const store = await repository.createStore(
+        context,
+        operation.businessId,
+        operation.userId,
+        input,
+        isDefault,
       );
+      // The store wizard's own branches (if any) take over this default
+      // branch client-side rather than being added alongside it.
+      const business = await businessesRepository.findBusiness(context, operation.businessId);
+      await createDefaultBranch(context, operation.businessId, store.id, {
+        name: business?.displayName ?? store.name,
+        timezone: store.timezone,
+      });
+      return toStore(store);
     });
   }
 

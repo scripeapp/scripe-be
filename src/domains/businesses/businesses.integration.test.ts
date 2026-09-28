@@ -104,6 +104,38 @@ describe("businesses domain", () => {
     expect(invisible.status).toBe(404);
   });
 
+  it("gives the default store a branch named after the business, and fills its address from the business once", async () => {
+    const owner = await authenticate("Branch Owner");
+    const created = await request(server.baseUrl, "/api/businesses", {
+      method: "POST",
+      cookie: owner.cookies,
+      body: JSON.stringify({ displayName: "Harbour Salon" }),
+    });
+    const business = (created.body as { data: { business: { id: string; defaultStore: { id: string } } } }).data.business;
+    const branchesPath = `/api/businesses/${business.id}/stores/${business.defaultStore.id}/locations`;
+    const listBranches = async () =>
+      (await request(server.baseUrl, branchesPath, { cookie: owner.cookies })).body as { data: { locations: { name: string; isDefault: boolean; addressLine1: string | null; city: string | null }[] } };
+
+    expect((await listBranches()).data.locations).toEqual([expect.objectContaining({ name: "Harbour Salon", isDefault: true, addressLine1: null })]);
+
+    // Onboarding's "Preferred address" is saved on the business; HQ picks it up.
+    const withAddress = await request(server.baseUrl, `/api/businesses/${business.id}`, {
+      method: "PATCH",
+      cookie: owner.cookies,
+      body: JSON.stringify({ addressLine1: "12 Marina Road", city: "Lagos" }),
+    });
+    expect(withAddress.status).toBe(200);
+    expect((await listBranches()).data.locations[0]).toMatchObject({ addressLine1: "12 Marina Road", city: "Lagos" });
+
+    // Once HQ has an address, later business address changes leave it alone.
+    await request(server.baseUrl, `/api/businesses/${business.id}`, {
+      method: "PATCH",
+      cookie: owner.cookies,
+      body: JSON.stringify({ addressLine1: "99 Other Street" }),
+    });
+    expect((await listBranches()).data.locations[0]).toMatchObject({ addressLine1: "12 Marina Road" });
+  });
+
   it("rejects invalid business contracts before database work", async () => {
     const owner = await authenticate("Validation Owner");
     const response = await request(server.baseUrl, "/api/businesses", {
