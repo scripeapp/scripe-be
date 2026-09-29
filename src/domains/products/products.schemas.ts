@@ -25,3 +25,4 @@ export const modifierOptionUpdateSchema = z.object({ name: z.string().trim().min
 export const modifierOptionReorderSchema = z.object({ orderedIds: z.array(uuid).min(1).max(200) });
 export const productModifierGroupParamsSchema = z.object({ businessId: uuid, productId: uuid, groupId: uuid });
 export const productModifierGroupAttachSchema = z.object({ groupId: uuid });
+export const variantListSchema = z.object({ assetCode: z.string().regex(/^[A-Z]{3}$/).default("NGN"), variants: z.array(z.object({ id: uuid.optional(), clientKey: z.string().max(120).optional(), name: z.string().trim().min(1).max(160), sku: z.string().trim().max(120).nullable().optional(), optionValues: z.record(z.string(), z.unknown()).optional(), priceMinor: z.number().int().min(0).nullable().optional(), compareAtMinor: z.number().int().min(0).nullable().optional() })).max(200) });

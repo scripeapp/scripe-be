@@ -35,3 +35,7 @@ export async function listBranchStock(c: DatabaseContext, businessId: string, va
   if (variantIds.length === 0) return [];
   return (await sql<{ variantId: string; locationId: string; onHand: string }>`select i."variantId", l."locationId", trim_scale(b."onHand")::text as "onHand" from app.stock_balances b join app.inventory_items i on i."id"=b."inventoryItemId" and i."businessId"=b."businessId" join app.inventory_locations l on l."id"=b."inventoryLocationId" and l."businessId"=b."businessId" where b."businessId"=${businessId}::uuid and i."variantId" in (${sql.join(variantIds.map((id) => sql`${id}::uuid`))})`.execute(c.transaction)).rows;
 }
+
+export async function archiveBasePrices(c: DatabaseContext, businessId: string, variantId: string, assetCode: string): Promise<void> {
+  await sql`update app.product_prices set "status"='archived',"archivedAt"=now() where "businessId"=${businessId}::uuid and "productVariantId"=${variantId}::uuid and "assetCode"=${assetCode} and "status"='active' and "locationId" is null`.execute(c.transaction);
+}

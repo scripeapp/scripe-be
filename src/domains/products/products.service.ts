@@ -3,12 +3,12 @@ import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
-import { notFoundError, type AppError } from "../../shared/errors.js";
+import { notFoundError, validationError, type AppError } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
-import { resolvePrice } from "../pricing/pricing.repository.js";
+import { archiveBasePrices, createPrice, resolvePrice } from "../pricing/pricing.repository.js";
 import { ensureItemForVariant } from "../inventory/inventory.repository.js";
 import * as repository from "./products.repository.js";
-import type { AttachedModifierGroup, Category, CategoryInput, CategoryUpdateInput, ModifierGroup, ModifierGroupDetail, ModifierGroupInput, ModifierGroupRow, ModifierGroupUpdateInput, ModifierOption, ModifierOptionInput, ModifierOptionRow, ModifierOptionUpdateInput, Product, ProductCreateInput, ProductOperation, ProductRow, ProductUpdateInput, PublicProduct, PublicVariant, Variant, VariantInput } from "./products.types.js";
+import type { AttachedModifierGroup, Category, CategoryInput, CategoryUpdateInput, ModifierGroup, ModifierGroupDetail, ModifierGroupInput, ModifierGroupRow, ModifierGroupUpdateInput, ModifierOption, ModifierOptionInput, ModifierOptionRow, ModifierOptionUpdateInput, Product, ProductCreateInput, ProductOperation, ProductRow, ProductUpdateInput, PublicProduct, PublicVariant, Variant, VariantInput, ReplacedVariant, VariantListInput } from "./products.types.js";
 
 export class ProductsService {
   constructor(private readonly database: Database) {}
@@ -17,6 +17,37 @@ export class ProductsService {
   async create(operation: ProductOperation, input: ProductCreateInput): Promise<Product> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "product.create"); const created = await repository.createProduct(c, operation.businessId, operation.userId, input, input.slug ?? `${slugify(input.name)}-${randomUUID().slice(0, 8)}`); const product = await hydrateProduct(c, created); if (product.trackInventory) await Promise.all(product.variants.map((v) => ensureInventoryItem(c, operation.businessId, v))); return product; }); }
   async update(operation: ProductOperation, productId: string, input: ProductUpdateInput): Promise<Product> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "product.update"); const row = await repository.updateProduct(c, operation.businessId, productId, input); if (!row) throw notFoundError("Product not found"); const product = await hydrateProduct(c, row); if (product.trackInventory) await Promise.all(product.variants.map((v) => ensureInventoryItem(c, operation.businessId, v))); return product; }); }
   async archive(operation: ProductOperation, productId: string): Promise<void> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "product.archive"); if (!(await repository.archiveProduct(c, operation.businessId, productId))) throw notFoundError("Product not found"); }); }
+  /** Makes the product's active variants exactly this list, in one transaction. An empty list keeps only the default variant. */
+  async replaceVariants(operation: ProductOperation, productId: string, input: VariantListInput): Promise<ReplacedVariant[]> {
+    return this.run(operation, async (c) => {
+      await this.require(c, operation.businessId, "product.update");
+      const product = await repository.findProduct(c, operation.businessId, productId);
+      if (!product) throw notFoundError("Product not found");
+      const current = await repository.listVariants(c, operation.businessId, productId);
+      if (input.variants.length === 0) {
+        const keep = current.find((variant) => variant.isDefault) ?? current[0];
+        await repository.archiveVariants(c, operation.businessId, productId, keep ? [keep.id] : []);
+        return keep ? [{ ...mapVariant(keep), clientKey: null }] : [];
+      }
+      const unknown = input.variants.find((row) => row.id && !current.some((variant) => variant.id === row.id));
+      if (unknown) throw validationError(`Variant ${unknown.id} doesn't belong to this product`);
+      if (input.variants.some((row) => row.priceMinor != null)) await this.require(c, operation.businessId, "pricing.manage");
+      // Archive first so removed variants free their SKUs, then clear the default so the new first row can take it.
+      await repository.archiveVariants(c, operation.businessId, productId, input.variants.flatMap((row) => (row.id ? [row.id] : [])));
+      await repository.clearDefaultVariant(c, operation.businessId, productId);
+      const saved: ReplacedVariant[] = [];
+      for (const [index, row] of input.variants.entries()) {
+        const fields = { name: row.name, sku: row.sku ?? null, optionValues: row.optionValues ?? {}, isDefault: index === 0 };
+        const variantRow = row.id ? await repository.updateVariant(c, operation.businessId, productId, row.id, fields) : await repository.addVariant(c, operation.businessId, productId, fields);
+        if (!variantRow) throw notFoundError("Variant not found");
+        const variant = mapVariant(variantRow);
+        if (product.trackInventory) await ensureInventoryItem(c, operation.businessId, variant);
+        if (row.priceMinor != null) await setBasePrice(c, operation, variant.id, input.assetCode, row.priceMinor, row.compareAtMinor ?? null);
+        saved.push({ ...variant, clientKey: row.clientKey ?? null });
+      }
+      return saved;
+    });
+  }
   async addVariant(operation: ProductOperation, productId: string, input: VariantInput): Promise<Variant> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "product.update"); const product = await repository.findProduct(c, operation.businessId, productId); if (!product) throw notFoundError("Product not found"); const variant = mapVariant(await repository.addVariant(c, operation.businessId, productId, input)); if (product.trackInventory) await ensureInventoryItem(c, operation.businessId, variant); return variant; }); }
   async listCategories(operation: ProductOperation): Promise<Category[]> { return this.run(operation, async (c) => (await repository.listCategories(c, operation.businessId)).map(mapCategory)); }
   async createCategory(operation: ProductOperation, input: CategoryInput): Promise<Category> { return this.run(operation, async (c) => { await this.require(c, operation.businessId, "category.manage"); return mapCategory(await repository.createCategory(c, operation.businessId, input, input.slug ?? slugify(input.name))); }); }
@@ -93,6 +124,13 @@ async function hydratePublicProduct(c: DatabaseContext, row: ProductRow, assetCo
 }
 function slugify(value: string): string { return value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100) || "product"; }
 /** A trackable product's variant always needs a matching inventory item before any stock action can touch it \u2014 see inventory.repository.ensureItemForVariant. */
+/** Replaces the variant's store-wide price only when it actually changed, so saving a product doesn't pile up price rows. */
+async function setBasePrice(c: DatabaseContext, operation: ProductOperation, variantId: string, assetCode: string, amountMinor: number, compareAtMinor: number | null): Promise<void> {
+  const current = await resolvePrice(c, operation.businessId, variantId, undefined, assetCode);
+  if (current && Number(current.amountMinor) === amountMinor && (current.compareAtMinor == null ? null : Number(current.compareAtMinor)) === compareAtMinor) return;
+  await archiveBasePrices(c, operation.businessId, variantId, assetCode);
+  await createPrice(c, operation.businessId, operation.userId, { productVariantId: variantId, assetCode, amountMinor, compareAtMinor });
+}
 function ensureInventoryItem(c: DatabaseContext, businessId: string, variant: Variant): Promise<unknown> { return ensureItemForVariant(c, businessId, variant.id, variant.name, variant.sku); }
 function mapVariant(row: Awaited<ReturnType<typeof repository.listVariants>>[number]): Variant { return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), archivedAt: row.archivedAt?.toISOString() ?? null }; }
 function mapCategory(row: Awaited<ReturnType<typeof repository.listCategories>>[number]): Category { return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), archivedAt: row.archivedAt?.toISOString() ?? null }; }

@@ -141,3 +141,40 @@ describe("products/modifier groups", () => {
     expect(afterArchive.data.groups.map((g) => g.id)).not.toContain(group.id);
   });
 });
+
+describe("products/variant list", () => {
+  interface VariantBody { id: string; name: string; sku: string | null; isDefault: boolean; clientKey: string | null }
+
+  async function setup(label: string) {
+    const cookie = await actor(label);
+    const business = ((await request(server.baseUrl, "/api/businesses", { method: "POST", cookie, body: JSON.stringify({ displayName: `${label} Co` }) })).body as { data: { business: { id: string; defaultStore: { id: string } } } }).data.business;
+    const base = `/api/businesses/${business.id}`;
+    const product = ((await request(server.baseUrl, `${base}/products`, { method: "POST", cookie, body: JSON.stringify({ storeId: business.defaultStore.id, name: "Ankara Shirt" }) })).body as { data: { product: { id: string } } }).data.product;
+    const replace = async (variants: unknown[]) => request(server.baseUrl, `${base}/products/${product.id}/variants`, { method: "PUT", cookie, body: JSON.stringify({ variants }) });
+    const activePrices = async (variantId: string) => ((await request(server.baseUrl, `${base}/prices?productVariantId=${variantId}`, { cookie })).body as { data: { prices: { amountMinor: string }[] } }).data.prices;
+    return { replace, activePrices };
+  }
+
+  it("replaces the default variant with the listed ones, priced, and maps client keys to ids", async () => {
+    const { replace, activePrices } = await setup("Variant List Owner");
+    const saved = await replace([{ clientKey: "small", name: "Small", sku: "ANK-S", priceMinor: 1_000_000 }, { clientKey: "large", name: "Large", priceMinor: 1_200_000 }]);
+    expect(saved.status).toBe(200);
+    const variants = (saved.body as { data: { variants: VariantBody[] } }).data.variants;
+    expect(variants.map((variant) => [variant.clientKey, variant.name, variant.isDefault])).toEqual([["small", "Small", true], ["large", "Large", false]]);
+    expect((await activePrices(variants[1]!.id)).map((price) => price.amountMinor)).toEqual(["1200000"]);
+
+    // Rename one, drop one, add one; an unchanged price isn't written again.
+    const next = await replace([{ id: variants[0]!.id, name: "S", sku: "ANK-S", priceMinor: 1_000_000 }, { clientKey: "medium", name: "Medium", sku: "ANK-M", priceMinor: 1_100_000 }]);
+    expect(next.status).toBe(200);
+    expect((next.body as { data: { variants: VariantBody[] } }).data.variants.map((variant) => [variant.name, variant.isDefault])).toEqual([["S", true], ["Medium", false]]);
+    expect(await activePrices(variants[0]!.id)).toHaveLength(1);
+  });
+
+  it("keeps only the default when the list is emptied, and rejects another product's variant", async () => {
+    const { replace } = await setup("Variant Empty Owner");
+    const variants = ((await replace([{ name: "Red" }, { name: "Blue" }])).body as { data: { variants: VariantBody[] } }).data.variants;
+    const emptied = await replace([]);
+    expect((emptied.body as { data: { variants: VariantBody[] } }).data.variants.map((variant) => variant.id)).toEqual([variants[0]!.id]);
+    expect((await replace([{ id: "00000000-0000-4000-8000-000000000000", name: "Stray" }])).status).toBe(400);
+  });
+});
