@@ -313,6 +313,12 @@ Each phase ships something usable on its own. Sizes are rough estimates for one 
 
 *Done when a salon can run a full day from the dashboard and the till.*
 
+**Status (29 Sept 2026): Phases 1 and 2 are built.** Left out on purpose:
+- Several services in one visit are supported by the API (`POST /api/store/bookings` takes up to five items), but quick book offers one service at a time.
+- Deposits don't exist until Phase 3, so the till has nothing to deduct yet.
+- A variant can't override a service's duration; the per-staff override covers "senior stylist takes longer".
+- Held online bookings are only released by a job, which comes with Phase 3.
+
 ### Phase 3 — Online booking & deposits (~1.5 weeks)
 
 - Storefront booking flow, holds, deposit payment, webhook confirmation
