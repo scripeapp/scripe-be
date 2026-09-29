@@ -279,4 +279,37 @@ describe("point-of-sale till", () => {
     expect(shift.expectedCashMinor).toBe(String(10000 + cashTotal));
     expect(shift.varianceMinor).toBe("0");
   });
+
+  it("fulfils a till order for products that don't track stock", async () => {
+    const fix = await posFixture("Fulfil Owner");
+    const sale = await request(server.baseUrl, "/api/store/pos/order", { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+      store_id: fix.storeId,
+      branch_id: fix.locationId,
+      items: tickets(fix),
+      payment_method: "card",
+    }) });
+    const orderId = (sale.body as { data: { order_id: string } }).data.order_id;
+    const order = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders/${orderId}`, { cookie: fix.cookies });
+    const lines = (order.body as { data: { order: { lines: { id: string; quantity: number }[] } } }).data.order.lines;
+    const location = await request(server.baseUrl, `/api/businesses/${fix.businessId}/inventory/locations`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({ locationId: fix.locationId, name: "Counter" }) });
+    const inventoryLocationId = (location.body as { data: { location: { id: string } } }).data.location.id;
+
+    const fulfilled = await request(server.baseUrl, `/api/businesses/${fix.businessId}/fulfillment`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+      orderId,
+      inventoryLocationId,
+      method: "pickup",
+      lines: lines.map((line) => ({ orderLineId: line.id, quantity: line.quantity })),
+    }) });
+    expect(fulfilled.status).toBe(201);
+    const after = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders/${orderId}`, { cookie: fix.cookies });
+    expect((after.body as { data: { order: { fulfillmentStatus: string; status: string } } }).data.order).toMatchObject({ fulfillmentStatus: "fulfilled", status: "fulfilled" });
+
+    const again = await request(server.baseUrl, `/api/businesses/${fix.businessId}/fulfillment`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+      orderId,
+      inventoryLocationId,
+      method: "pickup",
+      lines: lines.map((line) => ({ orderLineId: line.id, quantity: line.quantity })),
+    }) });
+    expect(again.status).toBe(409);
+  });
 });
