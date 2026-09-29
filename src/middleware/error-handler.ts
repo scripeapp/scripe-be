@@ -47,6 +47,13 @@ export function errorHandler(
       : isInvalidInput
         ? "VALIDATION_ERROR"
         : "SERVICE_UNAVAILABLE";
+    if (status === 503) {
+      console.error("[error] database", context, {
+        kind: error.kind,
+        message: error.message,
+        cause: error.cause,
+      });
+    }
     ApiResponse.error(response, { code, message: error.message }, status);
     return;
   }

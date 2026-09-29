@@ -39,6 +39,14 @@ export class StoresController {
     return { store, product, data: { store, product } };
   });
 
+  readonly listPublicModifierGroups = this.handle(async (request) => {
+    const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
+    const productIdOrSlug = request.params.productIdOrSlug;
+    if (!productIdOrSlug) throw validationError("Missing product identifier");
+    const branchId = typeof request.query.branch_id === "string" && /^[0-9a-f-]{36}$/i.test(request.query.branch_id) ? request.query.branch_id : null;
+    return await this.service.listPublicModifierGroups(request.requestId, slug, productIdOrSlug, branchId);
+  });
+
   readonly listPublicBranches = this.handle(async (request) => {
     const { slug } = schemas.publicStoreParamsSchema.parse(request.params);
     return await this.service.listPublicBranches(request.requestId, slug);
@@ -348,6 +356,11 @@ export class StoresController {
       ),
     };
   }, 200, schemas.shiftResultSchema);
+
+  readonly shiftSummary = this.handle(async (request) => {
+    const { businessId, shiftId } = schemas.shiftParamsSchema.parse(request.params);
+    return { summary: await this.service.shiftSummary(this.operation(request, businessId), shiftId) };
+  });
 
   readonly listCashMovements = this.handle(async (request) => {
     const { businessId, shiftId } = schemas.shiftParamsSchema.parse(

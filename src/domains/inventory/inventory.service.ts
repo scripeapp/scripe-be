@@ -3,7 +3,7 @@ import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
-import { notFoundError, validationError } from "../../shared/errors.js";
+import { conflictError, notFoundError, validationError } from "../../shared/errors.js";
 import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js";
 import { postJournalEntry } from "../accounting/accounting.service.js";
 import * as authorization from "../authorization/authorization.service.js";
@@ -179,7 +179,7 @@ export class InventoryService {
   /** Shared by direct movement posting and the transfer/count workflows — every path that moves stock needs the same idempotent-post + waste-journal behavior. */
   private async postMovementWithJournal(c: DatabaseContext, o: InventoryOperation, input: MovementInput): Promise<StockMovement> {
     const row = await repo.postMovement(c, o.businessId, o.userId, input, o.requestId);
-    if (!row) throw new Error("Movement idempotency key already used");
+    if (!row) throw conflictError("Movement idempotency key already used");
     // Only "waste" carries a reliable unit cost at this call site (unlike
     // "sale", which has no COGS posting in this pass - see migration
     // 0042's header comment) - Dr the expense, Cr the inventory asset it

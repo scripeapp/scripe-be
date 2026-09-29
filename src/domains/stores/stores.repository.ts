@@ -424,12 +424,23 @@ export async function closeShift(
       where shift."businessId"=${businessId}::uuid and shift."storeId"=${storeId}::uuid
         and shift."id"=${shiftId}::uuid and shift."status"='open'
       for update
-    ), totals as (
+    ), movements as (
       select locked."id",
-        coalesce(sum(case when movement."type" in ('cash_in','adjustment') then movement."amountMinor" else -movement."amountMinor" end),0)::bigint as movement_total
+        coalesce(sum(case when movement."type" in ('cash_in','adjustment') then movement."amountMinor" else -movement."amountMinor" end),0)::bigint as total
       from locked
       left join app.cash_movements movement on movement."shiftId"=locked."id"
       group by locked."id"
+    ), sales as (
+      -- Cash taken for till sales rung up on this shift.
+      select locked."id",
+        coalesce(sum(payment."amountMinor") filter (where payment."method"='cash' and payment."status"='captured'),0)::bigint as total
+      from locked
+      left join app.orders o on o."registerShiftId"=locked."id" and o."businessId"=locked."businessId"
+      left join app.payments payment on payment."orderId"=o."id" and payment."businessId"=o."businessId"
+      group by locked."id"
+    ), totals as (
+      select movements."id", movements.total + sales.total as movement_total
+      from movements join sales on sales."id"=movements."id"
     )
     update app.register_shifts shift set
       "closedByMembershipId"=${membershipId}::uuid,
@@ -439,6 +450,34 @@ export async function closeShift(
       "status"='closed', "closedAt"=now(), "notes"=${notes ?? null}
     from locked join totals on totals."id"=locked."id"
     where shift."id"=locked."id" returning shift.*
+  `.execute(context.transaction);
+  return result.rows[0];
+}
+
+export interface ShiftSummaryRow {
+  readonly openingCashMinor: string;
+  readonly cashSalesMinor: string;
+  readonly cashMovementsMinor: string;
+}
+
+/** Where a shift's drawer should stand right now: float, till cash sales and manual movements. */
+export async function shiftSummary(
+  context: DatabaseContext,
+  businessId: string,
+  shiftId: string,
+): Promise<ShiftSummaryRow | undefined> {
+  const result = await sql<ShiftSummaryRow>`
+    select shift."openingCashMinor"::text as "openingCashMinor",
+      (select coalesce(sum(payment."amountMinor"), 0)::text
+         from app.orders o
+         join app.payments payment on payment."orderId" = o."id" and payment."businessId" = o."businessId"
+        where o."businessId" = shift."businessId" and o."registerShiftId" = shift."id"
+          and payment."method" = 'cash' and payment."status" = 'captured') as "cashSalesMinor",
+      (select coalesce(sum(case when movement."type" in ('cash_in','adjustment') then movement."amountMinor" else -movement."amountMinor" end), 0)::text
+         from app.cash_movements movement where movement."shiftId" = shift."id") as "cashMovementsMinor"
+    from app.register_shifts shift
+    where shift."businessId" = ${businessId}::uuid and shift."id" = ${shiftId}::uuid
+    limit 1
   `.execute(context.transaction);
   return result.rows[0];
 }

@@ -62,6 +62,74 @@ export class BookingsService {
     });
   }
 
+  /**
+   * A booking the business makes itself. Unlike the storefront hold it is
+   * confirmed straight away, ignores the customer-facing notice and advance
+   * limits, and can hold several services back to back. The exclusion
+   * constraint still refuses double-booking a staff member.
+   */
+  async create(
+    userId: string,
+    requestId: string,
+    storeId: string,
+    input: {
+      locationId: string | null;
+      startsAt: string;
+      source: "dashboard" | "walk_in" | "pos";
+      notes: string | null;
+      customerName: string | null;
+      customerEmail: string | null;
+      customerPhone: string | null;
+      items: { productId: string; variantId: string | null; staffId: string; modifierOptionIds: string[] }[];
+    },
+  ): Promise<ServiceBooking> {
+    return this.forBusiness(userId, requestId, storeId, "booking.create", async (context, businessId) => {
+      const locationId = await repo.resolveStoreLocation(context, businessId, storeId, input.locationId);
+      if (!locationId) throw validationError("Unknown booking location.");
+
+      let cursor = new Date(Date.parse(input.startsAt));
+      cursor.setUTCSeconds(0, 0);
+      const items: repo.NewBookingItem[] = [];
+      for (const item of input.items) {
+        const check = await repo.serviceStaffCheck(context, businessId, item.productId, item.variantId, item.staffId);
+        if (!check) throw validationError("This item is not bookable as a service.");
+        if (check.baseDuration === null) throw validationError("Set this service's duration before booking it.");
+        if (!check.bookable) throw validationError("This staff member is currently unavailable.");
+        if (!check.performs) throw validationError("This staff member does not offer this service.");
+        const extra = await slots.modifierExtraMinutes(context, businessId, item.modifierOptionIds);
+        const durationMinutes = (check.durationOverride ?? check.baseDuration) + extra;
+        const endsAt = new Date(cursor.getTime() + durationMinutes * 60 * 1000);
+        items.push({ ...item, startsAt: cursor, endsAt, durationMinutes });
+        cursor = endsAt;
+      }
+
+      let bookingId: string;
+      try {
+        bookingId = await repo.insertStaffBooking(context, {
+          businessId,
+          storeId,
+          locationId,
+          source: input.source,
+          customerName: input.customerName,
+          customerEmail: input.customerEmail,
+          customerPhone: input.customerPhone,
+          notes: input.notes,
+          manageToken: randomBytes(16).toString("hex"),
+          items,
+        });
+      } catch (error) {
+        const normalized = error instanceof DatabaseError ? error : normalizeDatabaseError(error);
+        if (normalized instanceof DatabaseError && normalized.kind === "exclusion-violation") {
+          throw conflictError("That staff member is already booked for the requested time.");
+        }
+        throw error;
+      }
+      const booking = await repo.findById(context, businessId, bookingId);
+      if (!booking) throw notFoundError("Booking not found");
+      return toServiceBooking(booking);
+    });
+  }
+
   async list(
     userId: string,
     requestId: string,
@@ -144,6 +212,7 @@ export class BookingsService {
       variantId: string | null;
       staffId: string | null;
       locationId: string | null;
+      modifierOptionIds?: readonly string[];
       date: string;
       days: number;
     },
@@ -163,10 +232,12 @@ export class BookingsService {
       const fromMs = this.windowStart(input.date, -1);
       const toMs = this.windowStart(input.date, input.days + 2);
 
-      const [schedules, exceptions, occupied] = await Promise.all([
+      const [schedules, exceptions, occupied, unavailableLocationIds, extraMinutes] = await Promise.all([
         slots.scheduleEntries(context, businessId, staffIds, input.locationId),
         slots.exceptionEntries(context, businessId, staffIds, fromMs, toMs),
         slots.occupiedRanges(context, businessId, staffIds, fromMs, toMs, null),
+        slots.unavailableLocations(context, businessId, input.productId),
+        slots.modifierExtraMinutes(context, businessId, input.modifierOptionIds ?? []),
       ]);
 
       const generated = slots.computeSlots({
@@ -180,6 +251,8 @@ export class BookingsService {
         locationFilter: input.locationId,
         staffFilter: input.staffId,
         nowMilliseconds: Date.now(),
+        extraMinutes,
+        unavailableLocationIds,
       });
 
       const timezone = (await repo.storeTimezone(context, storeId)) ?? DEFAULT_TIMEZONE;

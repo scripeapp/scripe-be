@@ -8,7 +8,7 @@ import * as authorization from "../authorization/authorization.service.js";
 import { archiveBasePrices, createPrice, resolvePrice } from "../pricing/pricing.repository.js";
 import { ensureItemForVariant } from "../inventory/inventory.repository.js";
 import * as repository from "./products.repository.js";
-import type { AttachedModifierGroup, Category, CategoryInput, CategoryUpdateInput, ModifierGroup, ModifierGroupDetail, ModifierGroupInput, ModifierGroupRow, ModifierGroupUpdateInput, ModifierOption, ModifierOptionInput, ModifierOptionRow, ModifierOptionUpdateInput, Product, ProductCreateInput, ProductOperation, ProductRow, ProductUpdateInput, PublicProduct, PublicVariant, Variant, VariantInput, ReplacedVariant, VariantListInput } from "./products.types.js";
+import type { PublicModifierGroup, AttachedModifierGroup, Category, CategoryInput, CategoryUpdateInput, ModifierGroup, ModifierGroupDetail, ModifierGroupInput, ModifierGroupRow, ModifierGroupUpdateInput, ModifierOption, ModifierOptionInput, ModifierOptionRow, ModifierOptionUpdateInput, Product, ProductCreateInput, ProductOperation, ProductRow, ProductUpdateInput, PublicProduct, PublicVariant, Variant, VariantInput, ReplacedVariant, VariantListInput } from "./products.types.js";
 
 export class ProductsService {
   constructor(private readonly database: Database) {}
@@ -98,6 +98,12 @@ export async function getPublicProduct(
   const row = await repository.findActiveProductByIdOrSlug(context, businessId, storeId, productIdOrSlug);
   if (!row) return undefined;
   return hydratePublicProduct(context, row, assetCode);
+}
+
+export async function listPublicModifierGroups(context: DatabaseContext, businessId: string, storeId: string, productIdOrSlug: string, branchId: string | null): Promise<PublicModifierGroup[] | undefined> {
+  const row = await repository.findActiveProductByIdOrSlug(context, businessId, storeId, productIdOrSlug);
+  if (!row) return undefined;
+  return repository.listPublicModifierGroups(context, businessId, row.id, branchId);
 }
 
 export async function listPublicCategories(context: DatabaseContext, businessId: string): Promise<Category[]> {

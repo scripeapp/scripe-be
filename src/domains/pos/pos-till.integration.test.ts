@@ -235,4 +235,81 @@ describe("point-of-sale till", () => {
     }) });
     expect(response.status).toBe(409);
   });
+
+  it("counts cash sales rung up on a shift in its expected cash", async () => {
+    const fix = await posFixture("Drawer Owner");
+    const register = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/registers`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({ locationId: fix.locationId, name: "Front Till" }) });
+    const registerId = (register.body as { data: { register: { id: string } } }).data.register.id;
+    const opened = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/registers/${registerId}/shifts`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({ openingCashMinor: "10000" }) });
+    const shiftId = (opened.body as { data: { shift: { id: string } } }).data.shift.id;
+
+    const charge = (method: string) =>
+      request(server.baseUrl, "/api/store/pos/order", { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+        store_id: fix.storeId,
+        branch_id: fix.locationId,
+        items: tickets(fix),
+        payment_method: method,
+        register_shift_id: shiftId,
+      }) });
+    const cashSale = await charge("cash");
+    expect(cashSale.status).toBe(200);
+    expect((await charge("card")).status).toBe(200);
+    const cashTotal = (cashSale.body as { data: { total_minor: number } }).data.total_minor;
+    const cashOrderId = (cashSale.body as { data: { order_id: string } }).data.order_id;
+    const receipt = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders/${cashOrderId}/receipt`, { cookie: fix.cookies });
+    expect(receipt.status).toBe(200);
+
+    const orders = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders?limit=10`, { cookie: fix.cookies });
+    const listed = (orders.body as { data: { orders: { channelKind: string; paymentMethod: string; registerShiftId: string }[] } }).data.orders;
+    expect(listed.map((order) => order.channelKind)).toEqual(["pos", "pos"]);
+    expect(listed.map((order) => order.paymentMethod).sort()).toEqual(["card", "cash"]);
+    expect(listed.every((order) => order.registerShiftId === shiftId)).toBe(true);
+
+    const summary = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/shifts/${shiftId}/summary`, { cookie: fix.cookies });
+    expect(summary.status).toBe(200);
+    expect((summary.body as { data: { summary: Record<string, string> } }).data.summary).toMatchObject({
+      openingCashMinor: "10000",
+      cashSalesMinor: String(cashTotal),
+      expectedCashMinor: String(10000 + cashTotal),
+    });
+
+    const closed = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/shifts/${shiftId}/close`, { method: "PATCH", cookie: fix.cookies, body: JSON.stringify({ countedCashMinor: String(10000 + cashTotal) }) });
+    expect(closed.status).toBe(200);
+    const shift = (closed.body as { data: { shift: { expectedCashMinor: string; varianceMinor: string } } }).data.shift;
+    expect(shift.expectedCashMinor).toBe(String(10000 + cashTotal));
+    expect(shift.varianceMinor).toBe("0");
+  });
+
+  it("fulfils a till order for products that don't track stock", async () => {
+    const fix = await posFixture("Fulfil Owner");
+    const sale = await request(server.baseUrl, "/api/store/pos/order", { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+      store_id: fix.storeId,
+      branch_id: fix.locationId,
+      items: tickets(fix),
+      payment_method: "card",
+    }) });
+    const orderId = (sale.body as { data: { order_id: string } }).data.order_id;
+    const order = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders/${orderId}`, { cookie: fix.cookies });
+    const lines = (order.body as { data: { order: { lines: { id: string; quantity: number }[] } } }).data.order.lines;
+    const location = await request(server.baseUrl, `/api/businesses/${fix.businessId}/inventory/locations`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({ locationId: fix.locationId, name: "Counter" }) });
+    const inventoryLocationId = (location.body as { data: { location: { id: string } } }).data.location.id;
+
+    const fulfilled = await request(server.baseUrl, `/api/businesses/${fix.businessId}/fulfillment`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+      orderId,
+      inventoryLocationId,
+      method: "pickup",
+      lines: lines.map((line) => ({ orderLineId: line.id, quantity: line.quantity })),
+    }) });
+    expect(fulfilled.status).toBe(201);
+    const after = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders/${orderId}`, { cookie: fix.cookies });
+    expect((after.body as { data: { order: { fulfillmentStatus: string; status: string } } }).data.order).toMatchObject({ fulfillmentStatus: "fulfilled", status: "fulfilled" });
+
+    const again = await request(server.baseUrl, `/api/businesses/${fix.businessId}/fulfillment`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+      orderId,
+      inventoryLocationId,
+      method: "pickup",
+      lines: lines.map((line) => ({ orderLineId: line.id, quantity: line.quantity })),
+    }) });
+    expect(again.status).toBe(409);
+  });
 });

@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto"; import type { Database } from "../../d
  * online) lands on Gateway Clearing, since none of those are actually
  * swept into Scripe's own bank the moment they're captured.
  */
-async function postCaptureJournal(context: DatabaseContext, businessId: string, userId: string, sourceId: string, method: string, amountMinor: number | string, assetCode: string, order: OrderSnapshot): Promise<void> {
+export async function postCaptureJournal(context: DatabaseContext, businessId: string, userId: string, sourceId: string, method: string, amountMinor: number | string, assetCode: string, order: OrderSnapshot): Promise<void> {
   const amount = BigInt(amountMinor);
   const totalMinor = BigInt(order.totalMinor || "0");
   const taxMinor = BigInt(order.taxMinor || "0");

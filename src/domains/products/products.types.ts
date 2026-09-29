@@ -25,17 +25,21 @@ export interface PublicProduct extends Omit<Product, "variants"> { readonly vari
 export type ModifierSelectionMode = "single" | "multiple";
 export type ModifierGroupKind = "modifier" | "addon";
 export interface ModifierGroupRow { readonly id: string; readonly businessId: string; readonly storeId: string; readonly name: string; readonly description: string; readonly selectionMode: ModifierSelectionMode; readonly minSelections: number; readonly maxSelections: number | null; readonly kind: ModifierGroupKind; readonly sortOrder: number; readonly branchIds: string[] | null; readonly status: "active" | "archived"; readonly createdAt: Date; readonly updatedAt: Date; }
-export interface ModifierOptionRow { readonly id: string; readonly businessId: string; readonly groupId: string; readonly name: string; readonly priceAdjustmentMinor: string; readonly sortOrder: number; readonly isAvailable: boolean; readonly isDefault: boolean; readonly branchIds: string[] | null; readonly status: "active" | "archived"; readonly createdAt: Date; }
+export interface ModifierOptionRow { readonly id: string; readonly businessId: string; readonly groupId: string; readonly name: string; readonly priceAdjustmentMinor: string; readonly extraDurationMinutes: number; readonly sortOrder: number; readonly isAvailable: boolean; readonly isDefault: boolean; readonly branchIds: string[] | null; readonly status: "active" | "archived"; readonly createdAt: Date; }
 export interface ModifierGroup extends Omit<ModifierGroupRow, "createdAt" | "updatedAt"> { readonly createdAt: string; readonly updatedAt: string; readonly optionsCount: number; readonly productCount: number; }
 export interface ModifierGroupDetail extends ModifierGroup { readonly options: ModifierOption[]; }
 export interface ModifierOption extends Omit<ModifierOptionRow, "createdAt"> { readonly createdAt: string; }
 export interface ModifierGroupInput { readonly storeId: string; readonly name: string; readonly description?: string; readonly selectionMode?: ModifierSelectionMode; readonly minSelections?: number; readonly maxSelections?: number | null; readonly kind?: ModifierGroupKind; readonly branchIds?: string[] | null; }
 export interface ModifierGroupUpdateInput { readonly name?: string; readonly description?: string; readonly selectionMode?: ModifierSelectionMode; readonly minSelections?: number; readonly maxSelections?: number | null; readonly kind?: ModifierGroupKind; readonly branchIds?: string[] | null; }
-export interface ModifierOptionInput { readonly name: string; readonly priceAdjustmentMinor?: number; readonly isDefault?: boolean; readonly sortOrder?: number; }
-export interface ModifierOptionUpdateInput { readonly name?: string; readonly priceAdjustmentMinor?: number; readonly isAvailable?: boolean; readonly isDefault?: boolean; readonly branchIds?: string[] | null; }
+export interface ModifierOptionInput { readonly name: string; readonly priceAdjustmentMinor?: number; readonly extraDurationMinutes?: number; readonly isDefault?: boolean; readonly sortOrder?: number; }
+export interface ModifierOptionUpdateInput { readonly name?: string; readonly priceAdjustmentMinor?: number; readonly extraDurationMinutes?: number; readonly isAvailable?: boolean; readonly isDefault?: boolean; readonly branchIds?: string[] | null; }
 export interface AttachedModifierGroup { readonly id: string; readonly name: string; readonly kind: ModifierGroupKind; readonly sortOrder: number; }
 
 /** One row of a product's full variant list. Rows with an id update that variant; rows without one are created. The first row becomes the default. */
 export interface VariantListItemInput { readonly id?: string; readonly clientKey?: string; readonly name: string; readonly sku?: string | null; readonly optionValues?: Record<string, unknown>; readonly priceMinor?: number | null; readonly compareAtMinor?: number | null; }
 export interface VariantListInput { readonly assetCode: string; readonly variants: readonly VariantListItemInput[]; }
 export interface ReplacedVariant extends Variant { readonly clientKey: string | null; }
+
+/** A modifier or add-on group as a shopper sees it on one product at one branch. */
+export interface PublicModifierGroup { readonly id: string; readonly name: string; readonly description: string; readonly selectionMode: ModifierSelectionMode; readonly minSelections: number; readonly maxSelections: number | null; readonly kind: ModifierGroupKind; readonly options: PublicModifierOption[]; }
+export interface PublicModifierOption { readonly id: string; readonly name: string; readonly priceAdjustmentMinor: string; readonly extraDurationMinutes: number; readonly isDefault: boolean; }

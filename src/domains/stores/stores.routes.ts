@@ -22,6 +22,7 @@ export function createStoresRouter(): Router {
   router.get(`${publicBase}/:slug/delivery-methods`, controller.listPublicDeliveryMethods);
   router.get(`${publicBase}/:slug/product/:productIdOrSlug`, controller.getPublicProduct);
   router.get(`${publicBase}/:slug/products/:productIdOrSlug`, controller.getPublicProduct);
+  router.get(`${publicBase}/:slug/product/:productIdOrSlug/modifier-groups`, controller.listPublicModifierGroups);
   router.get(`${publicBase}/order/:reference`, controller.getPublicOrderByReference);
 
   // Business-scoped public aliases
@@ -80,6 +81,7 @@ export function createStoresRouter(): Router {
   );
 
   router.patch(`${base}/:storeId/shifts/:shiftId/close`, controller.closeShift);
+  router.get(`${base}/:storeId/shifts/:shiftId/summary`, controller.shiftSummary);
   router.get(
     `${base}/:storeId/shifts/:shiftId/cash-movements`,
     controller.listCashMovements,

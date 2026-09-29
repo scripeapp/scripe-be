@@ -20,6 +20,8 @@ export interface SlotSettings {
 export interface ServiceStaff {
   readonly staffId: string;
   readonly staffName: string;
+  /** This person's own duration for the service, when it differs from the product's. */
+  readonly durationOverrideMinutes: number | null;
 }
 
 export interface ScheduleEntry {
@@ -73,7 +75,9 @@ export async function bookableStaff(
   staffId: string | null,
 ): Promise<ServiceStaff[]> {
   const result = await sql<ServiceStaff>`
-    select sp."id" as "staffId", sp."displayName" as "staffName"
+    select sp."id" as "staffId", sp."displayName" as "staffName",
+           (array_agg(ss."durationOverrideMinutes"
+                      order by (ss."variantId" is not null) desc))[1] as "durationOverrideMinutes"
     from app.staff_profiles sp
     join app.staff_services ss on ss."staffId" = sp."id" and ss."businessId" = sp."businessId"
     where sp."businessId" = ${businessId}::uuid
@@ -163,6 +167,10 @@ interface SlotInput {
   readonly locationFilter: string | null;
   readonly staffFilter: string | null;
   readonly nowMilliseconds: number;
+  /** Extra time from chosen add-ons (modifier options). */
+  readonly extraMinutes?: number;
+  /** Branches where the service is switched off in product location settings. */
+  readonly unavailableLocationIds?: readonly string[];
 }
 
 interface Interval {
@@ -180,7 +188,6 @@ interface Interval {
  */
 export function computeSlots(input: SlotInput): AvailableSlot[] {
   const { settings } = input;
-  const durationMs = settings.durationMinutes * 60 * 1000;
   const candidateBeforeMs = settings.bufferBeforeMinutes * 60 * 1000;
   const candidateAfterMs = settings.bufferAfterMinutes * 60 * 1000;
   const slotIntervalMs = settings.slotIntervalMinutes * 60 * 1000;
@@ -198,6 +205,8 @@ export function computeSlots(input: SlotInput): AvailableSlot[] {
   for (const staff of input.staff) {
     if (input.staffFilter && staff.staffId !== input.staffFilter) continue;
     const occupied = occupiedByStaff.get(staff.staffId) ?? [];
+    const durationMinutes = (staff.durationOverrideMinutes ?? settings.durationMinutes) + (input.extraMinutes ?? 0);
+    const durationMs = durationMinutes * 60 * 1000;
     for (const day of calendarDays(input.fromDate, input.dayCount)) {
       for (const interval of workingIntervals(input, staff.staffId, day)) {
         if (interval.end - interval.start < durationMs) continue;
@@ -267,6 +276,7 @@ function workingIntervals(input: SlotInput, staffId: string, day: string): Inter
   for (const schedule of input.schedules) {
     if (schedule.staffId !== staffId || schedule.weekday !== localDateWeekday(day)) continue;
     if (input.locationFilter && schedule.locationId !== input.locationFilter) continue;
+    if (input.unavailableLocationIds?.includes(schedule.locationId)) continue;
     intervals.push({
       start: localDateTimeToUtcMilliseconds(day, schedule.startTime, schedule.timezone),
       end: localDateTimeToUtcMilliseconds(day, schedule.endTime, schedule.timezone),
@@ -280,6 +290,7 @@ function workingIntervals(input: SlotInput, staffId: string, day: string): Inter
     if (exception.staffId !== null && exception.staffId !== staffId) continue;
     if (exception.locationId === null) continue;
     if (input.locationFilter && exception.locationId !== input.locationFilter) continue;
+    if (input.unavailableLocationIds?.includes(exception.locationId)) continue;
     const timezone = exception.timezone ?? "UTC";
     const boundaries = localDayBoundaries(day, timezone);
     const start = Math.max(exception.startsAt.getTime(), boundaries.start);
@@ -346,4 +357,36 @@ function localDayBoundaries(day: string, timezone: string): { start: number; end
     start: localDateTimeToUtcMilliseconds(day, "00:00", timezone),
     end: localDateTimeToUtcMilliseconds(next, "00:00", timezone),
   };
+}
+
+/** Branches where this service has been switched off. */
+export async function unavailableLocations(
+  context: DatabaseContext,
+  businessId: string,
+  productId: string,
+): Promise<string[]> {
+  const result = await sql<{ locationId: string }>`
+    select pls."locationId"
+    from app.product_location_settings pls
+    where pls."businessId" = ${businessId}::uuid
+      and pls."productId" = ${productId}::uuid
+      and not pls."isAvailable"
+  `.execute(context.transaction);
+  return result.rows.map((row) => row.locationId);
+}
+
+/** Total extra minutes the chosen add-ons add to a service. */
+export async function modifierExtraMinutes(
+  context: DatabaseContext,
+  businessId: string,
+  optionIds: readonly string[],
+): Promise<number> {
+  if (optionIds.length === 0) return 0;
+  const result = await sql<{ total: number | null }>`
+    select sum(mo."extraDurationMinutes")::int as "total"
+    from app.modifier_options mo
+    where mo."businessId" = ${businessId}::uuid
+      and mo."id" = any(${[...optionIds]}::uuid[])
+  `.execute(context.transaction);
+  return result.rows[0]?.total ?? 0;
 }

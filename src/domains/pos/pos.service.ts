@@ -1,4 +1,6 @@
 import type { Database } from "../../db/database.types.js";
+import { postCaptureJournal } from "../payments/payments.service.js";
+import * as receiptsRepo from "../receipts/receipts.repository.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { withIdentity } from "../../db/principal.js";
 import { AppError, conflictError, notFoundError, validationError } from "../../shared/errors.js";
@@ -106,6 +108,7 @@ export class PosService {
         taxMinor: totals.taxMinor,
         serviceChargeMinor: totals.serviceChargeMinor,
         totalMinor: totals.totalMinor,
+        registerShiftId: input.registerShiftId,
       });
 
       let tip: { amountMinor: bigint; staffId: string | null } | null = null;
@@ -123,7 +126,18 @@ export class PosService {
 
       // Money tendered at the till covers the ticket plus the gratuity.
       const tenderedMinor = totals.totalMinor + (tip?.amountMinor ?? 0n);
-      await repo.recordPayment(context, businessId, userId, order.id, tenderedMinor, input.paymentMethod, currency);
+      const paymentId = await repo.recordPayment(context, businessId, userId, order.id, tenderedMinor, input.paymentMethod, currency);
+      // Same bookkeeping as any captured payment: the sale reaches the ledger
+      // and the customer gets a receipt. The tip is left out of the journal
+      // until there is a tips-payable account to credit.
+      const snapshot = {
+        currency,
+        subtotalMinor: order.subtotalMinor,
+        taxMinor: order.taxMinor,
+        totalMinor: order.totalMinor,
+      };
+      await postCaptureJournal(context, businessId, userId, paymentId, input.paymentMethod, order.totalMinor, currency, snapshot);
+      await receiptsRepo.issueReceipt(context, businessId, order.id, userId, snapshot);
 
       if (input.bookingId && booking) {
         await repo.completeBookingAtTill(

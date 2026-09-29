@@ -5,6 +5,7 @@ import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
 import { AppError, notFoundError, validationError } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
+import * as authorizationRepository from "../authorization/authorization.repository.js";
 import * as repository from "./staff.repository.js";
 import type { CreateExceptionInput, CreateStaffInput, SetStaffScheduleInput, SetStaffServicesInput, UpdateStaffInput } from "./staff.schemas.js";
 import type { CommissionReportRow, ScheduleException, ScheduleExceptionRow, StaffCommissionReport, StaffMember, StaffOperation, StaffProfileRow, StaffScheduleRow, StaffServiceRow } from "./staff.types.js";
@@ -188,4 +189,29 @@ function toCommissionReport(row: CommissionReportRow): StaffCommissionReport {
     commissionMinor,
     completedBookings: Number(row.completedCount),
   };
+}
+
+/** Owner's starting week: Monday to Friday, 09:00–17:00 at the default branch (branch local time). */
+export const OWNER_STARTING_HOURS = [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startTime: "09:00", endTime: "17:00" }));
+
+/**
+ * Makes a new business's owner bookable from day one, with weekday hours at
+ * the default branch, so a one-person business can take bookings without
+ * setting up staff first. Called when a business is created; migration 0069
+ * did the same for businesses that existed before.
+ */
+export async function seedOwnerAsStaff(context: DatabaseContext, businessId: string, ownerUserId: string, defaultBranchId: string): Promise<void> {
+  const [name, membership] = await Promise.all([
+    authorizationRepository.findUserName(context, ownerUserId),
+    authorizationRepository.findMembershipByUserId(context, businessId, ownerUserId),
+  ]);
+  if (!membership) return;
+  const profile = await repository.createProfile(context, businessId, {
+    membershipId: membership.id,
+    displayName: name || membership.email || "Owner",
+    isBookable: true,
+  });
+  await repository.replaceSchedule(context, businessId, profile.id, {
+    entries: OWNER_STARTING_HOURS.map((hours) => ({ locationId: defaultBranchId, ...hours })),
+  });
 }
