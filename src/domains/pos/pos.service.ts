@@ -106,6 +106,7 @@ export class PosService {
         taxMinor: totals.taxMinor,
         serviceChargeMinor: totals.serviceChargeMinor,
         totalMinor: totals.totalMinor,
+        registerShiftId: input.registerShiftId,
       });
 
       let tip: { amountMinor: bigint; staffId: string | null } | null = null;

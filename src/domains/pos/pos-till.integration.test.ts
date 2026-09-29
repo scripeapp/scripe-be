@@ -235,4 +235,31 @@ describe("point-of-sale till", () => {
     }) });
     expect(response.status).toBe(409);
   });
+
+  it("counts cash sales rung up on a shift in its expected cash", async () => {
+    const fix = await posFixture("Drawer Owner");
+    const register = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/registers`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({ locationId: fix.locationId, name: "Front Till" }) });
+    const registerId = (register.body as { data: { register: { id: string } } }).data.register.id;
+    const opened = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/registers/${registerId}/shifts`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({ openingCashMinor: "10000" }) });
+    const shiftId = (opened.body as { data: { shift: { id: string } } }).data.shift.id;
+
+    const charge = (method: string) =>
+      request(server.baseUrl, "/api/store/pos/order", { method: "POST", cookie: fix.cookies, body: JSON.stringify({
+        store_id: fix.storeId,
+        branch_id: fix.locationId,
+        items: tickets(fix),
+        payment_method: method,
+        register_shift_id: shiftId,
+      }) });
+    const cashSale = await charge("cash");
+    expect(cashSale.status).toBe(200);
+    expect((await charge("card")).status).toBe(200);
+    const cashTotal = (cashSale.body as { data: { total_minor: number } }).data.total_minor;
+
+    const closed = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/shifts/${shiftId}/close`, { method: "PATCH", cookie: fix.cookies, body: JSON.stringify({ countedCashMinor: String(10000 + cashTotal) }) });
+    expect(closed.status).toBe(200);
+    const shift = (closed.body as { data: { shift: { expectedCashMinor: string; varianceMinor: string } } }).data.shift;
+    expect(shift.expectedCashMinor).toBe(String(10000 + cashTotal));
+    expect(shift.varianceMinor).toBe("0");
+  });
 });

@@ -192,6 +192,7 @@ export async function createPosOrder(
     taxMinor: bigint;
     serviceChargeMinor: bigint;
     totalMinor: bigint;
+    registerShiftId?: string | null;
   },
 ): Promise<OrderRowSummary> {
   const number = `POS-${Date.now().toString(36).toUpperCase()}-${args.lines[0]?.productVariantId.slice(0, 8).toUpperCase() ?? randomUUID().slice(0, 8).toUpperCase()}`;
@@ -201,11 +202,12 @@ export async function createPosOrder(
       insert into app.orders (
         "businessId", "orderNumber", "storeId", "channelId", "locationId", "customerPartyId",
         "cartId", "currency", "subtotalMinor", "discountMinor", "taxMinor", "totalMinor",
-        "paymentStatus", "createdBy"
+        "paymentStatus", "createdBy", "registerShiftId"
       ) values (
         ${businessId}::uuid, ${number}, ${args.storeId}::uuid, ${args.channelId}::uuid,
         ${args.locationId ?? null}::uuid, null, null, ${args.assetCode}, ${subtotal.toString()},
-        0, ${args.taxMinor.toString()}, ${args.totalMinor.toString()}, 'paid', ${userId}::uuid
+        0, ${args.taxMinor.toString()}, ${args.totalMinor.toString()}, 'paid', ${userId}::uuid,
+        ${args.registerShiftId ?? null}::uuid
       )
       returning "id"::text, "orderNumber", "paymentStatus", "currency",
                 "subtotalMinor"::text, "taxMinor"::text, "totalMinor"::text

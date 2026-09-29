@@ -424,12 +424,23 @@ export async function closeShift(
       where shift."businessId"=${businessId}::uuid and shift."storeId"=${storeId}::uuid
         and shift."id"=${shiftId}::uuid and shift."status"='open'
       for update
-    ), totals as (
+    ), movements as (
       select locked."id",
-        coalesce(sum(case when movement."type" in ('cash_in','adjustment') then movement."amountMinor" else -movement."amountMinor" end),0)::bigint as movement_total
+        coalesce(sum(case when movement."type" in ('cash_in','adjustment') then movement."amountMinor" else -movement."amountMinor" end),0)::bigint as total
       from locked
       left join app.cash_movements movement on movement."shiftId"=locked."id"
       group by locked."id"
+    ), sales as (
+      -- Cash taken for till sales rung up on this shift.
+      select locked."id",
+        coalesce(sum(payment."amountMinor") filter (where payment."method"='cash' and payment."status"='captured'),0)::bigint as total
+      from locked
+      left join app.orders o on o."registerShiftId"=locked."id" and o."businessId"=locked."businessId"
+      left join app.payments payment on payment."orderId"=o."id" and payment."businessId"=o."businessId"
+      group by locked."id"
+    ), totals as (
+      select movements."id", movements.total + sales.total as movement_total
+      from movements join sales on sales."id"=movements."id"
     )
     update app.register_shifts shift set
       "closedByMembershipId"=${membershipId}::uuid,
