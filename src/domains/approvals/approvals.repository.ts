@@ -15,6 +15,7 @@ import type {
   WorkflowRule,
   WorkflowRuleApproverRow,
   WorkflowRuleRow,
+  WorkflowStatus,
   WorkflowSubmitterRow,
   WorkflowType,
 } from "./approvals.types.js";
@@ -159,13 +160,14 @@ export async function createWorkflow(
   userId: string,
   creator: { name: string; email: string; role: string },
   input: WorkflowInput,
+  status: WorkflowStatus = "active",
 ): Promise<string> {
   const workflow = (
     await sql<{ id: string }>`
       insert into app.approval_workflows (
-        "businessId", "name", "type", "triggerTitle", "triggerSubtitle", "noSelfApproval", "creatorName", "creatorEmail", "creatorRole", "createdBy"
+        "businessId", "name", "type", "status", "triggerTitle", "triggerSubtitle", "noSelfApproval", "creatorName", "creatorEmail", "creatorRole", "createdBy"
       ) values (
-        ${businessId}::uuid, ${input.name}, ${input.type}, ${input.triggerTitle ?? null}, ${input.triggerSubtitle ?? null},
+        ${businessId}::uuid, ${input.name}, ${input.type}, ${status}, ${input.triggerTitle ?? null}, ${input.triggerSubtitle ?? null},
         ${input.noSelfApproval ?? true}, ${creator.name}, ${creator.email}, ${creator.role}, ${userId}::uuid
       )
       returning "id"

@@ -487,3 +487,29 @@ export async function createCashMovement(
   `.execute(context.transaction);
   return result.rows[0];
 }
+
+/**
+ * Copies the business's address onto its default store's default branch,
+ * only where that branch has no address yet — so onboarding's "Preferred
+ * address" lands on HQ without ever overwriting an address someone typed.
+ */
+export async function fillDefaultBranchAddress(
+  context: DatabaseContext,
+  businessId: string,
+  address: { addressLine1: string; addressLine2: string | null; city: string | null; state: string | null; postalCode: string | null },
+): Promise<void> {
+  await sql`
+    update app.locations location set
+      "addressLine1" = ${address.addressLine1},
+      "addressLine2" = ${address.addressLine2},
+      "city" = ${address.city},
+      "state" = ${address.state},
+      "postalCode" = ${address.postalCode},
+      "updatedAt" = now()
+    from app.stores store
+    where store."id" = location."storeId"
+      and store."businessId" = ${businessId}::uuid and store."isDefault"
+      and location."businessId" = ${businessId}::uuid and location."isDefault" and location."status" <> 'archived'
+      and coalesce(trim(location."addressLine1"), '') = ''
+  `.execute(context.transaction);
+}

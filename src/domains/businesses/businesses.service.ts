@@ -5,6 +5,8 @@ import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
 import { AppError, notFoundError } from "../../shared/errors.js";
 import { seedDefaultChartOfAccounts } from "../accounting/accounting.service.js";
+import { seedStarterApprovalWorkflows } from "../approvals/approvals.service.js";
+import { createDefaultBranch, fillDefaultBranchAddress } from "../stores/stores.service.js";
 import * as authorization from "../authorization/authorization.service.js";
 import * as repository from "./businesses.repository.js";
 import type { Business, BusinessCreateInput, BusinessListRow, BusinessOperation, BusinessUpdateInput } from "./businesses.types.js";
@@ -32,8 +34,10 @@ export class BusinessesService {
       const created = await repository.createBusiness(context, input, storeSlug);
       await repository.setBusinessContext(context, created.id);
       await seedDefaultChartOfAccounts(context, created.id);
+      await seedStarterApprovalWorkflows(context, created.id, operation.userId);
       const row = await repository.findBusiness(context, created.id);
       if (!row) throw new Error("Created business could not be read in its transaction");
+      await createDefaultBranch(context, created.id, row.defaultStoreId, { name: row.displayName, timezone: row.timezone });
       return toBusiness(row);
     });
   }
@@ -43,6 +47,17 @@ export class BusinessesService {
       await this.requirePermission(context, businessId, "business.update");
       const updated = await repository.updateBusiness(context, businessId, input);
       if (!updated) throw notFoundError("Business not found");
+      // Onboarding's "Preferred address" arrives here; it also becomes HQ's
+      // address if HQ doesn't have one yet.
+      if (input.addressLine1?.trim()) {
+        await fillDefaultBranchAddress(context, businessId, {
+          addressLine1: input.addressLine1.trim(),
+          addressLine2: input.addressLine2 ?? null,
+          city: input.city ?? null,
+          state: input.state ?? null,
+          postalCode: input.postalCode ?? null,
+        });
+      }
       const row = await repository.findBusiness(context, businessId);
       if (!row) throw notFoundError("Business not found");
       return toBusiness(row);

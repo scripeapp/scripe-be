@@ -8,3 +8,34 @@ export async function resolvePrice(c: DatabaseContext, businessId: string, varia
 export async function upsertLocationSetting(c: DatabaseContext, businessId: string, input: LocationSettingInput): Promise<LocationSetting> { return (await sql<LocationSetting>`insert into app.product_location_settings ("businessId","productId","locationId","isAvailable","leadTimeMinutes") values (${businessId}::uuid,${input.productId}::uuid,${input.locationId}::uuid,${input.isAvailable ?? true},${input.leadTimeMinutes ?? null}) on conflict ("businessId","productId","locationId") do update set "isAvailable"=excluded."isAvailable","leadTimeMinutes"=excluded."leadTimeMinutes" returning "id","businessId","productId","locationId","isAvailable","leadTimeMinutes",to_char("createdAt",'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') as "createdAt",to_char("updatedAt",'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') as "updatedAt"`.execute(c.transaction)).rows[0]!; }
 export async function createTaxRate(c: DatabaseContext, businessId: string, input: { code: string; name: string; rateBps: number; isInclusive?: boolean; effectiveFrom?: string; effectiveTo?: string | null }): Promise<TaxRate> { return (await sql<TaxRate>`insert into app.tax_rates ("businessId","code","name","rateBps","isInclusive","effectiveFrom","effectiveTo") values (${businessId}::uuid,${input.code},${input.name},${input.rateBps},${input.isInclusive ?? false},coalesce(${input.effectiveFrom ?? null}::timestamptz,now()),${input.effectiveTo ?? null}::timestamptz) returning *`.execute(c.transaction)).rows[0]!; }
 export async function listTaxRates(c: DatabaseContext, businessId: string): Promise<TaxRate[]> { return (await sql<TaxRate>`select * from app.tax_rates where "businessId"=${businessId}::uuid and "status"='active' order by "name"`.execute(c.transaction)).rows; }
+
+// ---- Per-branch product settings (the product form's "Branch availability & pricing") ----
+
+export async function productVariantIds(c: DatabaseContext, businessId: string, productId: string): Promise<{ id: string; name: string; sku: string | null }[]> {
+  return (await sql<{ id: string; name: string; sku: string | null }>`select "id","name","sku" from app.product_variants where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "status"='active' order by "isDefault" desc,"createdAt"`.execute(c.transaction)).rows;
+}
+
+export async function listLocationSettings(c: DatabaseContext, businessId: string, productId: string): Promise<{ locationId: string; isAvailable: boolean; leadTimeMinutes: number | null }[]> {
+  return (await sql<{ locationId: string; isAvailable: boolean; leadTimeMinutes: number | null }>`select "locationId","isAvailable","leadTimeMinutes" from app.product_location_settings where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid`.execute(c.transaction)).rows;
+}
+
+/** Active branch-specific prices for a product's variants, one row per (variant, branch). */
+export async function listLocationPrices(c: DatabaseContext, businessId: string, variantIds: readonly string[], assetCode: string): Promise<{ productVariantId: string; locationId: string; amountMinor: string }[]> {
+  if (variantIds.length === 0) return [];
+  return (await sql<{ productVariantId: string; locationId: string; amountMinor: string }>`select "productVariantId","locationId","amountMinor"::text from app.product_prices where "businessId"=${businessId}::uuid and "productVariantId" in (${sql.join(variantIds.map((id) => sql`${id}::uuid`))}) and "assetCode"=${assetCode} and "status"='active' and "locationId" is not null`.execute(c.transaction)).rows;
+}
+
+export async function archiveLocationPrices(c: DatabaseContext, businessId: string, variantIds: readonly string[], locationId: string, assetCode: string): Promise<void> {
+  if (variantIds.length === 0) return;
+  await sql`update app.product_prices set "status"='archived',"archivedAt"=now() where "businessId"=${businessId}::uuid and "productVariantId" in (${sql.join(variantIds.map((id) => sql`${id}::uuid`))}) and "locationId"=${locationId}::uuid and "assetCode"=${assetCode} and "status"='active'`.execute(c.transaction);
+}
+
+/** On-hand stock for a product's variants at each branch that has an inventory location. */
+export async function listBranchStock(c: DatabaseContext, businessId: string, variantIds: readonly string[]): Promise<{ variantId: string; locationId: string; onHand: string }[]> {
+  if (variantIds.length === 0) return [];
+  return (await sql<{ variantId: string; locationId: string; onHand: string }>`select i."variantId", l."locationId", trim_scale(b."onHand")::text as "onHand" from app.stock_balances b join app.inventory_items i on i."id"=b."inventoryItemId" and i."businessId"=b."businessId" join app.inventory_locations l on l."id"=b."inventoryLocationId" and l."businessId"=b."businessId" where b."businessId"=${businessId}::uuid and i."variantId" in (${sql.join(variantIds.map((id) => sql`${id}::uuid`))})`.execute(c.transaction)).rows;
+}
+
+export async function archiveBasePrices(c: DatabaseContext, businessId: string, variantId: string, assetCode: string): Promise<void> {
+  await sql`update app.product_prices set "status"='archived',"archivedAt"=now() where "businessId"=${businessId}::uuid and "productVariantId"=${variantId}::uuid and "assetCode"=${assetCode} and "status"='active' and "locationId" is null`.execute(c.transaction);
+}

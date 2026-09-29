@@ -35,4 +35,18 @@ describe("carts and orders domains", () => {
     expect(orderData.totalMinor).toBe("250000");
     expect(Array.isArray(orderData.lines)).toBe(true);
   });
+  it("refuses checkout at a branch where the product is switched off", async () => {
+    const owner = await authenticate("Branch Availability Owner");
+    const business = ((await request(server.baseUrl, "/api/businesses", { method: "POST", cookie: owner.cookies, body: JSON.stringify({ displayName: "Branch Availability Co" }) })).body as { data: { business: { id: string; defaultStore: { id: string } } } }).data.business;
+    const base = `/api/businesses/${business.id}`;
+    const channel = ((await request(server.baseUrl, `${base}/stores/${business.defaultStore.id}/channels`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({ code: `web${randomUUID().slice(0, 6)}`, name: "Web", kind: "storefront" }) })).body as { data: { channel: { id: string } } }).data.channel;
+    const product = ((await request(server.baseUrl, `${base}/products`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({ storeId: business.defaultStore.id, name: "Suya", status: "active", variant: { name: "Default" } }) })).body as { data: { product: { id: string; variants: [{ id: string }] } } }).data.product;
+    await request(server.baseUrl, `${base}/prices`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({ productVariantId: product.variants[0].id, assetCode: "NGN", amountMinor: 50000 }) });
+    const branch = ((await request(server.baseUrl, `${base}/stores/${business.defaultStore.id}/locations`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({ name: "Ikeja", kind: "branch", countryCode: "NG", timezone: "Africa/Lagos", businessHours: {} }) })).body as { data: { location: { id: string } } }).data.location;
+    await request(server.baseUrl, `${base}/products/${product.id}/branch-settings`, { method: "PUT", cookie: owner.cookies, body: JSON.stringify({ branches: [{ locationId: branch.id, isAvailable: false, leadTimeMinutes: null, priceMinor: null }] }) });
+    const cart = ((await request(server.baseUrl, `${base}/carts`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({ storeId: business.defaultStore.id, channelId: channel.id }) })).body as { data: { cart: { id: string } } }).data.cart;
+    await request(server.baseUrl, `${base}/carts/${cart.id}/lines`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({ productVariantId: product.variants[0].id, quantity: 1 }) });
+    const checkout = await request(server.baseUrl, `${base}/carts/${cart.id}/checkout`, { method: "POST", cookie: owner.cookies, body: JSON.stringify({ locationId: branch.id, idempotencyKey: `checkout-${randomUUID()}` }) });
+    expect(checkout.status).toBe(409);
+  });
 });

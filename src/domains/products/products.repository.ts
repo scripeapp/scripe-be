@@ -141,3 +141,16 @@ export async function attachModifierGroup(c: DatabaseContext, businessId: string
   await sql`insert into app.product_modifier_groups ("businessId","productId","groupId","sortOrder") values (${businessId}::uuid,${productId}::uuid,${groupId}::uuid,${position}) on conflict ("productId","groupId") do nothing`.execute(c.transaction);
 }
 export async function detachModifierGroup(c: DatabaseContext, businessId: string, productId: string, groupId: string): Promise<void> { await sql`delete from app.product_modifier_groups where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "groupId"=${groupId}::uuid`.execute(c.transaction); }
+
+export async function clearDefaultVariant(c: DatabaseContext, businessId: string, productId: string): Promise<void> {
+  await sql`update app.product_variants set "isDefault"=false where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "isDefault"`.execute(c.transaction);
+}
+
+export async function updateVariant(c: DatabaseContext, businessId: string, productId: string, variantId: string, input: VariantInput): Promise<VariantRow | undefined> {
+  return (await sql<VariantRow>`update app.product_variants set "name"=${input.name},"sku"=${input.sku ?? null},"optionValues"=${JSON.stringify(input.optionValues ?? {})}::jsonb,"isDefault"=${input.isDefault ?? false} where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "id"=${variantId}::uuid and "status" <> 'archived' returning *`.execute(c.transaction)).rows[0];
+}
+
+export async function archiveVariants(c: DatabaseContext, businessId: string, productId: string, keepIds: readonly string[]): Promise<void> {
+  const keep = keepIds.length > 0 ? sql`and "id" not in (${sql.join(keepIds.map((id) => sql`${id}::uuid`))})` : sql``;
+  await sql`update app.product_variants set "status"='archived',"archivedAt"=now(),"isDefault"=false,"sku"=null where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "status" <> 'archived' ${keep}`.execute(c.transaction);
+}

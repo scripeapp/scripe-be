@@ -38,6 +38,56 @@ const MAX_CAS_ATTEMPTS = 2;
  * Bills/Transfers/transferSource (see migration 0031's header comment for
  * why — this rewrite doesn't have what that taxonomy was built for).
  */
+/**
+ * Every business starts with two approval workflows, both switched off: one
+ * for Bills and one for Transfers, each the same shape "Add workflow" builds
+ * for that type, with the owner as the only approver. They're templates to
+ * review and turn on, never gates by default — switched on, they'd hold up
+ * payments before anyone chose to. They cover different payment types, so
+ * either can be switched on without the other.
+ *
+ * Called once, when the business is created (businesses.service); existing
+ * businesses were backfilled by migration 0067.
+ */
+export async function seedStarterApprovalWorkflows(context: DatabaseContext, businessId: string, ownerUserId: string): Promise<void> {
+  const creator = await resolveCreatorSnapshot(context, businessId, ownerUserId);
+  const ownerName = creator.name || creator.email;
+  const approvers = ownerName ? [{ userId: ownerUserId, email: creator.email || null, name: ownerName, role: "Owner" }] : [];
+  for (const starter of STARTER_WORKFLOWS) {
+    await repository.createWorkflow(
+      context,
+      businessId,
+      ownerUserId,
+      creator,
+      {
+        name: starter.name,
+        type: starter.type,
+        triggerTitle: starter.triggerTitle,
+        triggerSubtitle: STARTER_TRIGGER_SUBTITLE,
+        noSelfApproval: true,
+        groups: [
+          {
+            title: STARTER_GROUP_TITLE,
+            subtitle: starter.groupSubtitle,
+            approvers,
+            rules: [{ rangeLabel: STARTER_RULE.rangeLabel, description: STARTER_RULE.description, minAmountMinor: null, maxAmountMinor: null, requireAll: true, sequential: false }],
+          },
+        ],
+      },
+      "inactive",
+    );
+  }
+}
+
+/** Mirrored by migration 0067's backfill — change both together. */
+export const STARTER_WORKFLOWS = [
+  { name: "Bills", type: "bill_payment", triggerTitle: "Bills Submitted", groupSubtitle: "All bills" },
+  { name: "Transfers", type: "withdrawal", triggerTitle: "Transfers Initiated", groupSubtitle: "All transfers" },
+] as const;
+const STARTER_TRIGGER_SUBTITLE = "Anyone with payment access";
+const STARTER_GROUP_TITLE = "Approval group 1";
+const STARTER_RULE = { rangeLabel: "Everything else", description: "All approvers in this group must approve" } as const;
+
 export class ApprovalsService {
   constructor(private readonly database: Database) {}
 
@@ -63,7 +113,7 @@ export class ApprovalsService {
       if (await repository.hasConflictingActiveWorkflow(context, operation.businessId, input.type)) {
         throw conflictError(`An active workflow already covers ${input.type === "all" ? "everything" : input.type.replace("_", " ")} — deactivate it first`);
       }
-      const creator = await resolveCreatorSnapshot(context, operation);
+      const creator = await resolveCreatorSnapshot(context, operation.businessId, operation.userId);
       const workflowId = await repository.createWorkflow(context, operation.businessId, operation.userId, creator, input);
       return (await repository.findWorkflow(context, operation.businessId, workflowId))!;
     });
@@ -100,7 +150,7 @@ export class ApprovalsService {
   async duplicateWorkflow(operation: ApprovalsOperation, workflowId: string): Promise<Workflow> {
     return this.run(operation, async (context) => {
       await requirePermission(context, operation.businessId, "approvals.workflow.manage");
-      const creator = await resolveCreatorSnapshot(context, operation);
+      const creator = await resolveCreatorSnapshot(context, operation.businessId, operation.userId);
       const source = await repository.findWorkflow(context, operation.businessId, workflowId);
       if (!source) throw notFoundError("Workflow not found");
       const newId = await repository.createWorkflow(context, operation.businessId, operation.userId, creator, {
@@ -253,10 +303,10 @@ export class ApprovalsService {
   }
 }
 
-async function resolveCreatorSnapshot(context: DatabaseContext, operation: ApprovalsOperation): Promise<{ name: string; email: string; role: string }> {
+async function resolveCreatorSnapshot(context: DatabaseContext, businessId: string, userId: string): Promise<{ name: string; email: string; role: string }> {
   const [name, membership] = await Promise.all([
-    authorizationRepository.findUserName(context, operation.userId),
-    authorizationRepository.findMembershipByUserId(context, operation.businessId, operation.userId),
+    authorizationRepository.findUserName(context, userId),
+    authorizationRepository.findMembershipByUserId(context, businessId, userId),
   ]);
   return { name: name ?? "", email: membership?.email ?? "", role: membership?.roles[0]?.code ?? "member" };
 }

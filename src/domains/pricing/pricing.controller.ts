@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
-import { businessParamsSchema, priceInputSchema, priceListSchema, priceParamsSchema, resolvePriceSchema, locationSettingSchema, taxRateSchema } from "./pricing.schemas.js";
+import { businessParamsSchema, priceInputSchema, priceListSchema, priceParamsSchema, productBranchParamsSchema, productBranchQuerySchema, productBranchSettingsSchema, resolvePriceSchema, locationSettingSchema, taxRateSchema } from "./pricing.schemas.js";
 import type { PricingService } from "./pricing.service.js";
 import type { PricingOperation } from "./pricing.types.js";
 export class PricingController {
@@ -11,6 +11,8 @@ export class PricingController {
   readonly archive = this.handle(async (r) => { const p = priceParamsSchema.parse(r.params); await this.service.archivePrice(this.operation(r, p.businessId), p.priceId); return { archived: true }; });
   readonly resolve = this.handle(async (r) => { const p = resolvePriceSchema.parse({ ...r.params, ...r.query }); return { price: await this.service.resolve(this.operation(r, p.businessId), p.productVariantId, p.locationId, p.assetCode) }; });
   readonly setLocation = this.handle(async (r) => { const p = businessParamsSchema.parse(r.params); return { setting: await this.service.setLocation(this.operation(r, p.businessId), locationSettingSchema.parse(r.body)) }; }, 201);
+  readonly branchSettings = this.handle(async (r) => { const p = productBranchParamsSchema.parse(r.params); return { branches: await this.service.getBranchSettings(this.operation(r, p.businessId), p.productId, productBranchQuerySchema.parse(r.query).assetCode) }; });
+  readonly saveBranchSettings = this.handle(async (r) => { const p = productBranchParamsSchema.parse(r.params); return { branches: await this.service.saveBranchSettings(this.operation(r, p.businessId), p.productId, productBranchSettingsSchema.parse(r.body)) }; });
   readonly listTaxRates = this.handle(async (r) => { const p = businessParamsSchema.parse(r.params); return { taxRates: await this.service.listTaxRates(this.operation(r, p.businessId)) }; });
   readonly createTaxRate = this.handle(async (r) => { const p = businessParamsSchema.parse(r.params); return { taxRate: await this.service.createTaxRate(this.operation(r, p.businessId), taxRateSchema.parse(r.body)) }; }, 201);
   private operation(r: Request, businessId: string): PricingOperation { return { userId: requireAuthContext(r).userId, businessId, requestId: r.requestId }; }

@@ -18,6 +18,10 @@ export async function priceCartLines(c: DatabaseContext, businessId: string, lin
     const query = sql<PriceLookup>`select p."id" as "productId", v."sku", p."name" as "description", (select pp."amountMinor"::text from app.product_prices pp where pp."businessId"=${businessId}::uuid and pp."productVariantId"=v."id" and pp."assetCode"=${line.assetCode} and pp."status"='active' and pp."effectiveFrom" <= now() and (pp."effectiveTo" is null or pp."effectiveTo" > now()) ${locationClause} order by (pp."locationId" is not null) desc, pp."effectiveFrom" desc limit 1) as "unit" from app.product_variants v join app.products p on p."id"=v."productId" and p."businessId"=v."businessId" where v."id"=${line.productVariantId}::uuid and v."businessId"=${businessId}::uuid and v."status"='active'`;
     const row = (await query.execute(c.transaction)).rows[0];
     if (!row?.unit) throw conflictError(`No active price for variant ${line.productVariantId}`);
+    if (locationId) {
+      const unavailable = (await sql<{ id: string }>`select "id" from app.product_location_settings where "businessId"=${businessId}::uuid and "productId"=${row.productId}::uuid and "locationId"=${locationId}::uuid and not "isAvailable"`.execute(c.transaction)).rows[0];
+      if (unavailable) throw conflictError(`${row.description} isn't available at this branch`);
+    }
     const lineTotal = BigInt(row.unit) * BigInt(line.quantity);
     priced.push({ line, productId: row.productId, sku: row.sku, description: row.description, unitMinor: row.unit, lineTotalMinor: lineTotal.toString() });
   }

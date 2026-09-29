@@ -6,3 +6,8 @@ export interface LocationSetting { readonly id: string; readonly businessId: str
 export interface LocationSettingInput { readonly productId: string; readonly locationId: string; readonly isAvailable?: boolean; readonly leadTimeMinutes?: number | null; }
 export interface TaxRate { readonly id: string; readonly businessId: string; readonly code: string; readonly name: string; readonly rateBps: number; readonly isInclusive: boolean; readonly status: PricingStatus; readonly effectiveFrom: string; readonly effectiveTo: string | null; }
 export interface PricingOperation { readonly userId: string; readonly businessId: string; readonly requestId: string; }
+
+/** One branch's view of a product: availability, lead time, its own price (null = base price) and on-hand stock per variant. */
+export interface ProductBranchSetting { readonly locationId: string; readonly isAvailable: boolean; readonly leadTimeMinutes: number | null; readonly priceMinor: string | null; readonly stock: Readonly<Record<string, string>>; }
+export interface ProductBranchSettingInput { readonly locationId: string; readonly isAvailable: boolean; readonly leadTimeMinutes: number | null; readonly priceMinor: number | null; readonly stock?: Readonly<Record<string, number>>; }
+export interface ProductBranchSettingsInput { readonly assetCode: string; readonly branches: readonly ProductBranchSettingInput[]; }

@@ -46,7 +46,8 @@ async function setupBusiness(owner: { cookies: string }, name: string) {
   const locationResponse = await request(server.baseUrl, `${base}/stores/${business.defaultStore.id}/locations`, {
     method: "POST",
     cookie: owner.cookies,
-    body: JSON.stringify({ name: `${name} Branch`, kind: "branch", addressLine1: "1 Admiralty Way", city: "Lagos", state: "Lagos", phone: "08011111111" }),
+    // Every store starts with an address-less default branch; this one takes over as the pickup point.
+    body: JSON.stringify({ name: `${name} Branch`, kind: "branch", isDefault: true, addressLine1: "1 Admiralty Way", city: "Lagos", state: "Lagos", phone: "08011111111" }),
   });
   const location = (locationResponse.body as { data: { location: { id: string } } }).data.location;
 
