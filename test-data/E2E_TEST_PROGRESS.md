@@ -3,10 +3,12 @@
 Tracking doc so anyone can continue from where testing stopped. Test data: [`sprout-meals.seed.json`](./sprout-meals.seed.json).
 
 ## How to run
-- Backend: `cd scripe-be && bun run dev` (uses local `scripe_dev`, migrated to `0064`) → http://localhost:4000
+- Backend: `cd scripe-be && bun run dev` (uses local `scripe_dev`, migrated to `0071`) → http://localhost:4000
 - Frontend: `cd scripe-fe && bun run dev` → http://localhost:3000
-- Login: `abdulsalamabodunrin369@gmail.com` / `abdulsalam123`
-- Business under test: **Sprout Meals** (`28533ce1-e540-4cea-a721-f76c954bc50e`)
+- Login (local test account, recreated 2026-09-29 after the dev DB was reset): `e2e.sprout@scripe.test` / `E2e-65114d179d4c!`
+- Business under test: **Sprout Meals** (`b9c9d816-5e98-47d0-9dd9-c26aea07f395`), store `a6098bfe-7209-4f25-8100-bebd67bc8056` (still **draft**), branch `5dc43540-ec62-47ea-a337-8529a98f365c`
+- Test data in it: products *Jollof Rice Bowl* (₦3,500, "Protein" group: Chicken +₦800 default / Beef +₦1,000) and *Chicken Wrap* (₦2,800); register *Front counter*; three till orders (one fulfilled); one closed shift (₦300 short).
+- The old `abdulsalam…` account and business `28533ce1…` no longer exist locally.
 
 ## Status legend
 🟢 fully working (verified after any fixes) · 🟡 in progress / partial · 🔴 blocked/bug found · ⬜ not started
@@ -24,15 +26,39 @@ Tracking doc so anyone can continue from where testing stopped. Test data: [`spr
 | 8 | Store → Inventory | 🟢 | UI renders; all 5 inventory endpoints (balances/locations/movements/transfers/counts) return 200. Empty because the sample product has tracking off. |
 | 9 | Store → Vendors | 🟢 | Create vendor works; "Fresh Farms Produce" persisted to `app.parties` + `app.supplier_accounts`. |
 | 10 | Store → Purchase orders | 🟢 | Backend create (201) + list (200) work; PO-2026-014 (₦180,000) persisted and shows in UI. See UX note below. |
-| 11 | Store → Bookings | 🟡 | **Backend + FE page complete**: BE booking engine (evolved tables, slot engine, reserve/slots/list/status endpoints) + staff commission report. FE Bookings page built & wired (calendar day/week, quick book, list, status panel via `Bookings/` module), Store→Bookings **nav re-added**, obsolete scheduling-era UI files removed, FE `tsc --noEmit` clean + lint clean. Remaining: POS till slice (price resolution, order-from-booking, tips, deposits). |
+| 11 | Store → Bookings | 🟢 | **Service bookings Phases 1–2 built (2026-09-29).** Staff-made bookings (`POST /api/store/bookings`, confirmed, no hold), walk-ins, add-on extra time, per-staff durations, service versions (variants), drag-to-move, staff commission + Staff earnings report, list/calendar redesigned to Figma. Still needs a manual click-through; see `docs/SERVICE_BOOKINGS_DESIGN.md` "Status". Earlier note: | **Backend + FE page complete**: BE booking engine (evolved tables, slot engine, reserve/slots/list/status endpoints) + staff commission report. FE Bookings page built & wired (calendar day/week, quick book, list, status panel via `Bookings/` module), Store→Bookings **nav re-added**, obsolete scheduling-era UI files removed, FE `tsc --noEmit` clean + lint clean. Remaining: POS till slice (price resolution, order-from-booking, tips, deposits). |
 | 12 | Store → Point of Sale | 🟢 | `GET /api/store/pos/analytics` **built & verified** (200) — POS-channel gross sales / orders / discounts / returns + daily chart. UI renders fully. **Till slice built (migration 0066 + POS domain + FE page)**: booking-order pricing (`POST /store/pos/order/preview|order`), order-from-booking with tips (`app.booking_tips`), deposits netted off tendered, commission report carries `tipsMinor`. Verified: `pos-till.integration.test.ts` (2 tests) + FE bookings panel/tip flow wired. |
-| 13 | Orders | ⬜ | Not started |
+| 13 | Orders | 🟢 | Audited end to end via the till (2026-09-29): sell → order listed → detail → fulfil → receipt → shift close. 10 bugs fixed, see "Orders audit" below. |
 | 14 | Payments | ⬜ | Not started |
 | 15 | Customers | ⬜ | Not started |
 | 16 | Banking | ⬜ | Not started |
 
 ## Next to test
-➡️ Resume audit at **Module 13 — Orders**, 14 Payments, 15 Customers, 16 Banking. Bookings FE page is built & wired but not yet manually smoke-tested end-to-end (see "Service bookings — Phase 2" builder notes below); backend bookings + commission slices are fully tested.
+➡️ Resume audit at **Module 14 — Payments**, then 15 Customers, 16 Banking. Also still worth a manual click-through: Store → Bookings (calendar → quick book → booking panel → till).
+
+## Orders audit (Module 13) — 2026-09-29 ✅
+Tested as a cashier would: register created → shift opened (₦10,000 float) → 3 till sales (cash with modifiers, card) → orders list/detail → fulfil → receipt → shift closed and reconciled. Bugs found and fixed:
+1. **[Auth] Signing in as a different user kept the previous user's business/store** → every request 403'd and the app bounced to onboarding. FE `hocs/AuthStateListener.tsx` now clears cached state and reloads when the session user changes.
+2. **[Till] Registers never loaded** — `RegisterShiftWidget` called removed `/store/registers` + `/store/register/shift/*` routes. Now uses `storesApi` (list/current/open/close).
+3. **[Registers] Settings page unreachable** — `registers` (and `qrcodes`) weren't in `STORE_SECTION_TABS`. Fixed; the till's "no register" hint links there.
+4. **[Till] Cash sales ignored in drawer reconciliation** — expected cash = float + manual movements only. Migration `0070_app_order_register_shift` (orders.registerShiftId); close now adds the shift's captured cash payments. New `GET …/stores/:storeId/shifts/:shiftId/summary` feeds the close screen.
+5. **[Till] Item picker 404'd** for variants/modifiers (`/store/public/:slug/product/:id/variants|modifier-groups` didn't exist) — and public endpoints fail for draft stores anyway. Till now reads as the merchant; storefront reads variants from the public product. New public `…/product/:id/modifier-groups` + migration `0071_app_public_modifier_reads` (anon read of active groups/options).
+6. **[Till] Categories 400** — called legacy `/store/categories`; now `categoriesApi`.
+7. **[Till] No receipt and no ledger posting for till sales** — payments were inserted directly. Now posts the capture journal and issues the receipt (tips excluded from the journal until a tips-payable account exists).
+8. **[Orders] Every order showed "Customer" from "Storefront", payment "Card · Paystack"** — backend orders now return `channelKind`, customer name/email/phone and `paymentMethod`; FE shows Walk-in/real method; till lines name options ("Jollof Rice Bowl (Beef)").
+9. **[Orders] Fulfil → 500** for products without stock tracking (joined to inventory items). Untracked lines now fulfil without stock moves; errors are 400/409. Fulfil defaults to Pickup for till orders.
+10. **[Orders] ⋯ menu did nothing** — now Refresh / Export CSV / Deliveries.
+
+**Open questions / not fixed:**
+- Till orders are saved as placed + unfulfilled. Should a till sale count as fulfilled automatically (retail), or stay open for a kitchen (food)? Product decision.
+- The keypad on the Charge screen enters kobo (typing 12000 = ₦120.00) — cash-register style; confirm it's intended.
+- Top bar reads "Products / New product" on the Registers page.
+- `PairDeviceModal` still calls the legacy `/store/registers/:id/pairing-code` (no backend route).
+- Orders filter offers a "WhatsApp" channel that nothing produces.
+- Tips aren't in the ledger (no tips-payable account).
+
+## Vendors — address (2026-09-29)
+State and City are now dependent dropdowns (`constants/nigerianCities.ts`, LGAs per state) on the New vendor page. Other address forms (checkout, address book, vendor modal) had uncommitted edits in progress by someone else at the time and were left alone.
 
 > Testing note: keep the browser pane at its natural width (no viewport emulation) — an emulated-then-scaled viewport makes click coordinates miss, which looks like "buttons do nothing" but is a test-harness artifact, not an app bug.
 
@@ -90,7 +116,7 @@ Per `SERVICE_BOOKINGS_DESIGN.md` § Bookings page — the FE page is now wired t
 
 - **FE module**: `scripe-fe/src/components/Dashboard/Store/Bookings/` — `bookingsTypes.ts` (`ServiceBooking`/`AvailableSlot`/`ReservedBooking`/`StaffMember`/`ScheduleException` + `BOOKING_STATUS_META`), `bookingsTime.ts` (local-datetime/tz helpers + `localWallTimeToIso`), `bookingsApi.ts` (fetchBookings/fetchSlots/reserveBooking/updateBookingStatus/fetchStaff/fetchScheduleExceptions/formatPriceMinor), `BookingsCalendar.tsx` (day + week views, per-staff columns, business-hours + time-off-exception closed shading, status colours, click empty slot → quick-book prefill, click block → detail panel), `BookingsList.tsx` (today/upcoming/past/requests segments + staff/service/status filters), `QuickBookDrawer.tsx` (name/email/phone, service, staff, date, live slots; submits `POST /api/store/bookings/reserve`), `BookingDetailDrawer.tsx` (details, items & prices, status actions, cancel-reason, reschedule for held/pending with `starts_at`), `BookingsPage.tsx` (composition, location filter, refresh, auto-open created booking, listens for `open-quick-book` window event from the Dashboard header action).
 - **Wiring**: `config/navigation.tsx` store subitem `bookings` + `CalendarClock` icon (nav re-added); `StoreOverview.tsx` `"bookings"` tab → renders `BookingsPage`; `Dashboard.tsx` header shows "New booking" on the bookings sub-page.
-- **Cleanup**: deleted obsolete `Store/BookingsManager.tsx`, `Store/EventTypeList.tsx`, `Store/AvailabilityView.tsx` (verified zero importers). Kept `queries/scheduling/*` + `types/availability.ts` (still used by storefront calendar, product cards, `StoreCustomize`, `AddOrderModal`, `AvailabilitySelector`).
+- **Cleanup**: deleted obsolete `Store/BookingsManager.tsx`, `Store/EventTypeList.tsx`, `Store/AvailabilityView.tsx` (verified zero importers). Kept `types/availability.ts`. (`queries/scheduling/*` was later found unused and deleted on 2026-09-29.)
 - **Conventions**: state set on open/load is deferred past the effect's synchronous phase via `yieldToMicrotaskQueue()` (repo `react-hooks/set-state-in-effect` rule); mutations go through `PATCH /api/store/bookings/:id/status` with the transition matrix from the design doc.
 - **Verification**: `npx tsc --noEmit` → 0 errors outside stale `.next/types` artifacts; `npx eslint` on the new module + wired files → 0 errors (only 2 pre-existing `Dashboard.tsx` warnings). **Not yet manually smoke-tested** in-browser; run the calendar → quick-book → status-panel happy path when resuming audits.
 - **Note**: reserves still hold `priceMinor = 0` (pricing resolution is part of the till build), so the commission report revenue is legitimately 0 for online bookings until the Phase 2 POS prices/charges them.
@@ -102,7 +128,7 @@ Per `SERVICE_BOOKINGS_DESIGN.md` § Bookings page — the FE page is now wired t
 4. **[Store overview / branch dashboard] `GET /api/store/analytics` → 400 (endpoint missing).** **Fixed:** added a store-scoped analytics endpoint to the `dashboard` domain, mounted at `/api/store/analytics`; returns `total_revenue`/`total_orders`/`total_customers`/`total_products` + per-location breakdown. Verified 200 (correctly counts the 1 product created).
 
 ---
-_Last updated: 2026-09-29 — POS till slice built (migration 0066 booking_tips, pos domain, till integration tests, FE bookings panel + tip flow); Store → Bookings FE page wired end-to-end. Remaining: Modules 13–16 + new-till manual smoke test._
+_Last updated: 2026-09-29 — Module 13 Orders audited and fixed (migrations 0070–0071); bookings Phases 1–2 built. Remaining: Modules 14–16 + Bookings manual click-through._
 
 ## POS till slice — ✅ built & wired (2026-09-29)
 Per `SERVICE_BOOKINGS_DESIGN.md` § Phase 2 (till). Pricing + tips + deposits now land end-to-end:
@@ -114,4 +140,4 @@ Per `SERVICE_BOOKINGS_DESIGN.md` § Phase 2 (till). Pricing + tips + deposits no
 - **FE**: PosScreen gains Menu/Bookings toggle + till bookings panel (60s poll, reload after charge); `usePosTicket.openBooking` materializes booked items (variant/modifiers) and tracks `bookingQuantities` so additive items are the only lines sent with `booking_id`; PosTenderScreen shows tip presets when charging a booking (`amount_minor` sent via `toMinorUnits`).
 - **Verification**: `pos-till.integration.test.ts` (preview/charge booking, tip→commission, retail fallback, cross-branch shift 409) — 2 passing; bookings/commission suites still green; backend + FE `tsc --noEmit` clean; FE lint clean on touched files.
 
-_Remaining: new-till manual smoke test (Store → Bookings → till), then Modules 13–16._
+_Superseded: see "Orders audit" above for the till smoke test (2026-09-29)._
