@@ -9,7 +9,7 @@ import { verifyPin } from "../../shared/pin.js";
 import * as authorization from "../authorization/authorization.service.js";
 import { PosService, type DeviceActor } from "../pos/pos.service.js";
 import type { PosLineInput } from "../pos/pos.types.js";
-import { listPublicCategories, listPublicModifierGroups, listPublicProducts } from "../products/products.service.js";
+import { getPublicProduct, listPublicCategories, listPublicModifierGroups, listPublicProducts } from "../products/products.service.js";
 import * as staffRepository from "../staff/staff.repository.js";
 import * as posRepository from "../pos/pos.repository.js";
 import * as storesRepository from "../stores/stores.repository.js";
@@ -143,6 +143,14 @@ export class PosDevicesService {
         listPublicCategories(context, device.businessId),
       ]);
       return { products, categories };
+    });
+  }
+
+  async product(device: DeviceActor, productId: string) {
+    return this.asDevice(device, "product.read", async (context) => {
+      const product = await getPublicProduct(context, device.businessId, device.storeId, productId);
+      if (!product) throw notFoundError("Product not found");
+      return product;
     });
   }
 

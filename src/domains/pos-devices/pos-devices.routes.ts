@@ -24,6 +24,7 @@ export function createPosDevicesRouter(): Router {
   router.get(`${device}/session`, controller.session);
   router.post(`${device}/unlock`, controller.unlock);
   router.get(`${device}/catalog`, controller.catalog);
+  router.get(`${device}/products/:productId`, controller.product);
   router.get(`${device}/products/:productId/modifier-groups`, controller.modifierGroups);
   router.get(`${device}/shift`, controller.currentShift);
   router.get(`${device}/shift/summary`, controller.shiftSummary);

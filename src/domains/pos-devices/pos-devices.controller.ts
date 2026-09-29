@@ -79,6 +79,11 @@ export class PosDevicesController {
 
   readonly catalog = this.handle(async (request) => this.service.catalog(this.device(request)));
 
+  readonly product = this.handle(async (request) => {
+    const { productId } = productParamsSchema.parse(request.params);
+    return { product: await this.service.product(this.device(request), productId) };
+  });
+
   readonly modifierGroups = this.handle(async (request) => {
     const { productId } = productParamsSchema.parse(request.params);
     return { groups: await this.service.modifierGroups(this.device(request), productId) };

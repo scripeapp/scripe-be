@@ -145,6 +145,8 @@ describe("cashier devices", () => {
     const catalog = data<{ products: { id: string; variants: { priceMinor: string | null }[] }[] }>(await onDevice(token, "/catalog"));
     expect(catalog.products.map((product) => product.id)).toEqual([fix.productId]);
     expect(catalog.products[0]!.variants[0]!.priceMinor).toBe("250000");
+    expect((await onDevice(token, `/products/${fix.productId}`)).status).toBe(200);
+    expect(data<{ groups: unknown[] }>(await onDevice(token, `/products/${fix.productId}/modifier-groups`)).groups).toEqual([]);
 
     const sale = { items: [{ product_id: fix.productId, quantity: 2 }], payment_method: "cash", staff_id: fix.cashierId, idempotency_key: randomUUID() };
     expect((await onDevice(token, "/order", sale)).status).toBe(409);
