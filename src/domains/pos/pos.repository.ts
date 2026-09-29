@@ -102,21 +102,25 @@ export async function defaultVariantId(
   return result.rows[0]?.id;
 }
 
-/** Sums the price adjustments of the selected modifier options for one line. */
-export async function modifierAdjustmentMinor(
+/** The price adjustment and names of the selected modifier options for one line. */
+export async function modifierSelection(
   context: DatabaseContext,
   businessId: string,
   optionIds: string[],
-): Promise<bigint> {
-  if (optionIds.length === 0) return 0n;
-  const result = await sql<{ total: string | null }>`
-    select sum("priceAdjustmentMinor")::text as "total"
+): Promise<{ adjustmentMinor: bigint; names: string[] }> {
+  if (optionIds.length === 0) return { adjustmentMinor: 0n, names: [] };
+  const result = await sql<{ name: string; priceAdjustmentMinor: string }>`
+    select "name", "priceAdjustmentMinor"::text as "priceAdjustmentMinor"
     from app.modifier_options
     where "businessId" = ${businessId}::uuid
       and "id" = any(${optionIds}::uuid[])
       and "isAvailable"
+    order by "sortOrder", "createdAt"
   `.execute(context.transaction);
-  return BigInt(result.rows[0]?.total ?? "0");
+  return {
+    adjustmentMinor: result.rows.reduce((sum, row) => sum + BigInt(row.priceAdjustmentMinor), 0n),
+    names: result.rows.map((row) => row.name),
+  };
 }
 
 export async function ensurePosChannel(
@@ -237,8 +241,8 @@ export async function recordPayment(
   amountMinor: bigint,
   method: string,
   assetCode: string,
-): Promise<void> {
-  await sql`
+): Promise<string> {
+  const result = await sql<{ id: string }>`
     insert into app.payments (
       "businessId", "orderId", "method", "status", "assetCode", "amountMinor",
       "idempotencyKey", "createdBy"
@@ -246,7 +250,9 @@ export async function recordPayment(
       ${businessId}::uuid, ${orderId}::uuid, ${method}, 'captured', ${assetCode},
       ${amountMinor.toString()}, ${randomUUID()}, ${userId}::uuid
     )
+    returning "id"
   `.execute(context.transaction);
+  return result.rows[0]!.id;
 }
 
 export interface BookingChargeRow {
@@ -384,8 +390,8 @@ export async function pricePosLines(
     const variantId = line.variantId ?? (await defaultVariantId(context, businessId, line.productId));
     if (!variantId) throw notFoundError(`No sellable variant for product ${line.productId}`);
     const price = await resolveVariantPrice(context, businessId, variantId, locationId, assetCode);
-    const adjustment = await modifierAdjustmentMinor(context, businessId, line.modifierOptionIds);
-    const unitMinor = BigInt(price.unitMinor) + adjustment;
+    const modifiers = await modifierSelection(context, businessId, line.modifierOptionIds);
+    const unitMinor = BigInt(price.unitMinor) + modifiers.adjustmentMinor;
     const lineTotal = unitMinor * BigInt(line.quantity);
     const selectedModifiers = line.modifierOptionIds.reduce<Record<string, unknown>>(
       (acc, optionId) => ({ ...acc, [optionId]: 1 }),
@@ -393,7 +399,8 @@ export async function pricePosLines(
     );
     priced.push({
       productVariantId: variantId,
-      description: price.description,
+      // The order line and receipt read "Jollof Rice Bowl (Beef)".
+      description: modifiers.names.length ? `${price.description} (${modifiers.names.join(", ")})` : price.description,
       sku: price.sku,
       quantity: line.quantity,
       unitMinor,

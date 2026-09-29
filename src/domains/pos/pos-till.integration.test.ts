@@ -255,6 +255,9 @@ describe("point-of-sale till", () => {
     expect(cashSale.status).toBe(200);
     expect((await charge("card")).status).toBe(200);
     const cashTotal = (cashSale.body as { data: { total_minor: number } }).data.total_minor;
+    const cashOrderId = (cashSale.body as { data: { order_id: string } }).data.order_id;
+    const receipt = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders/${cashOrderId}/receipt`, { cookie: fix.cookies });
+    expect(receipt.status).toBe(200);
 
     const orders = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders?limit=10`, { cookie: fix.cookies });
     const listed = (orders.body as { data: { orders: { channelKind: string; paymentMethod: string; registerShiftId: string }[] } }).data.orders;
