@@ -199,4 +199,84 @@ describe("bookings domain", () => {
     const list = await request(server.baseUrl, `/api/store/bookings?store_id=${victim.storeId}`, { cookie: intruder.cookies });
     expect(list.status).toBe(403);
   });
+
+  describe("bookings made by the business", () => {
+    const createBody = (fix: BookingFixture, overrides: Record<string, unknown> = {}) => ({
+      store_id: fix.storeId,
+      location_id: fix.locationId,
+      starts_at: fix.startInstant,
+      customer: { name: "Walk-in Wale", phone: "08030000000" },
+      items: [{ product_id: fix.productId, staff_id: fix.staffId }],
+      ...overrides,
+    });
+
+    it("creates a confirmed booking with several services back to back", async () => {
+      const fix = await bookingFixture("Dashboard Owner");
+      const response = await request(server.baseUrl, "/api/store/bookings", {
+        method: "POST",
+        cookie: fix.cookies,
+        body: JSON.stringify(createBody(fix, { items: [{ product_id: fix.productId, staff_id: fix.staffId }, { product_id: fix.productId, staff_id: fix.staffId }] })),
+      });
+      expect(response.status).toBe(201);
+      const booking = (response.body as { data: { status: string; source: string; hold_expires_at: string | null; starts_at: string; ends_at: string; items: { starts_at: string; ends_at: string; status: string }[] } }).data;
+      expect(booking.status).toBe("confirmed");
+      expect(booking.source).toBe("dashboard");
+      expect(booking.hold_expires_at).toBeNull();
+      expect(booking.items).toHaveLength(2);
+      expect(booking.items[1]!.starts_at).toBe(booking.items[0]!.ends_at);
+      expect(booking.ends_at).toBe(new Date(Date.parse(fix.startInstant) + 60 * 60 * 1000).toISOString());
+      expect(booking.items.every((item) => item.status === "confirmed")).toBe(true);
+    });
+
+    it("refuses to double-book the same person", async () => {
+      const fix = await bookingFixture("Dashboard Clash Owner");
+      const first = await request(server.baseUrl, "/api/store/bookings", { method: "POST", cookie: fix.cookies, body: JSON.stringify(createBody(fix)) });
+      expect(first.status).toBe(201);
+      const second = await request(server.baseUrl, "/api/store/bookings", { method: "POST", cookie: fix.cookies, body: JSON.stringify(createBody(fix)) });
+      expect(second.status).toBe(409);
+    });
+
+    it("ignores the customer notice window and needs booking.create", async () => {
+      const fix = await bookingFixture("Dashboard Notice Owner");
+      await request(server.baseUrl, `/api/businesses/${fix.businessId}/products/${fix.productId}/service-settings`, { method: "PUT", cookie: fix.cookies, body: JSON.stringify({ durationMinutes: 30, minNoticeMinutes: 10_000 }) });
+      const tooSoonOnline = await request(server.baseUrl, "/api/store/bookings/reserve", { method: "POST", body: JSON.stringify(reserveBody(fix)) });
+      expect(tooSoonOnline.status).toBe(400);
+      const byStaff = await request(server.baseUrl, "/api/store/bookings", { method: "POST", cookie: fix.cookies, body: JSON.stringify(createBody(fix)) });
+      expect(byStaff.status).toBe(201);
+
+      const intruder = await actor("Dashboard Intruder");
+      const blocked = await request(server.baseUrl, "/api/store/bookings", { method: "POST", cookie: intruder.cookies, body: JSON.stringify(createBody(fix)) });
+      expect(blocked.status).toBe(403);
+    });
+
+    it("adds add-on time and uses the staff member's own duration", async () => {
+      const fix = await bookingFixture("Dashboard Addon Owner");
+      const group = await created(fix, "/modifier-groups", { storeId: fix.storeId, name: "Extras" }, (b: { data: { group: { id: string } } }) => b.data.group.id);
+      const option = await created(fix, `/modifier-groups/${group}/options`, { name: "Beard trim", priceAdjustmentMinor: 300000, extraDurationMinutes: 15 }, (b: { data: { option: { id: string; extraDurationMinutes: number } } }) => b.data.option);
+      expect(option.extraDurationMinutes).toBe(15);
+
+      await request(server.baseUrl, `/api/businesses/${fix.businessId}/staff/${fix.staffId}/services`, { method: "PUT", cookie: fix.cookies, body: JSON.stringify({ services: [{ productId: fix.productId, durationOverrideMinutes: 45 }] }) });
+
+      const slots = await request(server.baseUrl, `/api/store/bookings/slots?store_id=${fix.storeId}&product_id=${fix.productId}&staff_id=${fix.staffId}&date=${fix.localDate}&modifier_option_ids=${option.id}`, { cookie: fix.cookies });
+      const slot = (slots.body as { data: { slots: { starts_at: string; ends_at: string }[] } }).data.slots.find((item) => item.starts_at === fix.startInstant);
+      expect(slot?.ends_at).toBe(new Date(Date.parse(fix.startInstant) + 60 * 60 * 1000).toISOString());
+
+      const response = await request(server.baseUrl, "/api/store/bookings", {
+        method: "POST",
+        cookie: fix.cookies,
+        body: JSON.stringify(createBody(fix, { items: [{ product_id: fix.productId, staff_id: fix.staffId, modifier_option_ids: [option.id] }] })),
+      });
+      expect(response.status).toBe(201);
+      const booking = (response.body as { data: { ends_at: string } }).data;
+      expect(booking.ends_at).toBe(new Date(Date.parse(fix.startInstant) + 60 * 60 * 1000).toISOString());
+    });
+
+    it("offers no open times at a branch where the service is switched off", async () => {
+      const fix = await bookingFixture("Dashboard Branch Owner");
+      const off = await request(server.baseUrl, `/api/businesses/${fix.businessId}/product-location-settings`, { method: "POST", cookie: fix.cookies, body: JSON.stringify({ productId: fix.productId, locationId: fix.locationId, isAvailable: false }) });
+      expect([200, 201]).toContain(off.status);
+      const slots = await request(server.baseUrl, `/api/store/bookings/slots?store_id=${fix.storeId}&product_id=${fix.productId}&date=${fix.localDate}`, { cookie: fix.cookies });
+      expect((slots.body as { data: { slots: unknown[] } }).data.slots).toHaveLength(0);
+    });
+  });
 });

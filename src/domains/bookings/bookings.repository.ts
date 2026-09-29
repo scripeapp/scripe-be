@@ -234,3 +234,116 @@ export async function updateBookingStatus(
   `.execute(context.transaction);
   return findById(context, businessId, bookingId);
 }
+
+export interface ServiceStaffCheck {
+  readonly baseDuration: number | null;
+  readonly durationOverride: number | null;
+  readonly performs: boolean;
+  readonly bookable: boolean;
+}
+
+/** Whether a staff member can perform a service, and how long it takes them. */
+export async function serviceStaffCheck(
+  context: DatabaseContext,
+  businessId: string,
+  productId: string,
+  variantId: string | null,
+  staffId: string,
+): Promise<ServiceStaffCheck | undefined> {
+  const result = await sql<ServiceStaffCheck>`
+    select pss."durationMinutes" as "baseDuration",
+           (select ss."durationOverrideMinutes" from app.staff_services ss
+             where ss."businessId" = p."businessId" and ss."staffId" = ${staffId}::uuid
+               and ss."productId" = p."id"
+               and (${variantId}::uuid is null or ss."variantId" is null or ss."variantId" = ${variantId}::uuid)
+             order by (ss."variantId" is not null) desc
+             limit 1) as "durationOverride",
+           exists (select 1 from app.staff_services ss
+             where ss."businessId" = p."businessId" and ss."staffId" = ${staffId}::uuid
+               and ss."productId" = p."id"
+               and (${variantId}::uuid is null or ss."variantId" is null or ss."variantId" = ${variantId}::uuid)) as "performs",
+           exists (select 1 from app.staff_profiles sp
+             where sp."businessId" = p."businessId" and sp."id" = ${staffId}::uuid and sp."isBookable") as "bookable"
+    from app.products p
+    left join app.product_service_settings pss on pss."productId" = p."id"
+    where p."id" = ${productId}::uuid
+      and p."businessId" = ${businessId}::uuid
+      and p."productType" = 'service'
+    limit 1
+  `.execute(context.transaction);
+  return result.rows[0];
+}
+
+/** A location of this store, or the store's default branch when none is given. */
+export async function resolveStoreLocation(
+  context: DatabaseContext,
+  businessId: string,
+  storeId: string,
+  locationId: string | null,
+): Promise<string | undefined> {
+  const result = await sql<{ id: string }>`
+    select loc."id" from app.locations loc
+    where loc."businessId" = ${businessId}::uuid
+      and loc."storeId" = ${storeId}::uuid
+      and (${locationId}::uuid is null and loc."isDefault" or loc."id" = ${locationId}::uuid)
+    limit 1
+  `.execute(context.transaction);
+  return result.rows[0]?.id;
+}
+
+export interface NewBookingItem {
+  readonly productId: string;
+  readonly variantId: string | null;
+  readonly staffId: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  readonly durationMinutes: number;
+  readonly modifierOptionIds: readonly string[];
+}
+
+/** A booking made by the business itself: confirmed straight away, no hold. */
+export async function insertStaffBooking(
+  context: DatabaseContext,
+  input: {
+    businessId: string;
+    storeId: string;
+    locationId: string;
+    source: "dashboard" | "walk_in" | "pos";
+    customerName: string | null;
+    customerEmail: string | null;
+    customerPhone: string | null;
+    notes: string | null;
+    manageToken: string;
+    items: readonly NewBookingItem[];
+  },
+): Promise<string> {
+  const first = input.items[0]!;
+  const last = input.items[input.items.length - 1]!;
+  const booking = await sql<{ id: string }>`
+    insert into app.bookings (
+      "businessId", "storeId", "locationId", "customerName", "customerEmail", "customerPhone",
+      "status", "source", "startsAt", "endsAt", "manageToken", "notes", "initiatedBy"
+    ) values (
+      ${input.businessId}::uuid, ${input.storeId}::uuid, ${input.locationId}::uuid,
+      ${input.customerName}, ${input.customerEmail}, ${input.customerPhone},
+      'confirmed', ${input.source}, ${first.startsAt}::timestamptz, ${last.endsAt}::timestamptz,
+      ${input.manageToken}, ${input.notes}, 'creator'
+    )
+    returning "id"
+  `.execute(context.transaction);
+  const bookingId = booking.rows[0]!.id;
+  for (const [position, item] of input.items.entries()) {
+    await sql`
+      insert into app.booking_items (
+        "businessId", "bookingId", "position", "productId", "variantId", "staffId",
+        "startsAt", "endsAt", "modifierOptionIds", "priceMinor", "durationMinutes", "status"
+      ) values (
+        ${input.businessId}::uuid, ${bookingId}::uuid, ${position}, ${item.productId}::uuid,
+        ${item.variantId}::uuid, ${item.staffId}::uuid, ${item.startsAt}::timestamptz,
+        ${item.endsAt}::timestamptz, ${[...item.modifierOptionIds]}::uuid[], 0,
+        ${item.durationMinutes}, 'confirmed'
+      )
+    `.execute(context.transaction);
+  }
+  return bookingId;
+}

@@ -112,14 +112,14 @@ export async function createModifierOption(c: DatabaseContext, businessId: strin
   const position = input.sortOrder ?? (await sql<{ next: number }>`select coalesce(max("sortOrder")+1, 0)::int as next from app.modifier_options where "groupId"=${groupId}::uuid`.execute(c.transaction)).rows[0]!.next;
   if (input.isDefault) await sql`update app.modifier_options set "isDefault"=false where "businessId"=${businessId}::uuid and "groupId"=${groupId}::uuid`.execute(c.transaction);
   return (await sql<ModifierOptionRow>`
-    insert into app.modifier_options ("businessId","groupId","name","priceAdjustmentMinor","sortOrder","isDefault")
-    values (${businessId}::uuid,${groupId}::uuid,${input.name},${input.priceAdjustmentMinor ?? 0},${position},${input.isDefault ?? false})
+    insert into app.modifier_options ("businessId","groupId","name","priceAdjustmentMinor","extraDurationMinutes","sortOrder","isDefault")
+    values (${businessId}::uuid,${groupId}::uuid,${input.name},${input.priceAdjustmentMinor ?? 0},${input.extraDurationMinutes ?? 0},${position},${input.isDefault ?? false})
     returning *
   `.execute(c.transaction)).rows[0]!;
 }
 export async function updateModifierOption(c: DatabaseContext, businessId: string, groupId: string, optionId: string, input: ModifierOptionUpdateInput): Promise<ModifierOptionRow | undefined> {
   const fields: RawBuilder<unknown>[] = [];
-  if (input.name !== undefined) fields.push(sql`"name"=${input.name}`); if (input.priceAdjustmentMinor !== undefined) fields.push(sql`"priceAdjustmentMinor"=${input.priceAdjustmentMinor}`); if (input.isAvailable !== undefined) fields.push(sql`"isAvailable"=${input.isAvailable}`); if (input.branchIds !== undefined) fields.push(sql`"branchIds"=${input.branchIds}::uuid[]`);
+  if (input.name !== undefined) fields.push(sql`"name"=${input.name}`); if (input.priceAdjustmentMinor !== undefined) fields.push(sql`"priceAdjustmentMinor"=${input.priceAdjustmentMinor}`); if (input.extraDurationMinutes !== undefined) fields.push(sql`"extraDurationMinutes"=${input.extraDurationMinutes}`); if (input.isAvailable !== undefined) fields.push(sql`"isAvailable"=${input.isAvailable}`); if (input.branchIds !== undefined) fields.push(sql`"branchIds"=${input.branchIds}::uuid[]`);
   if (input.isDefault !== undefined) { if (input.isDefault) await sql`update app.modifier_options set "isDefault"=false where "businessId"=${businessId}::uuid and "groupId"=${groupId}::uuid`.execute(c.transaction); fields.push(sql`"isDefault"=${input.isDefault}`); }
   if (!fields.length) return (await sql<ModifierOptionRow>`select * from app.modifier_options where "businessId"=${businessId}::uuid and "groupId"=${groupId}::uuid and "id"=${optionId}::uuid limit 1`.execute(c.transaction)).rows[0];
   return (await sql<ModifierOptionRow>`update app.modifier_options set ${sql.join(fields, sql`, `)} where "businessId"=${businessId}::uuid and "groupId"=${groupId}::uuid and "id"=${optionId}::uuid returning *`.execute(c.transaction)).rows[0];

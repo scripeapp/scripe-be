@@ -3,6 +3,7 @@ import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
 import {
   bookingIdParamsSchema,
+  createBookingSchema,
   listBookingsQuerySchema,
   reserveBookingSchema,
   slotsQuerySchema,
@@ -31,6 +32,32 @@ export class BookingsController {
         customerPhone: body.customer?.phone,
       });
       ApiResponse.success(response, data, 201);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** A booking made by the business (dashboard, walk-in, till): confirmed, no hold. */
+  readonly create = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { userId } = requireAuthContext(request);
+      const body = createBookingSchema.parse(request.body);
+      const booking = await this.service.create(userId, request.requestId, body.store_id, {
+        locationId: body.location_id ?? null,
+        startsAt: body.starts_at,
+        source: body.source,
+        notes: body.notes ?? null,
+        customerName: body.customer?.name || null,
+        customerEmail: body.customer?.email || null,
+        customerPhone: body.customer?.phone || null,
+        items: body.items.map((item) => ({
+          productId: item.product_id,
+          variantId: item.variant_id ?? null,
+          staffId: item.staff_id,
+          modifierOptionIds: item.modifier_option_ids,
+        })),
+      });
+      ApiResponse.success(response, booking, 201);
     } catch (error) {
       next(error);
     }
@@ -89,6 +116,7 @@ export class BookingsController {
         variantId: query.variant_id ?? null,
         staffId: query.staff_id ?? null,
         locationId: query.location_id ?? null,
+        modifierOptionIds: query.modifier_option_ids,
         date: query.date,
         days: query.days,
       });

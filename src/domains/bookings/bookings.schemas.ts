@@ -35,6 +35,33 @@ export const reserveBookingSchema = z.object({
     .optional(),
 });
 
+export const createBookingSchema = z.object({
+  store_id: uuid,
+  location_id: uuid.nullable().optional(),
+  starts_at: isoDateTime,
+  source: z.enum(["dashboard", "walk_in", "pos"]).default("dashboard"),
+  notes: z.string().trim().max(1000).nullable().optional(),
+  customer: z
+    .object({
+      name: z.string().trim().max(160).nullable().optional(),
+      email: z.string().trim().email().max(320).nullable().optional().or(z.literal("")),
+      phone: z.string().trim().max(20).nullable().optional(),
+    })
+    .optional(),
+  // Services in the visit, performed back to back in this order.
+  items: z
+    .array(
+      z.object({
+        product_id: uuid,
+        variant_id: uuid.nullable().optional(),
+        staff_id: uuid,
+        modifier_option_ids: z.array(uuid).max(20).default([]),
+      }),
+    )
+    .min(1)
+    .max(5),
+});
+
 export const listBookingsQuerySchema = z.object({
   store_id: uuid,
   product_id: uuid.optional(),
@@ -72,6 +99,11 @@ export const slotsQuerySchema = z.object({
   variant_id: uuid.optional(),
   staff_id: uuid.optional(),
   location_id: uuid.optional(),
+  modifier_option_ids: z
+    .string()
+    .optional()
+    .transform((value) => (value ? value.split(",").filter(Boolean) : []))
+    .pipe(z.array(uuid).max(20)),
   date: dateOnly,
   days: z.coerce.number().int().min(1).max(7).default(1),
 });
