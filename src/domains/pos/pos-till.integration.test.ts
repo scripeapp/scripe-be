@@ -256,6 +256,14 @@ describe("point-of-sale till", () => {
     expect((await charge("card")).status).toBe(200);
     const cashTotal = (cashSale.body as { data: { total_minor: number } }).data.total_minor;
 
+    const summary = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/shifts/${shiftId}/summary`, { cookie: fix.cookies });
+    expect(summary.status).toBe(200);
+    expect((summary.body as { data: { summary: Record<string, string> } }).data.summary).toMatchObject({
+      openingCashMinor: "10000",
+      cashSalesMinor: String(cashTotal),
+      expectedCashMinor: String(10000 + cashTotal),
+    });
+
     const closed = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/shifts/${shiftId}/close`, { method: "PATCH", cookie: fix.cookies, body: JSON.stringify({ countedCashMinor: String(10000 + cashTotal) }) });
     expect(closed.status).toBe(200);
     const shift = (closed.body as { data: { shift: { expectedCashMinor: string; varianceMinor: string } } }).data.shift;

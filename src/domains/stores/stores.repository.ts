@@ -454,6 +454,34 @@ export async function closeShift(
   return result.rows[0];
 }
 
+export interface ShiftSummaryRow {
+  readonly openingCashMinor: string;
+  readonly cashSalesMinor: string;
+  readonly cashMovementsMinor: string;
+}
+
+/** Where a shift's drawer should stand right now: float, till cash sales and manual movements. */
+export async function shiftSummary(
+  context: DatabaseContext,
+  businessId: string,
+  shiftId: string,
+): Promise<ShiftSummaryRow | undefined> {
+  const result = await sql<ShiftSummaryRow>`
+    select shift."openingCashMinor"::text as "openingCashMinor",
+      (select coalesce(sum(payment."amountMinor"), 0)::text
+         from app.orders o
+         join app.payments payment on payment."orderId" = o."id" and payment."businessId" = o."businessId"
+        where o."businessId" = shift."businessId" and o."registerShiftId" = shift."id"
+          and payment."method" = 'cash' and payment."status" = 'captured') as "cashSalesMinor",
+      (select coalesce(sum(case when movement."type" in ('cash_in','adjustment') then movement."amountMinor" else -movement."amountMinor" end), 0)::text
+         from app.cash_movements movement where movement."shiftId" = shift."id") as "cashMovementsMinor"
+    from app.register_shifts shift
+    where shift."businessId" = ${businessId}::uuid and shift."id" = ${shiftId}::uuid
+    limit 1
+  `.execute(context.transaction);
+  return result.rows[0];
+}
+
 export async function listCashMovements(
   context: DatabaseContext,
   businessId: string,

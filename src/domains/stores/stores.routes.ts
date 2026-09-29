@@ -80,6 +80,7 @@ export function createStoresRouter(): Router {
   );
 
   router.patch(`${base}/:storeId/shifts/:shiftId/close`, controller.closeShift);
+  router.get(`${base}/:storeId/shifts/:shiftId/summary`, controller.shiftSummary);
   router.get(
     `${base}/:storeId/shifts/:shiftId/cash-movements`,
     controller.listCashMovements,

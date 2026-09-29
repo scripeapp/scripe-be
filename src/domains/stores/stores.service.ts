@@ -618,6 +618,16 @@ export class StoresService {
     });
   }
 
+  async shiftSummary(operation: OperationContext, shiftId: string) {
+    return this.run(operation, async (context) => {
+      await this.authorize(context, operation.businessId, "store.read");
+      const row = await repository.shiftSummary(context, operation.businessId, shiftId);
+      if (!row) throw notFoundError("Shift not found");
+      const expected = BigInt(row.openingCashMinor) + BigInt(row.cashSalesMinor) + BigInt(row.cashMovementsMinor);
+      return { ...row, expectedCashMinor: expected.toString() };
+    });
+  }
+
   async listCashMovements(
     operation: OperationContext,
     shiftId: string,

@@ -349,6 +349,11 @@ export class StoresController {
     };
   }, 200, schemas.shiftResultSchema);
 
+  readonly shiftSummary = this.handle(async (request) => {
+    const { businessId, shiftId } = schemas.shiftParamsSchema.parse(request.params);
+    return { summary: await this.service.shiftSummary(this.operation(request, businessId), shiftId) };
+  });
+
   readonly listCashMovements = this.handle(async (request) => {
     const { businessId, shiftId } = schemas.shiftParamsSchema.parse(
       request.params,
