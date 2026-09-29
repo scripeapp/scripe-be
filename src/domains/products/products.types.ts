@@ -34,3 +34,8 @@ export interface ModifierGroupUpdateInput { readonly name?: string; readonly des
 export interface ModifierOptionInput { readonly name: string; readonly priceAdjustmentMinor?: number; readonly isDefault?: boolean; readonly sortOrder?: number; }
 export interface ModifierOptionUpdateInput { readonly name?: string; readonly priceAdjustmentMinor?: number; readonly isAvailable?: boolean; readonly isDefault?: boolean; readonly branchIds?: string[] | null; }
 export interface AttachedModifierGroup { readonly id: string; readonly name: string; readonly kind: ModifierGroupKind; readonly sortOrder: number; }
+
+/** One row of a product's full variant list. Rows with an id update that variant; rows without one are created. The first row becomes the default. */
+export interface VariantListItemInput { readonly id?: string; readonly clientKey?: string; readonly name: string; readonly sku?: string | null; readonly optionValues?: Record<string, unknown>; readonly priceMinor?: number | null; readonly compareAtMinor?: number | null; }
+export interface VariantListInput { readonly assetCode: string; readonly variants: readonly VariantListItemInput[]; }
+export interface ReplacedVariant extends Variant { readonly clientKey: string | null; }
