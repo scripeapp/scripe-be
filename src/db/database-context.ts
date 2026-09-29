@@ -15,7 +15,8 @@ async function applyRlsContext(
     select
       set_config('app.user_id', ${principal.userId}, true),
       set_config('app.business_id', ${principal.businessId}, true),
-      set_config('app.request_id', ${principal.requestId}, true)
+      set_config('app.request_id', ${principal.requestId}, true),
+      set_config('app.device_id', ${principal.deviceId ?? null}, true)
   `.execute(transaction);
 }
 

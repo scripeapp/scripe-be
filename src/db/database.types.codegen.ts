@@ -341,6 +341,16 @@ export interface Bookings {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface BookingTips {
+  amountMinor: Int8;
+  bookingId: string;
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  orderId: string;
+  staffId: string | null;
+}
+
 export interface Businesses {
   addressLine1: string | null;
   addressLine2: string | null;
@@ -1027,9 +1037,13 @@ export interface Orders {
   discountMinor: Generated<Int8>;
   fulfillmentStatus: Generated<string>;
   id: Generated<string>;
+  idempotencyKey: string | null;
   locationId: string | null;
+  operatorStaffId: string | null;
   orderNumber: string;
   paymentStatus: Generated<string>;
+  posDeviceId: string | null;
+  registerShiftId: string | null;
   status: Generated<string>;
   storeId: string;
   subtotalMinor: Int8;
@@ -1370,6 +1384,7 @@ export interface RegisterShifts {
   businessId: string;
   closedAt: Timestamp | null;
   closedByMembershipId: string | null;
+  closedByStaffId: string | null;
   countedCashMinor: Int8 | null;
   createdAt: Generated<Timestamp>;
   expectedCashMinor: Int8 | null;
@@ -1377,8 +1392,10 @@ export interface RegisterShifts {
   locationId: string;
   notes: string | null;
   openedAt: Generated<Timestamp>;
-  openedByMembershipId: string;
+  openedByMembershipId: string | null;
+  openedByStaffId: string | null;
   openingCashMinor: Generated<Int8>;
+  posDeviceId: string | null;
   registerId: string;
   status: Generated<string>;
   storeId: string;
@@ -1485,6 +1502,9 @@ export interface StaffProfiles {
   membershipId: string | null;
   partyId: string | null;
   photoUploadId: string | null;
+  pinHash: string | null;
+  tillEnabled: Generated<boolean>;
+  tillLocationId: string | null;
   updatedAt: Generated<Timestamp>;
 }
 
@@ -1974,6 +1994,7 @@ export interface DB {
   bill_payment_allocations: BillPaymentAllocations;
   bills: Bills;
   booking_items: BookingItems;
+  booking_tips: BookingTips;
   bookings: Bookings;
   business_invitations: BusinessInvitations;
   business_legal_profiles: BusinessLegalProfiles;
