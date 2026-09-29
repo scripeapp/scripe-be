@@ -256,6 +256,12 @@ describe("point-of-sale till", () => {
     expect((await charge("card")).status).toBe(200);
     const cashTotal = (cashSale.body as { data: { total_minor: number } }).data.total_minor;
 
+    const orders = await request(server.baseUrl, `/api/businesses/${fix.businessId}/orders?limit=10`, { cookie: fix.cookies });
+    const listed = (orders.body as { data: { orders: { channelKind: string; paymentMethod: string; registerShiftId: string }[] } }).data.orders;
+    expect(listed.map((order) => order.channelKind)).toEqual(["pos", "pos"]);
+    expect(listed.map((order) => order.paymentMethod).sort()).toEqual(["card", "cash"]);
+    expect(listed.every((order) => order.registerShiftId === shiftId)).toBe(true);
+
     const summary = await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/shifts/${shiftId}/summary`, { cookie: fix.cookies });
     expect(summary.status).toBe(200);
     expect((summary.body as { data: { summary: Record<string, string> } }).data.summary).toMatchObject({

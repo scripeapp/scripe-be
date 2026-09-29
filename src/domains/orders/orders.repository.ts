@@ -4,9 +4,29 @@ import { conflictError } from "../../shared/errors.js";
 import type { CartLineRow } from "../carts/carts.types.js";
 import type { OrderLineRow, OrderRow } from "./orders.types.js";
 interface PriceLookup { readonly productId: string; readonly sku: string | null; readonly description: string; readonly unit: string | null; }
-export async function find(c: DatabaseContext, businessId: string, orderId: string): Promise<OrderRow | undefined> { return (await sql<OrderRow>`select * from app.orders where "businessId"=${businessId}::uuid and "id"=${orderId}::uuid`.execute(c.transaction)).rows[0]; }
+// An order plus what the dashboard shows beside it: which channel it came
+// through, the customer's name and contacts, and how it was paid.
+const ORDER_WITH_CONTEXT = sql`
+  select o.*,
+    channel."kind" as "channelKind",
+    party."displayName" as "customerName",
+    (select pc."value" from app.party_contacts pc
+      where pc."partyId" = o."customerPartyId" and pc."businessId" = o."businessId" and pc."kind" = 'email' and pc."status" = 'active'
+      order by pc."isPrimary" desc, pc."createdAt" limit 1) as "customerEmail",
+    (select pc."value" from app.party_contacts pc
+      where pc."partyId" = o."customerPartyId" and pc."businessId" = o."businessId" and pc."kind" = 'phone' and pc."status" = 'active'
+      order by pc."isPrimary" desc, pc."createdAt" limit 1) as "customerPhone",
+    (select p."method" from app.payments p
+      where p."orderId" = o."id" and p."businessId" = o."businessId" and p."status" in ('captured', 'authorized')
+      order by p."createdAt" desc limit 1) as "paymentMethod"
+  from app.orders o
+  left join app.sales_channels channel on channel."id" = o."channelId"
+  left join app.parties party on party."id" = o."customerPartyId" and party."businessId" = o."businessId"
+`;
+
+export async function find(c: DatabaseContext, businessId: string, orderId: string): Promise<OrderRow | undefined> { return (await sql<OrderRow>`${ORDER_WITH_CONTEXT} where o."businessId"=${businessId}::uuid and o."id"=${orderId}::uuid`.execute(c.transaction)).rows[0]; }
 export async function lines(c: DatabaseContext, businessId: string, orderId: string): Promise<OrderLineRow[]> { return (await sql<OrderLineRow>`select * from app.order_lines where "businessId"=${businessId}::uuid and "orderId"=${orderId}::uuid order by "createdAt","id"`.execute(c.transaction)).rows; }
-export async function list(c: DatabaseContext, businessId: string, status?: string, limit = 50): Promise<OrderRow[]> { const statusSql: RawBuilder<unknown> = status ? sql`and "status"=${status}` : sql``; return (await sql<OrderRow>`select * from app.orders where "businessId"=${businessId}::uuid ${statusSql} order by "createdAt" desc,"id" desc limit ${limit}`.execute(c.transaction)).rows; }
+export async function list(c: DatabaseContext, businessId: string, status?: string, limit = 50): Promise<OrderRow[]> { const statusSql: RawBuilder<unknown> = status ? sql`and o."status"=${status}` : sql``; return (await sql<OrderRow>`${ORDER_WITH_CONTEXT} where o."businessId"=${businessId}::uuid ${statusSql} order by o."createdAt" desc,o."id" desc limit ${limit}`.execute(c.transaction)).rows; }
 
 export interface PricedLine { readonly line: CartLineRow; readonly productId: string; readonly sku: string | null; readonly description: string; readonly unitMinor: string; readonly lineTotalMinor: string; }
 
