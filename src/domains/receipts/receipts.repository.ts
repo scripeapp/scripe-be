@@ -20,7 +20,7 @@ export async function issueReceipt(
   context: DatabaseContext,
   businessId: string,
   orderId: string,
-  userId: string,
+  userId: string | null,
   order: OrderSnapshot,
 ): Promise<FiscalDocumentRow> {
   await sql`select "id" from app.businesses where "id" = ${businessId}::uuid for update`.execute(context.transaction);

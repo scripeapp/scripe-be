@@ -1,11 +1,12 @@
 import { sql, type RawBuilder } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
 import type { CreateExceptionInput, CreateStaffInput, SetStaffScheduleInput, SetStaffServicesInput, UpdateStaffInput } from "./staff.schemas.js";
-import type { CommissionReportRow, ScheduleExceptionRow, StaffProfileRow, StaffScheduleRow, StaffServiceRow } from "./staff.types.js";
+import type { CommissionReportRow, ScheduleExceptionRow, StaffProfileRow, StaffScheduleRow, StaffServiceRow, TillPinRow } from "./staff.types.js";
 
 const PROFILE_COLUMNS = sql`
   "id", "businessId", "membershipId", "partyId", "displayName",
-  "photoUploadId", "isBookable", "commissionPercent", "createdAt", "updatedAt"
+  "photoUploadId", "isBookable", "commissionPercent", "tillEnabled", "tillLocationId",
+  ("pinHash" is not null) as "hasPin", "createdAt", "updatedAt"
 `;
 
 // ── profiles ─────────────────────────────────────────────────────────────────
@@ -178,3 +179,34 @@ export async function commissionReport(context: DatabaseContext, businessId: str
   `.execute(context.transaction);
   return result.rows;
 }
+
+// ── till access ──────────────────────────────────────────────────────────────
+
+/** PIN hashes of everyone who can unlock a till, optionally limited to one branch. */
+export async function tillPins(context: DatabaseContext, businessId: string, locationId?: string | null): Promise<TillPinRow[]> {
+  const result = await sql<TillPinRow>`
+    select "id", "displayName", "pinHash", "tillLocationId" from app.staff_profiles
+    where "businessId" = ${businessId}::uuid and "tillEnabled" and "pinHash" is not null
+      and (${locationId ?? null}::uuid is null or "tillLocationId" is null or "tillLocationId" = ${locationId ?? null}::uuid)
+    order by "displayName"
+  `.execute(context.transaction);
+  return result.rows;
+}
+
+export async function setTillAccess(
+  context: DatabaseContext,
+  businessId: string,
+  staffId: string,
+  input: { enabled: boolean; pinHash?: string; locationId?: string | null },
+): Promise<StaffProfileRow | undefined> {
+  const fields: RawBuilder<unknown>[] = [sql`"updatedAt" = now()`, sql`"tillEnabled" = ${input.enabled}`];
+  if (input.pinHash !== undefined) fields.push(sql`"pinHash" = ${input.pinHash}`);
+  if (input.locationId !== undefined) fields.push(sql`"tillLocationId" = ${input.locationId}::uuid`);
+  const result = await sql<StaffProfileRow>`
+    update app.staff_profiles set ${sql.join(fields, sql`, `)}
+    where "id" = ${staffId}::uuid and "businessId" = ${businessId}::uuid
+    returning ${PROFILE_COLUMNS}
+  `.execute(context.transaction);
+  return result.rows[0];
+}
+

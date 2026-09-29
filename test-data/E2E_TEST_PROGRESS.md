@@ -57,6 +57,15 @@ Tested as a cashier would: register created → shift opened (₦10,000 float) �
 - Orders filter offers a "WhatsApp" channel that nothing produces.
 - Tips aren't in the ledger (no tips-payable account).
 
+## Cashier devices (/pos) — rebuilt 2026-09-29 ✅
+The Supabase-era device POS was dropped in the backend cut-over (`7d558de`) and never ported; Pair device failed with "Route not found". Rebuilt on the new backend:
+- **Migration `0072_app_device_pos`**: device principal (`app.device_id`) that `has_business_permission` grants a fixed till permission list in its own business only; definer functions to resolve a device token and swap a pairing code (hashes only); staff profiles gain till access (`tillEnabled`, `pinHash`, `tillLocationId`); shifts/orders record operator staff + device; orders get an idempotency key.
+- **API**: `POST/GET …/registers/:id/pairing-code|devices|unpair` (merchant); `/api/pos/device/*` with `X-Register-Device-Token` (pair, session, unlock, catalog, product, modifier groups, shift, order preview/charge, orders, customers). `PUT /staff/:id/till` (4-digit PIN, scrypt, unique per business). Pairing codes and PINs are attempt-limited.
+- **One staff record**: Team → Members "Set PIN"/"Add till-only staff" and Team → Staff both edit staff profiles; the old POS-staff table is gone.
+- **Tests**: `pos-devices.integration.test.ts` (5) — PIN rules, pairing/unpair, unlock + lockout, draft-store sale with idempotent retry/attribution/receipt/shift close, refusal of non-till staff and other businesses' products. Suite: 349 passing.
+- **Clicked through** (test account): add till-only cashier with PIN → Point of Sale → Register → Pair device → /pos pair → PIN → open float → sell Jollof (Beef) by transfer → order shows operator, device, shift, receipt; wrong PIN shows "That PIN isn't right."
+- Registers live only in Point of Sale → Register (the old Store → Registers page was removed).
+
 ## Vendors — address (2026-09-29)
 State and City are now dependent dropdowns (`constants/nigerianCities.ts`, LGAs per state) on the New vendor page. Other address forms (checkout, address book, vendor modal) had uncommitted edits in progress by someone else at the time and were left alone.
 

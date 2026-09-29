@@ -384,12 +384,14 @@ export async function openShift(
   businessId: string,
   storeId: string,
   registerId: string,
-  membershipId: string,
+  membershipId: string | null,
   openingCashMinor: string,
+  device?: { staffId: string; deviceId: string },
 ): Promise<RegisterShiftRow | undefined> {
   const result = await sql<RegisterShiftRow>`
-    insert into app.register_shifts ("businessId","storeId","locationId","registerId","openedByMembershipId","openingCashMinor")
-    select register."businessId", register."storeId", register."locationId", register."id", ${membershipId}::uuid, ${openingCashMinor}
+    insert into app.register_shifts ("businessId","storeId","locationId","registerId","openedByMembershipId","openingCashMinor","openedByStaffId","posDeviceId")
+    select register."businessId", register."storeId", register."locationId", register."id", ${membershipId}::uuid, ${openingCashMinor},
+           ${device?.staffId ?? null}::uuid, ${device?.deviceId ?? null}::uuid
     from app.registers register where register."businessId"=${businessId}::uuid and register."storeId"=${storeId}::uuid and register."id"=${registerId}::uuid and register."status"='active'
     returning *
   `.execute(context.transaction);
@@ -413,9 +415,10 @@ export async function closeShift(
   businessId: string,
   storeId: string,
   shiftId: string,
-  membershipId: string,
+  membershipId: string | null,
   countedCashMinor: string,
   notes?: string,
+  closedByStaffId?: string | null,
 ): Promise<RegisterShiftRow | undefined> {
   const result = await sql<RegisterShiftRow>`
     with locked as materialized (
@@ -444,6 +447,7 @@ export async function closeShift(
     )
     update app.register_shifts shift set
       "closedByMembershipId"=${membershipId}::uuid,
+      "closedByStaffId"=${closedByStaffId ?? null}::uuid,
       "expectedCashMinor"=locked."openingCashMinor" + totals.movement_total,
       "countedCashMinor"=${countedCashMinor},
       "varianceMinor"=${countedCashMinor}::bigint - (locked."openingCashMinor" + totals.movement_total),

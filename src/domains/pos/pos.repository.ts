@@ -186,7 +186,7 @@ export interface OrderRowSummary {
 export async function createPosOrder(
   context: DatabaseContext,
   businessId: string,
-  userId: string,
+  userId: string | null,
   args: {
     storeId: string;
     channelId: string;
@@ -197,6 +197,10 @@ export async function createPosOrder(
     serviceChargeMinor: bigint;
     totalMinor: bigint;
     registerShiftId?: string | null;
+    operatorStaffId?: string | null;
+    posDeviceId?: string | null;
+    idempotencyKey?: string | null;
+    customerPartyId?: string | null;
   },
 ): Promise<OrderRowSummary> {
   const number = `POS-${Date.now().toString(36).toUpperCase()}-${args.lines[0]?.productVariantId.slice(0, 8).toUpperCase() ?? randomUUID().slice(0, 8).toUpperCase()}`;
@@ -206,12 +210,13 @@ export async function createPosOrder(
       insert into app.orders (
         "businessId", "orderNumber", "storeId", "channelId", "locationId", "customerPartyId",
         "cartId", "currency", "subtotalMinor", "discountMinor", "taxMinor", "totalMinor",
-        "paymentStatus", "createdBy", "registerShiftId"
+        "paymentStatus", "createdBy", "registerShiftId", "operatorStaffId", "posDeviceId", "idempotencyKey"
       ) values (
         ${businessId}::uuid, ${number}, ${args.storeId}::uuid, ${args.channelId}::uuid,
-        ${args.locationId ?? null}::uuid, null, null, ${args.assetCode}, ${subtotal.toString()},
+        ${args.locationId ?? null}::uuid, ${args.customerPartyId ?? null}::uuid, null, ${args.assetCode}, ${subtotal.toString()},
         0, ${args.taxMinor.toString()}, ${args.totalMinor.toString()}, 'paid', ${userId}::uuid,
-        ${args.registerShiftId ?? null}::uuid
+        ${args.registerShiftId ?? null}::uuid, ${args.operatorStaffId ?? null}::uuid, ${args.posDeviceId ?? null}::uuid,
+        ${args.idempotencyKey ?? null}
       )
       returning "id"::text, "orderNumber", "paymentStatus", "currency",
                 "subtotalMinor"::text, "taxMinor"::text, "totalMinor"::text
@@ -236,7 +241,7 @@ export async function createPosOrder(
 export async function recordPayment(
   context: DatabaseContext,
   businessId: string,
-  userId: string,
+  userId: string | null,
   orderId: string,
   amountMinor: bigint,
   method: string,
@@ -470,4 +475,20 @@ async function attachTillItems(context: DatabaseContext, businessId: string, row
     byBooking.set(item.bookingId, items);
   }
   for (const row of rows) row.items = byBooking.get(row.id) ?? [];
+}
+
+/** An earlier sale sent with the same idempotency key, so a retried device sale replays it. */
+export async function orderByIdempotencyKey(
+  context: DatabaseContext,
+  businessId: string,
+  idempotencyKey: string,
+): Promise<OrderRowSummary | undefined> {
+  const result = await sql<OrderRowSummary>`
+    select "id"::text, "orderNumber", "paymentStatus", "currency",
+           "subtotalMinor"::text, "taxMinor"::text, "totalMinor"::text
+    from app.orders
+    where "businessId" = ${businessId}::uuid and "idempotencyKey" = ${idempotencyKey}
+    limit 1
+  `.execute(context.transaction);
+  return result.rows[0];
 }
