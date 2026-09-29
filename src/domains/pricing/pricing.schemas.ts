@@ -9,3 +9,6 @@ export const priceListSchema = z.object({ businessId: uuid, productVariantId: uu
 export const resolvePriceSchema = z.object({ businessId: uuid, productVariantId: uuid, locationId: uuid.optional(), assetCode });
 export const locationSettingSchema = z.object({ productId: uuid, locationId: uuid, isAvailable: z.boolean().optional(), leadTimeMinutes: z.number().int().min(0).nullable().optional() });
 export const taxRateSchema = z.object({ code: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/), name: z.string().trim().min(1).max(120), rateBps: z.number().int().min(0).max(10000), isInclusive: z.boolean().optional(), effectiveFrom: z.string().datetime().optional(), effectiveTo: z.string().datetime().nullable().optional() });
+export const productBranchParamsSchema = z.object({ businessId: uuid, productId: uuid });
+export const productBranchQuerySchema = z.object({ assetCode: assetCode.default("NGN") });
+export const productBranchSettingsSchema = z.object({ assetCode: assetCode.default("NGN"), branches: z.array(z.object({ locationId: uuid, isAvailable: z.boolean(), leadTimeMinutes: z.number().int().min(0).nullable(), priceMinor: z.number().int().min(0).nullable(), stock: z.record(uuid, z.number().int().min(0)).optional() })).max(200) });
