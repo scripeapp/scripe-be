@@ -178,3 +178,15 @@ describe("products/variant list", () => {
     expect((await replace([{ id: "00000000-0000-4000-8000-000000000000", name: "Stray" }])).status).toBe(400);
   });
 });
+
+describe("products/blank SKU", () => {
+  it("saves a blank SKU as no SKU, so two products can both leave it empty", async () => {
+    const cookie = await actor("Blank Sku Owner");
+    const business = ((await request(server.baseUrl, "/api/businesses", { method: "POST", cookie, body: JSON.stringify({ displayName: "Blank Sku Co" }) })).body as { data: { business: { id: string; defaultStore: { id: string } } } }).data.business;
+    for (const name of ["Jollof Bowl", "Fried Rice Bowl"]) {
+      const created = await request(server.baseUrl, `/api/businesses/${business.id}/products`, { method: "POST", cookie, body: JSON.stringify({ storeId: business.defaultStore.id, name, variant: { name: "Regular", sku: "  " } }) });
+      expect(created.status).toBe(201);
+      expect((created.body as { data: { product: { variants: { sku: string | null }[] } } }).data.product.variants[0]!.sku).toBeNull();
+    }
+  });
+});

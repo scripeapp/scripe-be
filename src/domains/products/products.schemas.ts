@@ -1,14 +1,16 @@
 import { z } from "zod";
 const uuid = z.string().uuid();
 const slug = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120);
+// A blank SKU means "no SKU": the database only accepts null or 1–120 characters.
+const optionalSku = z.string().trim().max(120).transform((value) => value || null).nullable().optional();
 const productType = z.enum(["physical", "service", "digital", "menu", "pharmacy"]);
 export const productParamsSchema = z.object({ businessId: uuid, productId: uuid });
 export const productListParamsSchema = z.object({ businessId: uuid, storeId: uuid.optional(), status: z.enum(["draft", "active", "archived"]).optional(), search: z.string().trim().max(120).optional() });
-export const productCreateSchema = z.object({ storeId: uuid, name: z.string().trim().min(1).max(200), slug: slug.optional(), description: z.string().max(5000).optional(), productType: productType.optional(), status: z.enum(["draft", "active"]).optional(), isSellable: z.boolean().optional(), trackInventory: z.boolean().optional(), allowBackorder: z.boolean().optional(), variant: z.object({ name: z.string().trim().min(1).max(160).optional(), sku: z.string().trim().max(120).nullable().optional(), optionValues: z.record(z.string(), z.unknown()).optional(), unitId: uuid.nullable().optional() }).optional(), categoryIds: z.array(uuid).max(50).optional() });
+export const productCreateSchema = z.object({ storeId: uuid, name: z.string().trim().min(1).max(200), slug: slug.optional(), description: z.string().max(5000).optional(), productType: productType.optional(), status: z.enum(["draft", "active"]).optional(), isSellable: z.boolean().optional(), trackInventory: z.boolean().optional(), allowBackorder: z.boolean().optional(), variant: z.object({ name: z.string().trim().min(1).max(160).optional(), sku: optionalSku, optionValues: z.record(z.string(), z.unknown()).optional(), unitId: uuid.nullable().optional() }).optional(), categoryIds: z.array(uuid).max(50).optional() });
 export const productUpdateSchema = productCreateSchema.partial().omit({ storeId: true, variant: true });
 export const categoryCreateSchema = z.object({ name: z.string().trim().min(1).max(120), slug: slug.optional(), parentId: uuid.nullable().optional(), description: z.string().max(2000).optional(), sortOrder: z.number().int().min(0).max(100000).optional() });
 export const categoryUpdateSchema = categoryCreateSchema.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
-export const variantSchema = z.object({ name: z.string().trim().min(1).max(160), sku: z.string().trim().max(120).nullable().optional(), optionValues: z.record(z.string(), z.unknown()).optional(), unitId: uuid.nullable().optional(), isDefault: z.boolean().optional() });
+export const variantSchema = z.object({ name: z.string().trim().min(1).max(160), sku: optionalSku, optionValues: z.record(z.string(), z.unknown()).optional(), unitId: uuid.nullable().optional(), isDefault: z.boolean().optional() });
 export const categoryParamsSchema = z.object({ businessId: uuid, categoryId: uuid });
 export const variantParamsSchema = z.object({ businessId: uuid, productId: uuid, variantId: uuid.optional() });
 
@@ -25,4 +27,4 @@ export const modifierOptionUpdateSchema = z.object({ name: z.string().trim().min
 export const modifierOptionReorderSchema = z.object({ orderedIds: z.array(uuid).min(1).max(200) });
 export const productModifierGroupParamsSchema = z.object({ businessId: uuid, productId: uuid, groupId: uuid });
 export const productModifierGroupAttachSchema = z.object({ groupId: uuid });
-export const variantListSchema = z.object({ assetCode: z.string().regex(/^[A-Z]{3}$/).default("NGN"), variants: z.array(z.object({ id: uuid.optional(), clientKey: z.string().max(120).optional(), name: z.string().trim().min(1).max(160), sku: z.string().trim().max(120).nullable().optional(), optionValues: z.record(z.string(), z.unknown()).optional(), priceMinor: z.number().int().min(0).nullable().optional(), compareAtMinor: z.number().int().min(0).nullable().optional() })).max(200) });
+export const variantListSchema = z.object({ assetCode: z.string().regex(/^[A-Z]{3}$/).default("NGN"), variants: z.array(z.object({ id: uuid.optional(), clientKey: z.string().max(120).optional(), name: z.string().trim().min(1).max(160), sku: optionalSku, optionValues: z.record(z.string(), z.unknown()).optional(), priceMinor: z.number().int().min(0).nullable().optional(), compareAtMinor: z.number().int().min(0).nullable().optional() })).max(200) });

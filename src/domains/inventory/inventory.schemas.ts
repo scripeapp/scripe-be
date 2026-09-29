@@ -8,7 +8,7 @@ export const reservationSchema = z.object({ inventoryItemId: uuid, inventoryLoca
 export const balanceQuerySchema = z.object({ businessId: uuid, inventoryItemId: uuid.optional(), inventoryLocationId: uuid.optional() });
 export const itemsQuerySchema = z.object({ businessId: uuid, status: z.enum(["active", "archived"]).optional(), search: z.string().trim().max(120).optional() });
 export const movementsQuerySchema = z.object({ businessId: uuid, inventoryItemId: uuid.optional(), inventoryLocationId: uuid.optional(), limit: z.coerce.number().int().min(1).max(200).default(50) });
-export const inventoryItemSchema = z.object({ name: z.string().trim().min(1).max(200), sku: z.string().trim().max(120).nullable().optional(), variantId: uuid.nullable().optional(), trackingMode: z.enum(["quantity", "lot", "serial"]).optional() });
+export const inventoryItemSchema = z.object({ name: z.string().trim().min(1).max(200), sku: z.string().trim().max(120).transform((value) => value || null).nullable().optional(), variantId: uuid.nullable().optional(), trackingMode: z.enum(["quantity", "lot", "serial"]).optional() });
 export const inventoryLocationSchema = z.object({ locationId: uuid, name: z.string().trim().min(1).max(120) });
 
 export const transferParamsSchema = z.object({ businessId: uuid, transferId: uuid });
