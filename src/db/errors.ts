@@ -1,6 +1,7 @@
 const UNIQUE_VIOLATION = "23505";
 const FOREIGN_KEY_VIOLATION = "23503";
 const CHECK_VIOLATION = "23514";
+const EXCLUSION_VIOLATION = "23P01";
 const SERIALIZATION_FAILURE = "40001";
 const DEADLOCK_DETECTED = "40P01";
 const IDLE_TRANSACTION_TIMEOUT = "25P03";
@@ -10,6 +11,7 @@ export type DatabaseErrorKind =
   | "unique-violation"
   | "foreign-key-violation"
   | "check-violation"
+  | "exclusion-violation"
   | "serialization-failure"
   | "deadlock"
   | "lock-timeout"
@@ -80,6 +82,12 @@ export function normalizeDatabaseError(error: unknown): DatabaseError {
       return new DatabaseError("foreign-key-violation", "The referenced record does not exist.", pgError);
     case CHECK_VIOLATION:
       return new DatabaseError("check-violation", "The value violates a database constraint.", pgError);
+    case EXCLUSION_VIOLATION:
+      return new DatabaseError(
+        "exclusion-violation",
+        "The requested range conflicts with an existing one (e.g. an overlapping booking).",
+        pgError,
+      );
     case SERIALIZATION_FAILURE:
       return new DatabaseError("serialization-failure", "The transaction could not be serialized; retry it.", pgError);
     case DEADLOCK_DETECTED:

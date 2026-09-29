@@ -1,11 +1,11 @@
 import { sql, type RawBuilder } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
 import type { CreateExceptionInput, CreateStaffInput, SetStaffScheduleInput, SetStaffServicesInput, UpdateStaffInput } from "./staff.schemas.js";
-import type { ScheduleExceptionRow, StaffProfileRow, StaffScheduleRow, StaffServiceRow } from "./staff.types.js";
+import type { CommissionReportRow, ScheduleExceptionRow, StaffProfileRow, StaffScheduleRow, StaffServiceRow } from "./staff.types.js";
 
 const PROFILE_COLUMNS = sql`
   "id", "businessId", "membershipId", "partyId", "displayName",
-  "photoUploadId", "isBookable", "createdAt", "updatedAt"
+  "photoUploadId", "isBookable", "commissionPercent", "createdAt", "updatedAt"
 `;
 
 // ── profiles ─────────────────────────────────────────────────────────────────
@@ -29,8 +29,8 @@ export async function findProfile(context: DatabaseContext, businessId: string, 
 
 export async function createProfile(context: DatabaseContext, businessId: string, input: CreateStaffInput): Promise<StaffProfileRow> {
   const result = await sql<StaffProfileRow>`
-    insert into app.staff_profiles ("businessId", "membershipId", "partyId", "displayName", "photoUploadId", "isBookable")
-    values (${businessId}::uuid, ${input.membershipId ?? null}, ${input.partyId ?? null}, ${input.displayName}, ${input.photoUploadId ?? null}, ${input.isBookable})
+    insert into app.staff_profiles ("businessId", "membershipId", "partyId", "displayName", "photoUploadId", "isBookable", "commissionPercent")
+    values (${businessId}::uuid, ${input.membershipId ?? null}, ${input.partyId ?? null}, ${input.displayName}, ${input.photoUploadId ?? null}, ${input.isBookable}, ${input.commissionPercent ?? 0})
     returning ${PROFILE_COLUMNS}
   `.execute(context.transaction);
   return result.rows[0]!;
@@ -41,6 +41,7 @@ export async function updateProfile(context: DatabaseContext, businessId: string
   if (input.displayName !== undefined) fields.push(sql`"displayName" = ${input.displayName}`);
   if (input.photoUploadId !== undefined) fields.push(sql`"photoUploadId" = ${input.photoUploadId}`);
   if (input.isBookable !== undefined) fields.push(sql`"isBookable" = ${input.isBookable}`);
+  if (input.commissionPercent !== undefined) fields.push(sql`"commissionPercent" = ${input.commissionPercent}`);
   const result = await sql<StaffProfileRow>`
     update app.staff_profiles set ${sql.join(fields, sql`, `)}
     where "id" = ${staffId}::uuid and "businessId" = ${businessId}::uuid
@@ -148,4 +149,32 @@ export async function deleteException(context: DatabaseContext, businessId: stri
     delete from app.schedule_exceptions where "id" = ${exceptionId}::uuid and "businessId" = ${businessId}::uuid returning "id"
   `.execute(context.transaction);
   return result.rows.length > 0;
+}
+
+// ── commission report ────────────────────────────────────────────────────────
+
+export async function commissionReport(context: DatabaseContext, businessId: string, from: Date, to: Date): Promise<CommissionReportRow[]> {
+  const result = await sql<CommissionReportRow>`
+    select
+      sp."id" as "staffId",
+      sp."displayName",
+      sp."commissionPercent"::integer as "commissionPercent",
+      coalesce(sum(bi."priceMinor") filter (where bi."status" = 'completed'), 0)::text as "revenueMinor",
+      coalesce((select sum(t."amountMinor") from app.booking_tips t
+                 where t."businessId" = sp."businessId"
+                   and t."staffId" = sp."id"
+                   and t."createdAt" >= ${from}::timestamptz
+                   and t."createdAt" < ${to}::timestamptz), 0)::text as "tipsMinor",
+      count(bi."id") filter (where bi."status" = 'completed')::text as "completedCount"
+    from app.staff_profiles sp
+    left join app.booking_items bi
+      on bi."staffId" = sp."id"
+     and bi."businessId" = sp."businessId"
+     and bi."endsAt" >= ${from}::timestamptz
+     and bi."endsAt" < ${to}::timestamptz
+    where sp."businessId" = ${businessId}::uuid
+    group by sp."id", sp."displayName", sp."commissionPercent"
+    order by sp."displayName"
+  `.execute(context.transaction);
+  return result.rows;
 }

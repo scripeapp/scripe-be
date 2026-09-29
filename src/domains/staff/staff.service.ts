@@ -7,7 +7,7 @@ import { AppError, notFoundError, validationError } from "../../shared/errors.js
 import * as authorization from "../authorization/authorization.service.js";
 import * as repository from "./staff.repository.js";
 import type { CreateExceptionInput, CreateStaffInput, SetStaffScheduleInput, SetStaffServicesInput, UpdateStaffInput } from "./staff.schemas.js";
-import type { ScheduleException, ScheduleExceptionRow, StaffMember, StaffOperation, StaffProfileRow, StaffScheduleRow, StaffServiceRow } from "./staff.types.js";
+import type { CommissionReportRow, ScheduleException, ScheduleExceptionRow, StaffCommissionReport, StaffMember, StaffOperation, StaffProfileRow, StaffScheduleRow, StaffServiceRow } from "./staff.types.js";
 
 const READ = "team.read";
 const MANAGE = "team.manage";
@@ -98,6 +98,14 @@ export class StaffService {
     });
   }
 
+  async commissionReport(operation: StaffOperation, from: string, to: string): Promise<StaffCommissionReport[]> {
+    return this.run(operation, async (context) => {
+      await authorization.requirePermission(context, operation.businessId, READ);
+      const rows = await repository.commissionReport(context, operation.businessId, new Date(from), new Date(to));
+      return rows.map(toCommissionReport);
+    });
+  }
+
   private async requireProfile(context: DatabaseContext, businessId: string, staffId: string): Promise<StaffProfileRow> {
     const profile = await repository.findProfile(context, businessId, staffId);
     if (!profile) throw notFoundError("Staff member not found");
@@ -144,6 +152,7 @@ function toStaffMember(profile: StaffProfileRow, services: StaffServiceRow[], sc
     displayName: profile.displayName,
     photoUploadId: profile.photoUploadId,
     isBookable: profile.isBookable,
+    commissionPercent: profile.commissionPercent,
     services: services
       .filter((service) => service.staffId === profile.id)
       .map(({ staffId: _staffId, ...service }) => service),
@@ -164,5 +173,19 @@ function toException(row: ScheduleExceptionRow): ScheduleException {
     endsAt: row.endsAt.toISOString(),
     kind: row.kind,
     reason: row.reason,
+  };
+}
+
+function toCommissionReport(row: CommissionReportRow): StaffCommissionReport {
+  const revenueMinor = Number(row.revenueMinor);
+  const commissionMinor = Math.round((revenueMinor * row.commissionPercent) / 100);
+  return {
+    staffId: row.staffId,
+    displayName: row.displayName,
+    commissionPercent: row.commissionPercent,
+    revenueMinor,
+    tipsMinor: Number(row.tipsMinor),
+    commissionMinor,
+    completedBookings: Number(row.completedCount),
   };
 }

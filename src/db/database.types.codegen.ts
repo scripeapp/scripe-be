@@ -159,16 +159,6 @@ export interface AuditEvents {
   userAgent: string | null;
 }
 
-export interface AvailabilityProfiles {
-  businessId: string;
-  createdAt: Generated<Timestamp>;
-  data: Generated<Json>;
-  id: Generated<string>;
-  name: string;
-  status: Generated<string>;
-  updatedAt: Generated<Timestamp>;
-}
-
 export interface BankingKybDirectors {
   businessId: string;
   bvn: string;
@@ -309,30 +299,45 @@ export interface Bills {
   updatedAt: Generated<Timestamp>;
 }
 
-export interface Bookings {
-  bookingDate: Timestamp;
+export interface BookingItems {
+  bookingId: string;
   businessId: string;
+  createdAt: Generated<Timestamp>;
+  durationMinutes: number;
+  endsAt: Timestamp;
+  id: Generated<string>;
+  modifierOptionIds: Generated<string[]>;
+  position: Generated<number>;
+  priceMinor: Generated<Int8>;
+  productId: string;
+  staffId: string | null;
+  startsAt: Timestamp;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+  variantId: string | null;
+}
+
+export interface Bookings {
+  businessId: string;
+  cancelledReason: string | null;
   createdAt: Generated<Timestamp>;
   customerEmail: string | null;
   customerName: string | null;
   customerPartyId: string | null;
   customerPhone: string | null;
-  declineReason: string | null;
-  durationMinutes: number | null;
-  endTime: string;
-  expiresAt: Timestamp | null;
+  endsAt: Timestamp;
+  holdExpiresAt: Timestamp | null;
   id: Generated<string>;
   initiatedBy: string | null;
-  locationDetails: string | null;
-  locationType: string | null;
+  locationId: string | null;
+  manageToken: string | null;
+  notes: string | null;
   orderId: string | null;
-  productId: string;
   requiresApproval: Generated<boolean>;
-  rescheduledFrom: Timestamp | null;
-  startTime: string;
+  source: Generated<string>;
+  startsAt: Timestamp;
   status: Generated<string>;
   storeId: string;
-  timezone: Generated<string>;
   updatedAt: Generated<Timestamp>;
 }
 
@@ -759,18 +764,6 @@ export interface Discounts {
   type: string;
   updatedAt: Generated<Timestamp>;
   usageCount: Generated<number>;
-}
-
-export interface EventTypes {
-  availabilityProfileId: string | null;
-  businessId: string;
-  createdAt: Generated<Timestamp>;
-  data: Generated<Json>;
-  id: Generated<string>;
-  isActive: Generated<boolean>;
-  slug: string;
-  title: string;
-  updatedAt: Generated<Timestamp>;
 }
 
 export interface FiscalDocuments {
@@ -1484,6 +1477,7 @@ export interface ScheduleExceptions {
 
 export interface StaffProfiles {
   businessId: string;
+  commissionPercent: Generated<number>;
   createdAt: Generated<Timestamp>;
   displayName: string;
   id: Generated<string>;
@@ -1971,7 +1965,6 @@ export interface DB {
   approval_workflow_submitters: ApprovalWorkflowSubmitters;
   approval_workflows: ApprovalWorkflows;
   audit_events: AuditEvents;
-  availability_profiles: AvailabilityProfiles;
   banking_kyb_directors: BankingKybDirectors;
   banking_kyc_attempts: BankingKycAttempts;
   banking_profiles: BankingProfiles;
@@ -1980,6 +1973,7 @@ export interface DB {
   bill_lines: BillLines;
   bill_payment_allocations: BillPaymentAllocations;
   bills: Bills;
+  booking_items: BookingItems;
   bookings: Bookings;
   business_invitations: BusinessInvitations;
   business_legal_profiles: BusinessLegalProfiles;
@@ -2012,7 +2006,6 @@ export interface DB {
   delivery_zones: DeliveryZones;
   discount_redemptions: DiscountRedemptions;
   discounts: Discounts;
-  event_types: EventTypes;
   fiscal_documents: FiscalDocuments;
   fulfillment_lines: FulfillmentLines;
   fulfillments: Fulfillments;

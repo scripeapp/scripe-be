@@ -4,6 +4,7 @@ const uuid = z.string().uuid();
 const displayName = z.string().trim().min(1).max(160);
 const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:mm");
 const MINUTES_IN_DAY = 1440;
+const commissionPercent = z.number().int().min(0).max(100);
 
 export const businessParamsSchema = z.object({ businessId: uuid });
 export const staffParamsSchema = businessParamsSchema.extend({ staffId: uuid });
@@ -16,6 +17,7 @@ export const createStaffSchema = z
     displayName,
     photoUploadId: uuid.nullable().optional(),
     isBookable: z.boolean().default(true),
+    commissionPercent: commissionPercent.optional(),
   })
   .refine((value) => Boolean(value.membershipId || value.partyId), {
     message: "A staff member must link to a membership or a payroll party",
@@ -27,8 +29,19 @@ export const updateStaffSchema = z
     displayName: displayName.optional(),
     photoUploadId: uuid.nullable().optional(),
     isBookable: z.boolean().optional(),
+    commissionPercent: commissionPercent.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field is required");
+
+export const commissionReportQuerySchema = z
+  .object({
+    from: z.string().datetime(),
+    to: z.string().datetime(),
+  })
+  .refine((value) => new Date(value.to) > new Date(value.from), {
+    message: "to must be after from",
+    path: ["to"],
+  });
 
 export const setStaffServicesSchema = z.object({
   services: z

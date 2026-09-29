@@ -1,0 +1,1 @@
+drop table if exists app.booking_tips cascade;

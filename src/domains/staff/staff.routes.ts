@@ -22,5 +22,7 @@ export function createStaffRouter(): Router {
   router.post(`${base}/schedule-exceptions`, controller.createException);
   router.delete(`${base}/schedule-exceptions/:exceptionId`, controller.removeException);
 
+  router.get(`${base}/staff/commission-report`, controller.commissionReport);
+
   return router;
 }

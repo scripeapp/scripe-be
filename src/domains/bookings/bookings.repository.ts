@@ -1,109 +1,71 @@
 import { sql, type RawBuilder } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
-import type { BookingRow } from "./bookings.types.js";
+import type { BookingItemRow, BookingRow, BookingStatus } from "./bookings.types.js";
 
-// Dates are cast to text so a plain calendar date never shifts a day through
-// JS Date/UTC conversion on the way out.
-const BOOKING_COLUMNS = sql`
-  "id", "businessId", "storeId", "productId", "orderId", "customerPartyId",
-  "customerName", "customerEmail", "customerPhone",
-  to_char("bookingDate", 'YYYY-MM-DD') as "bookingDate", "startTime",
-  "endTime", "timezone", "locationType", "locationDetails", "requiresApproval",
-  "durationMinutes", "status", "declineReason",
-  to_char("rescheduledFrom", 'YYYY-MM-DD') as "rescheduledFrom", "initiatedBy",
-  "expiresAt", "createdAt", "updatedAt"
+// The destination timezone comes from the location the visit happens at, falling
+// back to the store — the frontend renders booking_date/start_time in it.
+const STORE_TIMEZONE = sql`
+  coalesce((select loc."timezone" from app.locations loc where loc."id" = bookings."locationId"),
+           store."timezone")
 `;
 
-/**
- * Public storefront reservation. Derives businessId from the active store in a
- * single INSERT...SELECT (the stores_public_read policy allows reading an active
- * store), so an unauthenticated shopper can hold a slot. Returns undefined when
- * the store is missing or not active.
- */
-export async function reserveBooking(
-  context: DatabaseContext,
-  input: { storeId: string; productId: string; date: string; startTime: string; endTime: string; expiresInMinutes: number },
-): Promise<{ id: string; expiresAt: Date } | undefined> {
-  const result = await sql<{ id: string; expiresAt: Date }>`
-    insert into app.bookings
-      ("businessId", "storeId", "productId", "bookingDate", "startTime", "endTime",
-       "status", "initiatedBy", "expiresAt")
-    select s."businessId", s."id", ${input.productId}::uuid,
-      ${input.date}::date, ${input.startTime}, ${input.endTime},
-      'pending', 'customer', now() + (${input.expiresInMinutes} * interval '1 minute')
-    from app.stores s
-    where s."id" = ${input.storeId}::uuid and s."status" = 'active'
-    returning "id", "expiresAt"
-  `.execute(context.transaction);
-  return result.rows[0];
+const BOOKING_COLUMNS = sql`
+  bookings."id", bookings."businessId", bookings."storeId", bookings."locationId",
+  bookings."orderId", bookings."customerName", bookings."customerEmail", bookings."customerPhone",
+  bookings."status", bookings."source", bookings."startsAt", bookings."endsAt",
+  bookings."holdExpiresAt", bookings."manageToken", bookings."notes", bookings."cancelledReason",
+  bookings."requiresApproval", bookings."initiatedBy", bookings."createdAt", bookings."updatedAt"
+`;
+
+function selectBookings() {
+  return sql`
+    select ${BOOKING_COLUMNS},
+           ${STORE_TIMEZONE}::text as "timezone"
+    from app.bookings
+    join app.stores store on store."id" = bookings."storeId"
+  `;
 }
 
-/**
- * Resolve the owning business from an active store (stores_public_read allows
- * this without a member identity). Lets the flat `/store/bookings` endpoints
- * work off store_id alone, since the frontend doesn't send business_id on them.
- */
-export async function businessIdForActiveStore(
-  context: DatabaseContext,
-  storeId: string,
-): Promise<string | undefined> {
-  const result = await sql<{ businessId: string }>`
-    select "businessId" from app.stores
-    where "id" = ${storeId}::uuid and "status" = 'active'
-    limit 1
-  `.execute(context.transaction);
-  return result.rows[0]?.businessId;
+export interface BookingListFilters {
+  readonly orderId?: string;
+  readonly productId?: string;
+  readonly dateFrom?: string;
+  readonly dateTo?: string;
+  readonly status?: BookingStatus;
 }
 
-/**
- * Resolve the owning business from a store the CALLER can read (stores_read =
- * has_business_permission('store.read')). Used by the authenticated dashboard
- * endpoints, which must work on draft/unpublished stores too.
- */
-export async function businessIdForStore(
-  context: DatabaseContext,
-  storeId: string,
-): Promise<string | undefined> {
-  const result = await sql<{ businessId: string }>`
-    select "businessId" from app.stores where "id" = ${storeId}::uuid limit 1
-  `.execute(context.transaction);
-  return result.rows[0]?.businessId;
-}
-
-export async function listByProduct(
+export async function listBookings(
   context: DatabaseContext,
   businessId: string,
   storeId: string,
-  productId: string,
-  page: number,
+  filters: BookingListFilters,
   limit: number,
+  offset: number,
 ): Promise<BookingRow[]> {
-  const offset = (page - 1) * limit;
+  const clauses: RawBuilder<unknown>[] = [
+    sql`bookings."businessId" = ${businessId}::uuid`,
+    sql`bookings."storeId" = ${storeId}::uuid`,
+  ];
+  if (filters.orderId) clauses.push(sql`bookings."orderId" = ${filters.orderId}::uuid`);
+  if (filters.productId) {
+    clauses.push(
+      sql`exists (select 1 from app.booking_items bi where bi."bookingId" = bookings."id" and bi."productId" = ${filters.productId}::uuid)`,
+    );
+  }
+  if (filters.dateFrom) clauses.push(sql`bookings."startsAt" >= ${filters.dateFrom}::date`);
+  if (filters.dateTo) clauses.push(sql`bookings."startsAt" < ${filters.dateTo}::date + interval '1 day'`);
+  if (filters.status) clauses.push(sql`bookings."status" = ${filters.status}`);
+
   const result = await sql<BookingRow>`
-    select ${BOOKING_COLUMNS} from app.bookings
-    where "businessId" = ${businessId}::uuid
-      and "storeId" = ${storeId}::uuid
-      and "productId" = ${productId}::uuid
-    order by "bookingDate" desc, "startTime" desc
+    ${selectBookings()}
+    where ${sql.join(clauses, sql` and `)}
+    order by bookings."startsAt" desc
     limit ${limit} offset ${offset}
   `.execute(context.transaction);
-  return result.rows;
-}
-
-export async function listByOrder(
-  context: DatabaseContext,
-  businessId: string,
-  storeId: string,
-  orderId: string,
-): Promise<BookingRow[]> {
-  const result = await sql<BookingRow>`
-    select ${BOOKING_COLUMNS} from app.bookings
-    where "businessId" = ${businessId}::uuid
-      and "storeId" = ${storeId}::uuid
-      and "orderId" = ${orderId}::uuid
-    order by "bookingDate" desc, "startTime" desc
-  `.execute(context.transaction);
-  return result.rows;
+  const rows = result.rows;
+  if (rows.length === 0) return [];
+  await attachItems(context, businessId, rows);
+  return rows;
 }
 
 export async function findById(
@@ -112,40 +74,163 @@ export async function findById(
   bookingId: string,
 ): Promise<BookingRow | undefined> {
   const result = await sql<BookingRow>`
-    select ${BOOKING_COLUMNS} from app.bookings
-    where "id" = ${bookingId}::uuid and "businessId" = ${businessId}::uuid
+    ${selectBookings()}
+    where bookings."id" = ${bookingId}::uuid and bookings."businessId" = ${businessId}::uuid
     limit 1
   `.execute(context.transaction);
-  return result.rows[0];
+  const row = result.rows[0];
+  if (!row) return undefined;
+  await attachItems(context, businessId, [row]);
+  return row;
 }
 
-export async function updateStatus(
+async function attachItems(context: DatabaseContext, businessId: string, rows: BookingRow[]): Promise<void> {
+  const bookingIds = rows.map((row) => row.id);
+  const result = await sql<BookingItemRow>`
+    select i."id", i."businessId", i."bookingId", i."position", i."productId", i."variantId",
+           i."staffId", sp."displayName" as "staffName", i."startsAt", i."endsAt",
+           i."modifierOptionIds", i."priceMinor", i."durationMinutes", i."status"
+    from app.booking_items i
+    left join app.staff_profiles sp on sp."id" = i."staffId"
+    where i."businessId" = ${businessId}::uuid
+      and i."bookingId" = any(${bookingIds}::uuid[])
+    order by i."bookingId", i."position"
+  `.execute(context.transaction);
+  const byBooking = new Map<string, BookingItemRow[]>();
+  for (const item of result.rows) {
+    const items = byBooking.get(item.bookingId) ?? [];
+    items.push(item);
+    byBooking.set(item.bookingId, items);
+  }
+  for (const row of rows) row.items = byBooking.get(row.id) ?? [];
+}
+
+export interface ReserveResult {
+  readonly id: string | null;
+  readonly startsAt: Date | null;
+  readonly endsAt: Date | null;
+  readonly holdExpiresAt: Date | null;
+  readonly error: string | null;
+}
+
+/** Public storefront hold, executed as the trusted SECURITY DEFINER function. */
+export async function reserveFromPublic(
+  context: DatabaseContext,
+  input: {
+    storeId: string;
+    productId: string;
+    variantId: string | null;
+    staffId: string;
+    locationId: string | null;
+    startsAt: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    manageToken?: string;
+    holdMinutes?: number;
+  },
+): Promise<ReserveResult> {
+  const result = await sql<ReserveResult>`
+    select * from app.reserve_booking_from_public(
+      ${input.storeId}::uuid, ${input.productId}::uuid,
+      ${input.variantId}::uuid, ${input.staffId}::uuid, ${input.locationId}::uuid,
+      ${input.startsAt}::timestamptz, ${input.customerName ?? null}, ${input.customerEmail ?? null},
+      ${input.customerPhone ?? null}, ${input.manageToken ?? null}, ${input.holdMinutes ?? 10}
+    )
+  `.execute(context.transaction);
+  const row = result.rows[0];
+  return {
+    id: row?.id ?? null,
+    startsAt: row?.startsAt ?? null,
+    endsAt: row?.endsAt ?? null,
+    holdExpiresAt: row?.holdExpiresAt ?? null,
+    error: row?.error ?? null,
+  };
+}
+
+export function businessIdForActiveStore(
+  context: DatabaseContext,
+  storeId: string,
+): Promise<string | undefined> {
+  return storeBusinessId(context, sql`store."status" = 'active' and store."id" = ${storeId}::uuid`);
+}
+
+export function businessIdForStore(context: DatabaseContext, storeId: string): Promise<string | undefined> {
+  return storeBusinessId(context, sql`store."id" = ${storeId}::uuid`);
+}
+
+function storeBusinessId(
+  context: DatabaseContext,
+  predicate: RawBuilder<unknown>,
+): Promise<string | undefined> {
+  return sql<{ businessId: string }>`
+    select "businessId" from app.stores store where ${predicate} limit 1
+  `.execute(context.transaction).then((result) => result.rows[0]?.businessId);
+}
+
+export function storeTimezone(context: DatabaseContext, storeId: string): Promise<string | undefined> {
+  return sql<{ timezone: string }>`
+    select "timezone" from app.stores where "id" = ${storeId}::uuid limit 1
+  `.execute(context.transaction).then((result) => result.rows[0]?.timezone);
+}
+
+export interface ShiftedItemInput {
+  readonly id: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+}
+
+/**
+ * Move a booking's items to new UTC windows. The exclusion constraint validates
+ * the new windows inside the caller's transaction; a violation surfaces as a
+ * DatabaseError with kind "exclusion-violation".
+ */
+export async function shiftItems(
+  context: DatabaseContext,
+  businessId: string,
+  bookingId: string,
+  shifts: ShiftedItemInput[],
+): Promise<void> {
+  for (const shift of shifts) {
+    await sql`
+      update app.booking_items
+        set "startsAt" = ${shift.startsAt}::timestamptz,
+            "endsAt" = ${shift.endsAt}::timestamptz,
+            "updatedAt" = now()
+      where "id" = ${shift.id}::uuid
+        and "bookingId" = ${bookingId}::uuid
+        and "businessId" = ${businessId}::uuid
+    `.execute(context.transaction);
+  }
+}
+
+export interface StatusPatch {
+  readonly status: BookingStatus;
+  readonly cancelReason?: string | null;
+  readonly startsAt?: Date;
+  readonly endsAt?: Date;
+}
+
+export async function updateBookingStatus(
   context: DatabaseContext,
   businessId: string,
   storeId: string,
   bookingId: string,
-  patch: {
-    status: string;
-    declineReason?: string | null;
-    bookingDate?: string;
-    startTime?: string;
-    endTime?: string;
-    rescheduledFrom?: string;
-  },
+  patch: StatusPatch,
 ): Promise<BookingRow | undefined> {
   const fields: RawBuilder<unknown>[] = [sql`"status" = ${patch.status}`, sql`"updatedAt" = now()`];
-  if (patch.declineReason !== undefined) fields.push(sql`"declineReason" = ${patch.declineReason}`);
-  if (patch.bookingDate !== undefined) fields.push(sql`"bookingDate" = ${patch.bookingDate}::date`);
-  if (patch.startTime !== undefined) fields.push(sql`"startTime" = ${patch.startTime}`);
-  if (patch.endTime !== undefined) fields.push(sql`"endTime" = ${patch.endTime}`);
-  if (patch.rescheduledFrom !== undefined) fields.push(sql`"rescheduledFrom" = ${patch.rescheduledFrom}::date`);
+  // Free a slot, un-hold a checkout, or hard-cancel: the hold is irrelevant once
+  // the booking leaves the held state.
+  if (patch.status !== "held") fields.push(sql`"holdExpiresAt" = null`);
+  if (patch.cancelReason !== undefined) fields.push(sql`"cancelledReason" = ${patch.cancelReason}`);
+  if (patch.startsAt !== undefined) fields.push(sql`"startsAt" = ${patch.startsAt}::timestamptz`);
+  if (patch.endsAt !== undefined) fields.push(sql`"endsAt" = ${patch.endsAt}::timestamptz`);
 
-  const result = await sql<BookingRow>`
+  await sql`
     update app.bookings set ${sql.join(fields, sql`, `)}
     where "id" = ${bookingId}::uuid
       and "businessId" = ${businessId}::uuid
       and "storeId" = ${storeId}::uuid
-    returning ${BOOKING_COLUMNS}
   `.execute(context.transaction);
-  return result.rows[0];
+  return findById(context, businessId, bookingId);
 }

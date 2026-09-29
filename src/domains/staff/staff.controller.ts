@@ -3,6 +3,7 @@ import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
 import {
   businessParamsSchema,
+  commissionReportQuerySchema,
   createExceptionSchema,
   createStaffSchema,
   exceptionParamsSchema,
@@ -54,6 +55,11 @@ export class StaffController {
   readonly removeException = this.handle(async (request) => {
     await this.service.removeException(this.operation(request), exceptionParamsSchema.parse(request.params).exceptionId);
     return { deleted: true };
+  });
+
+  readonly commissionReport = this.handle(async (request) => {
+    const { from, to } = commissionReportQuerySchema.parse(request.query);
+    return { report: await this.service.commissionReport(this.operation(request), from, to) };
   });
 
   private operation(request: Request): StaffOperation {

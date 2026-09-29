@@ -13,6 +13,7 @@ export function createBookingsRouter(): Router {
 
   // Dashboard reads/writes require an authenticated business member.
   router.get("/api/store/bookings", requireAuth, controller.list);
+  router.get("/api/store/bookings/slots", requireAuth, controller.slots);
   router.patch("/api/store/bookings/:bookingId/status", requireAuth, controller.updateStatus);
 
   return router;

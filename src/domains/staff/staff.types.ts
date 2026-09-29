@@ -6,6 +6,7 @@ export interface StaffProfileRow {
   readonly displayName: string;
   readonly photoUploadId: string | null;
   readonly isBookable: boolean;
+  readonly commissionPercent: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -46,6 +47,7 @@ export interface StaffMember {
   readonly displayName: string;
   readonly photoUploadId: string | null;
   readonly isBookable: boolean;
+  readonly commissionPercent: number;
   readonly services: readonly Omit<StaffServiceRow, "staffId">[];
   readonly schedule: readonly Omit<StaffScheduleRow, "staffId">[];
   readonly createdAt: string;
@@ -66,4 +68,23 @@ export interface StaffOperation {
   readonly userId: string;
   readonly requestId: string;
   readonly businessId: string;
+}
+
+export interface CommissionReportRow {
+  readonly staffId: string;
+  readonly displayName: string;
+  readonly commissionPercent: number;
+  readonly revenueMinor: string;
+  readonly tipsMinor: string;
+  readonly completedCount: string;
+}
+
+export interface StaffCommissionReport {
+  readonly staffId: string;
+  readonly displayName: string;
+  readonly commissionPercent: number;
+  readonly revenueMinor: number;
+  readonly tipsMinor: number;
+  readonly commissionMinor: number;
+  readonly completedBookings: number;
 }

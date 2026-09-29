@@ -1,0 +1,1 @@
+alter table app.staff_profiles drop column "commissionPercent";
