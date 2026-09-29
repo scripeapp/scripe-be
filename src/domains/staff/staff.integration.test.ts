@@ -52,6 +52,16 @@ describe("staff domain", () => {
     expect((await request(server.baseUrl, `/api/businesses/${randomUUID()}/staff`)).status).toBe(401);
   });
 
+  it("makes a new business's owner bookable on weekdays at the default branch", async () => {
+    const fix = await fixture("Solo Owner");
+    const staff = ((await request(server.baseUrl, `/api/businesses/${fix.businessId}/staff`, { cookie: fix.cookies })).body as { data: { staff: { displayName: string; isBookable: boolean; membershipId: string | null; schedule: { weekday: number; startTime: string; endTime: string; locationId: string }[] }[] } }).data.staff;
+    const branches = ((await request(server.baseUrl, `/api/businesses/${fix.businessId}/stores/${fix.storeId}/locations`, { cookie: fix.cookies })).body as { data: { locations: { id: string; isDefault: boolean }[] } }).data.locations;
+    expect(staff).toHaveLength(1);
+    expect(staff[0]).toMatchObject({ displayName: "Solo Owner", isBookable: true, membershipId: expect.any(String) });
+    expect(staff[0]!.schedule.map((entry) => [entry.weekday, entry.startTime, entry.endTime])).toEqual([1, 2, 3, 4, 5].map((weekday) => [weekday, "09:00", "17:00"]));
+    expect(new Set(staff[0]!.schedule.map((entry) => entry.locationId))).toEqual(new Set([branches.find((branch) => branch.isDefault)!.id]));
+  });
+
   it("manages a payroll staff member end to end", async () => {
     const fix = await fixture("Team Owner");
     const partyId = await created(fix, "/parties", { kind: "person", displayName: "Dami the Barber" }, (b) => b.data.party.id as string);
@@ -62,7 +72,10 @@ describe("staff domain", () => {
     expect(staff.id).toBeTruthy();
 
     const list = await request(server.baseUrl, `/api/businesses/${fix.businessId}/staff`, { cookie: fix.cookies });
-    expect((list.body as { data: { staff: unknown[] } }).data.staff).toHaveLength(1);
+    // The owner is bookable from the start, so Dami is the second staff member.
+    const listed = (list.body as { data: { staff: { id: string }[] } }).data.staff;
+    expect(listed).toHaveLength(2);
+    expect(listed.map((member) => member.id)).toContain(staff.id);
 
     const withServices = await request(server.baseUrl, `/api/businesses/${fix.businessId}/staff/${staff.id}/services`, { method: "PUT", cookie: fix.cookies, body: JSON.stringify({ services: [{ productId }] }) });
     expect(withServices.status).toBe(200);

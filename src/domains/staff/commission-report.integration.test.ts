@@ -164,7 +164,8 @@ describe("staff commission and reporting", () => {
     const report = await request(server.baseUrl, `/api/businesses/${fix.businessId}/staff/commission-report?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { cookie: fix.cookies });
     expect(report.status).toBe(200);
     const rows = (report.body as { data: { report: { staffId: string; displayName: string; commissionPercent: number; revenueMinor: number; tipsMinor: number; commissionMinor: number; completedBookings: number }[] } }).data.report;
-    expect(rows).toHaveLength(2);
+    // Two staff added here, plus the owner, who is bookable from the start.
+    expect(rows).toHaveLength(3);
     expect(rows.find((row) => row.staffId === fix.otherStaffId)).toMatchObject({ revenueMinor: 0, commissionMinor: 0, completedBookings: 0 });
 
     const nadia = rows.find((row) => row.staffId === fix.staffId)!;

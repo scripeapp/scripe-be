@@ -46,8 +46,8 @@ export async function createDefaultBranch(
   businessId: string,
   storeId: string,
   fields: { name: string; timezone: string; address?: BranchAddress | null },
-): Promise<void> {
-  await repository.createLocation(
+): Promise<string> {
+  const branch = await repository.createLocation(
     context,
     businessId,
     storeId,
@@ -70,6 +70,7 @@ export async function createDefaultBranch(
     },
     true,
   );
+  return branch.id;
 }
 
 export interface BranchAddress {
