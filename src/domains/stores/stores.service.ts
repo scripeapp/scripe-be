@@ -9,8 +9,8 @@ import {
 } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
 import * as businessesRepository from "../businesses/businesses.repository.js";
-import { listPublicCategories, listPublicProducts, listPublicProductsByIds, getPublicProduct } from "../products/products.service.js";
-import type { Category, PublicProduct } from "../products/products.types.js";
+import { listPublicCategories, listPublicModifierGroups, listPublicProducts, listPublicProductsByIds, getPublicProduct } from "../products/products.service.js";
+import type { Category, PublicModifierGroup, PublicProduct } from "../products/products.types.js";
 import { findPublicOrderByReference } from "../orders/orders.repository.js";
 import * as repository from "./stores.repository.js";
 import type {
@@ -132,6 +132,16 @@ export class StoresService {
   /** For order-confirmation display — not scoped to a single store's slug. */
   async listPublicProductsByIds(requestId: string, ids: readonly string[]): Promise<PublicProduct[]> {
     return this.runAnonymous(requestId, (context) => listPublicProductsByIds(context, ids));
+  }
+
+  async listPublicModifierGroups(requestId: string, slug: string, productIdOrSlug: string, branchId: string | null): Promise<PublicModifierGroup[]> {
+    return this.runAnonymous(requestId, async (context) => {
+      const store = await repository.findActiveStoreBySlug(context, slug);
+      if (!store) throw notFoundError("Store not found");
+      const groups = await listPublicModifierGroups(context, store.businessId, store.id, productIdOrSlug, branchId);
+      if (!groups) throw notFoundError("Product not found");
+      return groups;
+    });
   }
 
   async getPublicProduct(requestId: string, slug: string, productIdOrSlug: string): Promise<{ store: PublicStore; product: PublicProduct }> {

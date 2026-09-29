@@ -1,5 +1,6 @@
 import { sql, type RawBuilder } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
+import type { PublicModifierGroup, PublicModifierOption } from "./products.types.js";
 import type { AttachedModifierGroup, CategoryInput, CategoryRow, CategoryUpdateInput, ModifierGroupInput, ModifierGroupRow, ModifierGroupUpdateInput, ModifierOptionInput, ModifierOptionRow, ModifierOptionUpdateInput, ProductCreateInput, ProductRow, ProductUpdateInput, VariantInput, VariantRow } from "./products.types.js";
 
 export async function listProducts(c: DatabaseContext, businessId: string, filters: { storeId?: string; status?: string; search?: string }): Promise<ProductRow[]> {
@@ -153,4 +154,30 @@ export async function updateVariant(c: DatabaseContext, businessId: string, prod
 export async function archiveVariants(c: DatabaseContext, businessId: string, productId: string, keepIds: readonly string[]): Promise<void> {
   const keep = keepIds.length > 0 ? sql`and "id" not in (${sql.join(keepIds.map((id) => sql`${id}::uuid`))})` : sql``;
   await sql`update app.product_variants set "status"='archived',"archivedAt"=now(),"isDefault"=false,"sku"=null where "businessId"=${businessId}::uuid and "productId"=${productId}::uuid and "status" <> 'archived' ${keep}`.execute(c.transaction);
+}
+
+/** Active groups and available options on a product, limited to those offered at a branch when one is given. */
+export async function listPublicModifierGroups(c: DatabaseContext, businessId: string, productId: string, branchId: string | null): Promise<PublicModifierGroup[]> {
+  const groups = (await sql<Omit<PublicModifierGroup, "options">>`
+    select g."id", g."name", g."description", g."selectionMode", g."minSelections", g."maxSelections", g."kind"
+    from app.product_modifier_groups pg
+    join app.modifier_groups g on g."id" = pg."groupId" and g."businessId" = pg."businessId"
+    where pg."businessId" = ${businessId}::uuid and pg."productId" = ${productId}::uuid
+      and g."status" = 'active'
+      and (${branchId}::uuid is null or g."branchIds" is null or ${branchId}::uuid = any(g."branchIds"))
+    order by pg."sortOrder", g."name"
+  `.execute(c.transaction)).rows;
+  if (groups.length === 0) return [];
+  const options = (await sql<PublicModifierOption & { groupId: string }>`
+    select o."id", o."groupId", o."name", o."priceAdjustmentMinor"::text as "priceAdjustmentMinor", o."extraDurationMinutes", o."isDefault"
+    from app.modifier_options o
+    where o."businessId" = ${businessId}::uuid and o."groupId" = any(${groups.map((group) => group.id)}::uuid[])
+      and o."status" = 'active' and o."isAvailable"
+      and (${branchId}::uuid is null or o."branchIds" is null or ${branchId}::uuid = any(o."branchIds"))
+    order by o."sortOrder", o."createdAt"
+  `.execute(c.transaction)).rows;
+  return groups.map((group) => ({
+    ...group,
+    options: options.filter((option) => option.groupId === group.id).map(({ groupId: _groupId, ...option }) => option),
+  }));
 }

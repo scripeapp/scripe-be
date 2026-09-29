@@ -474,6 +474,33 @@ describe("stores domain", () => {
       expect(byProductSlug.status).toBe(200);
       expect(entity<{ id: string }>(byProductSlug, "product").id).toBe(activeProduct.id);
 
+      // Modifier groups on the product, as a shopper sees them.
+      const extras = entity<{ id: string }>(
+        await request(server.baseUrl, `/api/businesses/${business.id}/modifier-groups`, {
+          method: "POST",
+          cookie: owner.cookies,
+          body: JSON.stringify({ storeId: business.defaultStore.id, name: "Extras", kind: "addon" }),
+        }),
+        "group",
+      );
+      for (const option of [{ name: "Ice", priceAdjustmentMinor: 0 }, { name: "Ginger shot", priceAdjustmentMinor: 50000 }]) {
+        await request(server.baseUrl, `/api/businesses/${business.id}/modifier-groups/${extras.id}/options`, {
+          method: "POST",
+          cookie: owner.cookies,
+          body: JSON.stringify(option),
+        });
+      }
+      await request(server.baseUrl, `/api/businesses/${business.id}/products/${activeProduct.id}/modifier-groups`, {
+        method: "POST",
+        cookie: owner.cookies,
+        body: JSON.stringify({ groupId: extras.id }),
+      });
+      const publicModifiers = await request(server.baseUrl, `/api/store/public/${slug}/product/${activeProduct.id}/modifier-groups`);
+      expect(publicModifiers.status).toBe(200);
+      const publicGroups = (publicModifiers.body as { data: { name: string; options: { name: string; priceAdjustmentMinor: string }[] }[] }).data;
+      expect(publicGroups).toHaveLength(1);
+      expect(publicGroups[0]!.options.map((option) => [option.name, option.priceAdjustmentMinor])).toEqual([["Ice", "0"], ["Ginger shot", "50000"]]);
+
       // Branches lookup
       const branchesRes = await request(server.baseUrl, `/api/store/public/${slug}/branches`);
       expect(branchesRes.status).toBe(200);

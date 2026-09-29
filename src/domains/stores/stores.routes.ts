@@ -22,6 +22,7 @@ export function createStoresRouter(): Router {
   router.get(`${publicBase}/:slug/delivery-methods`, controller.listPublicDeliveryMethods);
   router.get(`${publicBase}/:slug/product/:productIdOrSlug`, controller.getPublicProduct);
   router.get(`${publicBase}/:slug/products/:productIdOrSlug`, controller.getPublicProduct);
+  router.get(`${publicBase}/:slug/product/:productIdOrSlug/modifier-groups`, controller.listPublicModifierGroups);
   router.get(`${publicBase}/order/:reference`, controller.getPublicOrderByReference);
 
   // Business-scoped public aliases

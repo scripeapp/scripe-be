@@ -39,3 +39,7 @@ export interface AttachedModifierGroup { readonly id: string; readonly name: str
 export interface VariantListItemInput { readonly id?: string; readonly clientKey?: string; readonly name: string; readonly sku?: string | null; readonly optionValues?: Record<string, unknown>; readonly priceMinor?: number | null; readonly compareAtMinor?: number | null; }
 export interface VariantListInput { readonly assetCode: string; readonly variants: readonly VariantListItemInput[]; }
 export interface ReplacedVariant extends Variant { readonly clientKey: string | null; }
+
+/** A modifier or add-on group as a shopper sees it on one product at one branch. */
+export interface PublicModifierGroup { readonly id: string; readonly name: string; readonly description: string; readonly selectionMode: ModifierSelectionMode; readonly minSelections: number; readonly maxSelections: number | null; readonly kind: ModifierGroupKind; readonly options: PublicModifierOption[]; }
+export interface PublicModifierOption { readonly id: string; readonly name: string; readonly priceAdjustmentMinor: string; readonly extraDurationMinutes: number; readonly isDefault: boolean; }
