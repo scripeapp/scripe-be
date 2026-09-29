@@ -25,6 +25,7 @@ import { createServiceSettingsRouter } from "./domains/service-settings/service-
 import { createStaffRouter } from "./domains/staff/staff.routes.js";
 import { createPricingRouter } from "./domains/pricing/pricing.routes.js";
 import { createPosRouter } from "./domains/pos/pos.routes.js";
+import { createPosDevicesRouter } from "./domains/pos-devices/pos-devices.routes.js";
 import { createInventoryRouter } from "./domains/inventory/inventory.routes.js";
 import { createCartsRouter } from "./domains/carts/carts.routes.js";
 import { createPromotionsRouter } from "./domains/promotions/promotions.routes.js";
@@ -99,6 +100,7 @@ export function createApp(): Express {
   app.use(createStaffRouter());
   app.use(createPricingRouter());
   app.use(createPosRouter());
+  app.use(createPosDevicesRouter());
   app.use(createInventoryRouter());
   app.use(createCartsRouter());
   app.use(createPromotionsRouter());

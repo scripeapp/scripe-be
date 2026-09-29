@@ -17,6 +17,7 @@ export function createStaffRouter(): Router {
   router.delete(`${base}/staff/:staffId`, controller.remove);
   router.put(`${base}/staff/:staffId/services`, controller.setServices);
   router.put(`${base}/staff/:staffId/schedule`, controller.setSchedule);
+  router.put(`${base}/staff/:staffId/till`, controller.setTillAccess);
 
   router.get(`${base}/schedule-exceptions`, controller.listExceptions);
   router.post(`${base}/schedule-exceptions`, controller.createException);

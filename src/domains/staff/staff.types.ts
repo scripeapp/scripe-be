@@ -7,8 +7,19 @@ export interface StaffProfileRow {
   readonly photoUploadId: string | null;
   readonly isBookable: boolean;
   readonly commissionPercent: number;
+  readonly tillEnabled: boolean;
+  readonly tillLocationId: string | null;
+  readonly hasPin: boolean;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+/** A till staff member's PIN hash, only ever read to check an entered PIN. */
+export interface TillPinRow {
+  readonly id: string;
+  readonly displayName: string;
+  readonly pinHash: string;
+  readonly tillLocationId: string | null;
 }
 
 export interface StaffServiceRow {
@@ -48,6 +59,10 @@ export interface StaffMember {
   readonly photoUploadId: string | null;
   readonly isBookable: boolean;
   readonly commissionPercent: number;
+  /** Till access: can unlock a paired till with a PIN, optionally at one branch only. */
+  readonly tillEnabled: boolean;
+  readonly tillLocationId: string | null;
+  readonly hasPin: boolean;
   readonly services: readonly Omit<StaffServiceRow, "staffId">[];
   readonly schedule: readonly Omit<StaffScheduleRow, "staffId">[];
   readonly createdAt: string;

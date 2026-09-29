@@ -24,7 +24,7 @@ export function createCorsOptions(): CorsOptions {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id", "X-Register-Device-Token"],
   };
 }
 

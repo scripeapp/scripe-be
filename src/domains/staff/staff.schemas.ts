@@ -33,6 +33,12 @@ export const updateStaffSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
+export const tillAccessSchema = z.object({
+  enabled: z.boolean(),
+  pin: z.string().regex(/^\d{4}$/, "The PIN must be 4 digits").optional(),
+  locationId: uuid.nullable().optional(),
+});
+
 export const commissionReportQuerySchema = z
   .object({
     from: z.string().datetime(),

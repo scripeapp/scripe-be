@@ -35,7 +35,12 @@ export async function hasPermission(
   businessId: string,
   permission: string,
 ): Promise<boolean> {
-  return (await findAuthorizedMembership(context, businessId, permission)) !== undefined;
+  // For a user this is exactly "an active membership whose roles grant the
+  // permission"; for a paired till device it is the device's fixed list.
+  const result = await sql<{ allowed: boolean }>`
+    select app.has_business_permission(${businessId}::uuid, ${permission}) as "allowed"
+  `.execute(context.transaction);
+  return result.rows[0]?.allowed === true;
 }
 
 // ============================================================================

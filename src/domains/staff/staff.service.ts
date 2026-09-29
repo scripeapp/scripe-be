@@ -1,9 +1,10 @@
 import type { Database } from "../../db/database.types.js";
+import { hashPin, verifyPin } from "../../shared/pin.js";
 import { withDatabaseContext } from "../../db/database-context.js";
 import type { DatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
-import { AppError, notFoundError, validationError } from "../../shared/errors.js";
+import { AppError, conflictError, notFoundError, validationError } from "../../shared/errors.js";
 import * as authorization from "../authorization/authorization.service.js";
 import * as authorizationRepository from "../authorization/authorization.repository.js";
 import * as repository from "./staff.repository.js";
@@ -41,6 +42,40 @@ export class StaffService {
     return this.run(operation, async (context) => {
       await authorization.requirePermission(context, operation.businessId, MANAGE);
       const updated = await repository.updateProfile(context, operation.businessId, staffId, input);
+      if (!updated) throw notFoundError("Staff member not found");
+      return this.hydrate(context, operation.businessId, updated);
+    });
+  }
+
+  /**
+   * Till access: switch it on or off, set or change the 4-digit PIN, and
+   * optionally limit it to one branch. PINs are unique within the business
+   * because a cashier unlocks a till with the PIN alone.
+   */
+  async setTillAccess(
+    operation: StaffOperation,
+    staffId: string,
+    input: { enabled: boolean; pin?: string; locationId?: string | null },
+  ): Promise<StaffMember> {
+    return this.run(operation, async (context) => {
+      await authorization.requirePermission(context, operation.businessId, MANAGE);
+      const profile = await this.requireProfile(context, operation.businessId, staffId);
+      if (input.enabled && !input.pin && !profile.hasPin) throw validationError("Set a 4-digit PIN to give till access.");
+      if (input.locationId) await this.ensureLocationsOwned(context, operation.businessId, [input.locationId]);
+
+      let pinHash: string | undefined;
+      if (input.pin) {
+        const others = (await repository.tillPins(context, operation.businessId)).filter((row) => row.id !== staffId);
+        for (const other of others) {
+          if (await verifyPin(input.pin, other.pinHash)) throw conflictError("Someone else already uses that PIN. Choose another.");
+        }
+        pinHash = await hashPin(input.pin);
+      }
+      const updated = await repository.setTillAccess(context, operation.businessId, staffId, {
+        enabled: input.enabled,
+        pinHash,
+        locationId: input.locationId,
+      });
       if (!updated) throw notFoundError("Staff member not found");
       return this.hydrate(context, operation.businessId, updated);
     });
@@ -154,6 +189,9 @@ function toStaffMember(profile: StaffProfileRow, services: StaffServiceRow[], sc
     photoUploadId: profile.photoUploadId,
     isBookable: profile.isBookable,
     commissionPercent: profile.commissionPercent,
+    tillEnabled: profile.tillEnabled,
+    tillLocationId: profile.tillLocationId,
+    hasPin: profile.hasPin,
     services: services
       .filter((service) => service.staffId === profile.id)
       .map(({ staffId: _staffId, ...service }) => service),

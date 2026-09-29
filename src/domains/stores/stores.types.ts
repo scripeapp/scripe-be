@@ -124,7 +124,10 @@ export interface RegisterShiftRow {
   readonly storeId: string;
   readonly locationId: string;
   readonly registerId: string;
-  readonly openedByMembershipId: string;
+  readonly openedByMembershipId: string | null;
+  readonly openedByStaffId?: string | null;
+  readonly closedByStaffId?: string | null;
+  readonly posDeviceId?: string | null;
   readonly closedByMembershipId: string | null;
   readonly openingCashMinor: string;
   readonly expectedCashMinor: string | null;
