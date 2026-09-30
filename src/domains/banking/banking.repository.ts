@@ -19,10 +19,10 @@ import type {
   WithdrawalStatus,
 } from "./banking.types.js";
 
-const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "providerCustomerType", "notificationEmail", "email", "firstName", "lastName", "phone", "bvn", "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber", "dateOfRegistration"::text as "dateOfRegistration", "website", "description", "businessCategory", "annualRevenue", "businessAddress", "certificateOfIncorporationUploadId", "statusReportUploadId", "proofOfAddressUploadId", "kybReviewedBy", "kybReviewedAt", "kybReviewNotes", "createdAt", "updatedAt"`;
+const PROFILE_COLUMNS = `"businessId", "kycStatus", "kycFailureReason", "kycSubmittedAt", "kycVerifiedAt", "providerCustomerCode", "providerCustomerType", "notificationEmail", "email", "firstName", "lastName", "phone", "bvn", "businessType", "registeredBusinessName", "registrationNumber", "taxIdentificationNumber", "dateOfRegistration"::text as "dateOfRegistration", "website", "description", "businessCategory", "annualRevenue", "businessAddress", "businessEmail", "businessPhone", "registeredAddress", "kybReviewedBy", "kybReviewedAt", "kybReviewNotes", "createdAt", "updatedAt"`;
 const VIRTUAL_ACCOUNT_COLUMNS = `"id", "businessId", "provider", "providerCustomerCode", "providerAccountId", "accountNumber", "accountName", "bankName", "bankSlug", "assetCode", "status", "assignmentReference", "failureReason", "metadata", "lastRequeryAt", "createdAt", "updatedAt"`;
 const WALLET_TRANSACTION_COLUMNS = `"id", "businessId", "type", "direction", "status", "assetCode", "amountMinor", "grossAmountMinor", "feeAmountMinor", "feeBreakdown", "provider", "providerReference", "description", "metadata", "postedAt", "createdAt"`;
-const WITHDRAWAL_COLUMNS = `"id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "transferRecipientCode", "providerReference", "providerTransferCode", "idempotencyKey", "status", "failureReason", "createdAt", "updatedAt"`;
+const WITHDRAWAL_COLUMNS = `"id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "transferRecipientCode", "providerReference", "providerTransferCode", "idempotencyKey", "status", "failureReason", "purpose", "billId", "createdAt", "updatedAt"`;
 
 function decryptProfile(row: BankingProfileRow | undefined): BankingProfileRow | undefined {
   if (!row) return undefined;
@@ -48,15 +48,31 @@ export async function findProfile(context: DatabaseContext, businessId: string):
 export async function saveProviderCustomer(
   context: DatabaseContext,
   businessId: string,
-  fields: { providerCustomerCode: string; providerCustomerType: ProviderCustomerType; notificationEmail: string },
+  fields: {
+    providerCustomerCode: string;
+    providerCustomerType: ProviderCustomerType;
+    notificationEmail: string;
+    /**
+     * The business identity the provider customer was created with, saved
+     * straight away so a submission that fails after this point (e.g. the
+     * verification call) reuses the same customer on retry instead of the
+     * provider rejecting a duplicate.
+     */
+    identity?: { registeredBusinessName: string; registrationNumber: string; bvn: string };
+  },
 ): Promise<void> {
+  const identity = fields.identity;
   await sql`
-    insert into app.banking_profiles ("businessId", "kycStatus", "providerCustomerCode", "providerCustomerType", "notificationEmail")
-    values (${businessId}::uuid, 'not_started', ${fields.providerCustomerCode}, ${fields.providerCustomerType}, ${fields.notificationEmail})
+    insert into app.banking_profiles ("businessId", "kycStatus", "providerCustomerCode", "providerCustomerType", "notificationEmail", "registeredBusinessName", "registrationNumber", "bvn")
+    values (${businessId}::uuid, 'not_started', ${fields.providerCustomerCode}, ${fields.providerCustomerType}, ${fields.notificationEmail},
+            ${identity?.registeredBusinessName ?? null}, ${identity?.registrationNumber ?? null}, ${identity ? encryptPii(identity.bvn) : null})
     on conflict ("businessId") do update set
       "providerCustomerCode" = excluded."providerCustomerCode",
       "providerCustomerType" = excluded."providerCustomerType",
       "notificationEmail" = excluded."notificationEmail",
+      "registeredBusinessName" = coalesce(excluded."registeredBusinessName", app.banking_profiles."registeredBusinessName"),
+      "registrationNumber" = coalesce(excluded."registrationNumber", app.banking_profiles."registrationNumber"),
+      "bvn" = coalesce(excluded."bvn", app.banking_profiles."bvn"),
       "updatedAt" = now()
   `.execute(context.transaction);
 }
@@ -98,9 +114,9 @@ export async function saveIndividualSubmission(
       "businessCategory" = null,
       "annualRevenue" = null,
       "businessAddress" = null,
-      "certificateOfIncorporationUploadId" = null,
-      "statusReportUploadId" = null,
-      "proofOfAddressUploadId" = null,
+      "businessEmail" = null,
+      "businessPhone" = null,
+      "registeredAddress" = null,
       "kybReviewedBy" = null,
       "kybReviewedAt" = null,
       "kybReviewNotes" = null,
@@ -131,9 +147,9 @@ export async function saveBusinessSubmission(
     businessCategory: string;
     annualRevenue: string | null;
     businessAddress: BusinessAddressInput;
-    certificateOfIncorporationUploadId: string;
-    statusReportUploadId: string | null;
-    proofOfAddressUploadId: string;
+    businessEmail?: string | null;
+    businessPhone?: string | null;
+    registeredAddress?: BusinessAddressInput | null;
   },
 ): Promise<BankingProfileRow> {
   const result = await sql<BankingProfileRow>`
@@ -158,9 +174,9 @@ export async function saveBusinessSubmission(
       "businessCategory" = ${fields.businessCategory},
       "annualRevenue" = ${fields.annualRevenue},
       "businessAddress" = ${JSON.stringify(fields.businessAddress)}::jsonb,
-      "certificateOfIncorporationUploadId" = ${fields.certificateOfIncorporationUploadId}::uuid,
-      "statusReportUploadId" = ${fields.statusReportUploadId}::uuid,
-      "proofOfAddressUploadId" = ${fields.proofOfAddressUploadId}::uuid,
+      "businessEmail" = ${fields.businessEmail ?? null},
+      "businessPhone" = ${fields.businessPhone ?? null},
+      "registeredAddress" = ${fields.registeredAddress ? JSON.stringify(fields.registeredAddress) : null}::jsonb,
       "kybReviewedBy" = null,
       "kybReviewedAt" = null,
       "kybReviewNotes" = null,
@@ -171,7 +187,7 @@ export async function saveBusinessSubmission(
   return decryptProfile(result.rows[0])!;
 }
 
-const DIRECTOR_COLUMNS = sql`"id", "businessId", "position", "isPrimary", "fullName", "firstName", "middleName", "lastName", "email", "phone", "bvn", "dateOfBirth", "idType", "idNumber", "idDocumentUploadId"`;
+const DIRECTOR_COLUMNS = sql`"id", "businessId", "position", "isPrimary", "fullName", "firstName", "middleName", "lastName", "email", "phone", "bvn", "dateOfBirth", "idType", "idNumber", "idDocumentUploadId", "role", "ownershipPercent"::text as "ownershipPercent", "title", "nationality", "residentialAddress"`;
 
 function decryptDirector(row: KybDirectorRow): KybDirectorRow {
   return { ...row, bvn: decryptPii(row.bvn) ?? "", dateOfBirth: decryptPii(row.dateOfBirth) ?? "", idNumber: decryptPii(row.idNumber) ?? "" };
@@ -195,12 +211,39 @@ export async function replaceKybDirectors(
     await sql`
       insert into app.banking_kyb_directors (
         "businessId", "position", "isPrimary", "fullName", "firstName", "middleName", "lastName", "email", "phone",
-        "bvn", "dateOfBirth", "idType", "idNumber", "idDocumentUploadId"
+        "bvn", "dateOfBirth", "idType", "idNumber", "idDocumentUploadId",
+        "role", "ownershipPercent", "title", "nationality", "residentialAddress"
       ) values (
         ${businessId}::uuid, ${position}, ${director.isPrimary}, ${director.fullName}, ${director.firstName}, ${director.middleName}, ${director.lastName},
         ${director.email}, ${director.phone}, ${encryptPii(director.bvn)}, ${encryptPii(director.dateOfBirth)}, ${director.idType},
-        ${encryptPii(director.idNumber)}, ${director.idDocumentUploadId}::uuid
+        ${encryptPii(director.idNumber)}, ${director.idDocumentUploadId}::uuid,
+        ${director.role ?? "director"}, ${Number(director.ownershipPercent ?? 0)}, ${director.title ?? null}, ${director.nationality ?? "NG"},
+        ${director.residentialAddress ? JSON.stringify(director.residentialAddress) : null}::jsonb
       )
+    `.execute(context.transaction);
+  }
+}
+
+export async function listKybDocuments(context: DatabaseContext, businessId: string): Promise<import("./banking.types.js").KybDocumentRow[]> {
+  const result = await sql<import("./banking.types.js").KybDocumentRow>`
+    select "id", "businessId", "documentType", "uploadId", "createdAt"
+    from app.banking_kyb_documents
+    where "businessId" = ${businessId}::uuid
+  `.execute(context.transaction);
+  return result.rows;
+}
+
+export async function replaceKybDocuments(
+  context: DatabaseContext,
+  businessId: string,
+  documents: readonly { documentType: string; uploadId: string }[],
+): Promise<void> {
+  await sql`delete from app.banking_kyb_documents where "businessId" = ${businessId}::uuid`.execute(context.transaction);
+  for (const doc of documents) {
+    await sql`
+      insert into app.banking_kyb_documents ("businessId", "documentType", "uploadId")
+      values (${businessId}::uuid, ${doc.documentType}, ${doc.uploadId}::uuid)
+      on conflict ("businessId", "documentType") do update set "uploadId" = excluded."uploadId"
     `.execute(context.transaction);
   }
 }
@@ -296,6 +339,7 @@ export async function createVirtualAccount(
   context: DatabaseContext,
   businessId: string,
   fields: {
+    provider?: string;
     providerCustomerCode: string | null;
     providerAccountId: string | null;
     accountNumber: string | null;
@@ -309,9 +353,9 @@ export async function createVirtualAccount(
 ): Promise<VirtualAccountRow> {
   const result = await sql<VirtualAccountRow>`
     insert into app.virtual_accounts (
-      "businessId", "providerCustomerCode", "providerAccountId", "accountNumber", "accountName", "bankName", "bankSlug", "status", "assignmentReference", "metadata"
+      "businessId", "provider", "providerCustomerCode", "providerAccountId", "accountNumber", "accountName", "bankName", "bankSlug", "status", "assignmentReference", "metadata"
     ) values (
-      ${businessId}::uuid, ${fields.providerCustomerCode}, ${fields.providerAccountId}, ${fields.accountNumber}, ${fields.accountName},
+      ${businessId}::uuid, coalesce(${fields.provider ?? null}, 'paystack'), ${fields.providerCustomerCode}, ${fields.providerAccountId}, ${fields.accountNumber}, ${fields.accountName},
       ${fields.bankName}, ${fields.bankSlug}, ${fields.status}, ${fields.assignmentReference}, ${JSON.stringify(fields.metadata)}::jsonb
     )
     returning ${sql.raw(VIRTUAL_ACCOUNT_COLUMNS)}
@@ -322,13 +366,25 @@ export async function createVirtualAccount(
 export async function updateVirtualAccount(
   context: DatabaseContext,
   id: string,
-  fields: { status?: VirtualAccountStatus; failureReason?: string | null; lastRequeryAt?: Date },
+  fields: {
+    status?: VirtualAccountStatus;
+    failureReason?: string | null;
+    lastRequeryAt?: Date;
+    accountNumber?: string | null;
+    accountName?: string | null;
+    bankName?: string | null;
+    bankSlug?: string | null;
+  },
 ): Promise<VirtualAccountRow | undefined> {
   const result = await sql<VirtualAccountRow>`
     update app.virtual_accounts set
       "status" = coalesce(${fields.status ?? null}, "status"),
       "failureReason" = case when ${fields.failureReason !== undefined} then ${fields.failureReason ?? null} else "failureReason" end,
       "lastRequeryAt" = coalesce(${fields.lastRequeryAt ?? null}, "lastRequeryAt"),
+      "accountNumber" = coalesce(${fields.accountNumber ?? null}, "accountNumber"),
+      "accountName" = coalesce(${fields.accountName ?? null}, "accountName"),
+      "bankName" = coalesce(${fields.bankName ?? null}, "bankName"),
+      "bankSlug" = coalesce(${fields.bankSlug ?? null}, "bankSlug"),
       "updatedAt" = now()
     where "id" = ${id}::uuid
     returning ${sql.raw(VIRTUAL_ACCOUNT_COLUMNS)}
@@ -455,14 +511,18 @@ export async function createWithdrawal(
     providerReference: string;
     idempotencyKey: string;
     status?: "pending" | "awaitingApproval";
+    billId?: string | null;
   },
 ): Promise<WithdrawalRow> {
+  const billId = fields.billId ?? null;
   const result = await sql<WithdrawalRow>`
     insert into app.withdrawals (
-      "id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "providerReference", "idempotencyKey", "status"
+      "id", "businessId", "requestedBy", "amountMinor", "assetCode", "bankCode", "accountNumber", "accountName", "providerReference", "idempotencyKey", "status",
+      "purpose", "billId"
     ) values (
       coalesce(${fields.id ?? null}::uuid, gen_random_uuid()), ${businessId}::uuid, ${requestedBy}::uuid, ${fields.amountMinor}::bigint, ${fields.assetCode}, ${fields.bankCode},
-      ${fields.accountNumber}, ${fields.accountName}, ${fields.providerReference}, ${fields.idempotencyKey}, ${fields.status ?? "pending"}
+      ${fields.accountNumber}, ${fields.accountName}, ${fields.providerReference}, ${fields.idempotencyKey}, ${fields.status ?? "pending"},
+      ${billId ? "bill_payment" : "withdrawal"}, ${billId}::uuid
     )
     returning ${sql.raw(WITHDRAWAL_COLUMNS)}
   `.execute(context.transaction);
@@ -506,4 +566,9 @@ export async function claimWithdrawalForProcessing(context: DatabaseContext, id:
     returning "id"
   `.execute(context.transaction);
   return result.rows.length > 0;
+}
+
+/** Settles the bill a succeeded bill-payment withdrawal paid (a no-op for any other withdrawal, or if already settled). */
+export async function settleBillWithdrawal(context: DatabaseContext, withdrawalId: string): Promise<void> {
+  await sql`select app.settle_bill_withdrawal(${withdrawalId}::uuid)`.execute(context.transaction);
 }

@@ -11,13 +11,28 @@ import type {
   BillMetricsResult,
   BillPaymentAllocationRow,
   BillRow,
+  BillTransferRow,
+  BillTransferTarget,
   CreateBillInput,
   ListBillsFilter,
   UpdateBillInput,
 } from "./payables.types.js";
 
 export async function createBill(c: DatabaseContext, businessId: string, userId: string, input: CreateBillInput): Promise<{ id: string }> {
-  const bill = (await sql<{ id: string }>`insert into app.bills ("businessId","supplierAccountId","billNumber","billType","assetCode","issuedAt","dueAt","subtotalMinor","taxMinor","totalMinor","notes","createdBy") values (${businessId}::uuid,${input.supplierAccountId ?? null}::uuid,${input.billNumber},${input.billType ?? 'supplier'},${input.assetCode ?? 'NGN'},${input.issuedAt ?? null}::date,${input.dueAt ?? null}::date,${input.subtotalMinor},${input.taxMinor ?? 0},${input.totalMinor},${input.notes ?? ''},${userId}::uuid) returning "id"`.execute(c.transaction)).rows[0]!;
+  let supplierAccountId = input.supplierAccountId;
+  if (supplierAccountId) {
+    const account = await sql<{ id: string }>`
+      select "id" from app.supplier_accounts
+      where ("id" = ${supplierAccountId}::uuid or "partyId" = ${supplierAccountId}::uuid)
+        and "businessId" = ${businessId}::uuid
+      limit 1
+    `.execute(c.transaction);
+    if (account.rows[0]) {
+      supplierAccountId = account.rows[0].id;
+    }
+  }
+
+  const bill = (await sql<{ id: string }>`insert into app.bills ("businessId","supplierAccountId","billNumber","billType","assetCode","issuedAt","dueAt","subtotalMinor","taxMinor","totalMinor","notes","createdBy") values (${businessId}::uuid,${supplierAccountId ?? null}::uuid,${input.billNumber},${input.billType ?? 'supplier'},${input.assetCode ?? 'NGN'},${input.issuedAt ?? null}::date,${input.dueAt ?? null}::date,${input.subtotalMinor},${input.taxMinor ?? 0},${input.totalMinor},${input.notes ?? ''},${userId}::uuid) returning "id"`.execute(c.transaction)).rows[0]!;
   for (const line of input.lines) {
     await sql`insert into app.bill_lines ("businessId","billId","description","quantity","unitAmountMinor","taxMinor","lineTotalMinor","accountCategory","purchaseOrderId","purchaseOrderLineId","goodsReceiptId") values (${businessId}::uuid,${bill.id}::uuid,${line.description},${line.quantity},${line.unitAmountMinor},${line.taxMinor ?? 0},${line.lineTotalMinor},${line.accountCategory},${line.purchaseOrderId ?? null}::uuid,${line.purchaseOrderLineId ?? null}::uuid,${line.goodsReceiptId ?? null}::uuid)`.execute(c.transaction);
   }
@@ -31,6 +46,36 @@ export async function findBillForAllocation(c: DatabaseContext, businessId: stri
   return result.rows[0];
 }
 
+/** What paying a bill from the wallet needs: the bill, its vendor's bank details, and what is already on its way. */
+export async function findBillForTransfer(c: DatabaseContext, businessId: string, billId: string): Promise<BillTransferTarget | undefined> {
+  const result = await sql<BillTransferTarget>`
+    select b."id", b."billNumber", b."status", b."assetCode", b."totalMinor"::text as "totalMinor", b."amountPaidMinor"::text as "amountPaidMinor",
+           sp."displayName" as "supplierName", s."bankCode", s."accountNumber", s."accountName",
+           coalesce((select sum(w."amountMinor") from app.withdrawals w
+                     where w."billId" = b."id" and w."status" in ('pending', 'awaitingApproval', 'processing')), 0)::text as "inFlightMinor"
+    from app.bills b
+    left join app.supplier_accounts s on s."id" = b."supplierAccountId" and s."businessId" = b."businessId"
+    left join app.parties sp on sp."id" = s."partyId" and sp."businessId" = s."businessId"
+    where b."id" = ${billId}::uuid and b."businessId" = ${businessId}::uuid
+    for update of b
+  `.execute(c.transaction);
+  return result.rows[0];
+}
+
+/** Wallet transfers raised to pay this bill, newest first, with the approval each one waits on. */
+export async function listBillTransfers(c: DatabaseContext, businessId: string, billId: string): Promise<BillTransferRow[]> {
+  const result = await sql<BillTransferRow>`
+    select w."id", w."amountMinor"::text as "amountMinor", w."status", w."providerReference", w."failureReason", w."createdAt"::text as "createdAt",
+           request."id" as "approvalRequestId", request."steps" as "approvalSteps", coalesce(request."pendingApproverIds", '{}') as "pendingApproverIds"
+    from app.withdrawals w
+    left join app.approval_requests request
+      on request."subjectType" = 'withdrawal' and request."subjectId" = w."id" and request."businessId" = w."businessId"
+    where w."businessId" = ${businessId}::uuid and w."billId" = ${billId}::uuid
+    order by w."createdAt" desc
+  `.execute(c.transaction);
+  return result.rows;
+}
+
 export async function allocatePayment(c: DatabaseContext, businessId: string, userId: string, billId: string, input: AllocatePaymentInput, id?: string): Promise<{ id: string } | null> {
   const result = await sql<{ id: string }>`insert into app.bill_payment_allocations ("id","businessId","billId","paymentReference","amountMinor","assetCode","paidAt","createdBy") select coalesce(${id ?? null}::uuid, gen_random_uuid()), ${businessId}::uuid, b."id", ${input.paymentReference}, ${input.amountMinor}, ${input.assetCode}, coalesce(${input.paidAt ?? null}::timestamptz, now()), ${userId}::uuid from app.bills b where b."id"=${billId}::uuid and b."businessId"=${businessId}::uuid and b."status" <> 'voided' and b."assetCode"=${input.assetCode} and b."amountPaidMinor" + ${input.amountMinor} <= b."totalMinor" returning "id"`.execute(c.transaction);
   const allocation = result.rows[0];
@@ -42,7 +87,7 @@ export async function allocatePayment(c: DatabaseContext, businessId: string, us
 export async function listBills(c: DatabaseContext, businessId: string, f: ListBillsFilter): Promise<{ bills: BillRow[]; total: number }> {
   const clauses: RawBuilder<unknown>[] = [sql`b."businessId" = ${businessId}::uuid`];
   if (f.status) clauses.push(sql`b."status" = ${f.status}`);
-  if (f.supplierAccountId) clauses.push(sql`b."supplierAccountId" = ${f.supplierAccountId}::uuid`);
+  if (f.supplierAccountId) clauses.push(sql`(b."supplierAccountId" = ${f.supplierAccountId}::uuid or s."partyId" = ${f.supplierAccountId}::uuid)`);
   if (f.search) clauses.push(sql`(b."billNumber" ilike ${`%${f.search}%`} or sp."displayName" ilike ${`%${f.search}%`})`);
 
   const whereClause = sql.join(clauses, sql` and `);
@@ -116,6 +161,9 @@ export async function findBillById(c: DatabaseContext, businessId: string, billI
       b."createdAt"::text as "createdAt",
       b."updatedAt"::text as "updatedAt",
       sp."displayName" as "supplierName",
+      s."bankName" as "supplierBankName",
+      s."accountNumber" as "supplierAccountNumber",
+      s."accountName" as "supplierAccountName",
       coalesce((
         select count(*)::int
         from app.bill_lines bl

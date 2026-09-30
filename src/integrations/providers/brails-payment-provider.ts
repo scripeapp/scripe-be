@@ -6,6 +6,8 @@ import type {
   BankAccountResolution,
   CustomerValidationResult,
   DedicatedAccountResult,
+  KybRegistrationType,
+  RequiredBusinessDocument,
   PaymentProviderGateway,
   TransferRecipientResult,
   TransferResult,
@@ -90,6 +92,19 @@ export class BrailsPaymentProviderGateway implements PaymentProviderGateway {
 
   createBusinessCustomer(): Promise<{ customerCode: string }> {
     return Promise.resolve({ customerCode: `pending:${randomUUID()}` });
+  }
+
+  /** Brails keeps no business customer to update — its placeholder customer carries nothing. */
+  updateBusinessCustomer(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
+   * Brails doesn't review documents (a platform administrator does), so this
+   * is the set our reviewers check, in Anchor's type codes.
+   */
+  requiredBusinessDocuments(input: { registrationType: KybRegistrationType }): Promise<RequiredBusinessDocument[]> {
+    return Promise.resolve(PLATFORM_REVIEW_DOCUMENTS[input.registrationType]);
   }
 
   submitBusinessVerification(): Promise<CustomerValidationResult> {
@@ -236,3 +251,20 @@ function toResult(account: BrailsVirtualAccount): DedicatedAccountResult {
     status: account.status === "active" ? "active" : account.status === "inactive" ? "failed" : "pending",
   };
 }
+
+const PROOF_OF_ADDRESS: RequiredBusinessDocument = { type: "PROOF_OF_ADDRESS", description: "A utility bill or tenancy agreement issued in the last 3 months", input: "file" };
+const PLATFORM_REVIEW_DOCUMENTS: Record<KybRegistrationType, RequiredBusinessDocument[]> = {
+  limited_liability: [
+    { type: "CERTIFICATE_OF_INCORPORATION", description: "Certificate showing that the company is duly incorporated", input: "file" },
+    { type: "CAC_STATUS_REPORT", description: "CAC status report for the company", input: "file" },
+    PROOF_OF_ADDRESS,
+  ],
+  sole_proprietorship: [
+    { type: "CERTIFICATE_OF_BUSINESS_NAME", description: "Certificate showing the business name is registered", input: "file" },
+    PROOF_OF_ADDRESS,
+  ],
+  ngo_cooperative: [
+    { type: "CERTIFICATE_OF_INCORPORATION", description: "Certificate of registration of the incorporated trustees", input: "file" },
+    PROOF_OF_ADDRESS,
+  ],
+};

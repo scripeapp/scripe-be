@@ -3,7 +3,7 @@ import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { withIdentity } from "../../db/principal.js";
-import { paymentProvider, type BusinessDocument } from "../../integrations/payment-provider.js";
+import { paymentProvider, type BusinessDocument, type BusinessPersonInput, type KybAddress, KYB_OFFICER_TITLES, type KybOfficerTitle } from "../../integrations/payment-provider.js";
 import { objectStorage } from "../../integrations/r2.js";
 import { emailSender } from "../../shared/email.js";
 import { loadEnvironment } from "../../shared/environment.js";
@@ -36,6 +36,7 @@ import type {
   SubmitKybInput,
   VirtualAccountRow,
   WalletTransactionRow,
+  WithdrawalBillLink,
   WithdrawalRow,
 } from "./banking.types.js";
 
@@ -47,6 +48,10 @@ const MAX_KYC_ATTEMPTS_PER_WINDOW = 5;
 /** Ported from legacy fraud-detection.service.ts's runChecks() thresholds (₦500k/₦2m) - real rule values that existed in legacy but were never actually wired to any request path. This is that wiring. */
 const LARGE_WITHDRAWAL_HIGH_MINOR = 500_000_00n;
 const LARGE_WITHDRAWAL_CRITICAL_MINOR = 2_000_000_00n;
+
+function formatNaira(minor: string): string {
+  return `₦${(Number(minor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 export class BankingService {
   constructor(
@@ -127,7 +132,7 @@ export class BankingService {
     const profile = await this.beginSubmission(operation, "business", (context) => this.requireKybUploads(context, operation.businessId, input));
 
     const primary = primaryDirector(input);
-    const address = {
+    const address: KybAddress = {
       addressLine1: input.address.streetAddress,
       addressLine2: input.address.apartment ?? null,
       city: input.address.city,
@@ -135,6 +140,54 @@ export class BankingService {
       postalCode: input.address.postalCode,
       country: input.address.countryCode,
     };
+    const registeredAddress: KybAddress = input.registeredAddress
+      ? {
+          addressLine1: input.registeredAddress.streetAddress,
+          addressLine2: input.registeredAddress.apartment ?? null,
+          city: input.registeredAddress.city,
+          state: input.registeredAddress.state,
+          postalCode: input.registeredAddress.postalCode,
+          country: input.registeredAddress.countryCode ?? "NG",
+        }
+      : address;
+
+    const people: BusinessPersonInput[] = input.directors.map((director) => {
+      const directorAddress: KybAddress = director.residentialAddress
+        ? {
+            addressLine1: director.residentialAddress.streetAddress,
+            addressLine2: director.residentialAddress.apartment ?? null,
+            city: director.residentialAddress.city,
+            state: director.residentialAddress.state,
+            postalCode: director.residentialAddress.postalCode,
+            country: director.residentialAddress.countryCode ?? "NG",
+          }
+        : address;
+
+      const title: KybOfficerTitle =
+        director.title && (KYB_OFFICER_TITLES as readonly string[]).includes(director.title)
+          ? (director.title as KybOfficerTitle)
+          : director.isPrimary
+            ? "CEO"
+            : "Manager";
+
+      return {
+        role: director.role,
+        ownershipPercent: director.ownershipPercent,
+        title,
+        isPrimary: director.isPrimary,
+        firstName: director.firstName,
+        lastName: director.lastName,
+        middleName: director.middleName,
+        email: director.email,
+        phone: director.phone,
+        bvn: director.bvn,
+        dateOfBirth: director.dateOfBirth,
+        nationality: director.nationality || "NG",
+        address: directorAddress,
+        idType: director.idType,
+        idNumber: director.idNumber,
+      };
+    });
 
     // A provider customer is only reused when it was created for this same
     // business identity — a changed name, CAC number or primary director
@@ -151,24 +204,13 @@ export class BankingService {
         industry: input.businessCategory,
         description: input.description ?? null,
         website: input.website ?? null,
-        email: primary.email,
-        phone: primary.phone,
+        email: input.businessEmail || primary.email,
+        phone: input.businessPhone || primary.phone,
         address,
-        directors: input.directors.map((director) => ({
-          isPrimary: director.isPrimary,
-          firstName: director.firstName,
-          lastName: director.lastName,
-          middleName: director.middleName,
-          email: director.email,
-          phone: director.phone,
-          bvn: director.bvn,
-          dateOfBirth: director.dateOfBirth,
-          nationality: "NG",
-          // Director home addresses aren't collected; the business address
-          // stands in, as Anchor requires one per officer.
-          address,
-        })),
+        registeredAddress,
+        people,
       }),
+      { registeredBusinessName: input.registeredBusinessName, registrationNumber: input.registrationNumber, bvn: primary.bvn },
     );
 
     const storedFiles = await this.run(operation, async (context) => {
@@ -192,9 +234,9 @@ export class BankingService {
         businessCategory: input.businessCategory,
         annualRevenue: input.annualRevenue ?? null,
         businessAddress: input.address,
-        certificateOfIncorporationUploadId: input.certificateOfIncorporationUploadId,
-        statusReportUploadId: input.statusReportUploadId ?? null,
-        proofOfAddressUploadId: input.proofOfAddressUploadId,
+        businessEmail: input.businessEmail ?? null,
+        businessPhone: input.businessPhone ?? null,
+        registeredAddress: input.registeredAddress ?? null,
       });
       await repository.replaceKybDirectors(
         context,
@@ -212,8 +254,22 @@ export class BankingService {
           idType: director.idType,
           idNumber: director.idNumber,
           idDocumentUploadId: director.idDocumentUploadId,
+          role: director.role,
+          ownershipPercent: String(director.ownershipPercent),
+          title: director.title ?? null,
+          nationality: director.nationality || "NG",
+          residentialAddress: director.residentialAddress ?? null,
         })),
       );
+      const kybDocs: { documentType: string; uploadId: string }[] = [
+        { documentType: "CERTIFICATE_OF_INCORPORATION", uploadId: input.certificateOfIncorporationUploadId },
+        { documentType: "PROOF_OF_ADDRESS", uploadId: input.proofOfAddressUploadId },
+      ];
+      if (input.statusReportUploadId) {
+        kybDocs.push({ documentType: "CAC_STATUS_REPORT", uploadId: input.statusReportUploadId });
+        kybDocs.push({ documentType: "MEMORANDUM_OF_ASSOCIATION", uploadId: input.statusReportUploadId });
+      }
+      await repository.replaceKybDocuments(context, operation.businessId, kybDocs);
       await this.logAction(context, operation, "banking.kyc_submitted", "banking_profile", operation.businessId, {
         status: "pending",
         type: "corporate",
@@ -273,6 +329,7 @@ export class BankingService {
       // The name comes from the provider/bank only — never from what the
       // business typed in, so an account can't be labelled as someone else.
       const row = await repository.createVirtualAccount(context, operation.businessId, {
+        provider: paymentProvider.name,
         providerCustomerCode: profile.providerCustomerCode,
         providerAccountId: account.providerAccountId,
         accountNumber: account.accountNumber,
@@ -320,7 +377,14 @@ export class BankingService {
       if (Date.now() - lastRequeryAt < REQUERY_COOLDOWN_MS) throw conflictError("Try requerying again after 10 minutes");
 
       const refreshed = await paymentProvider.requeryDedicatedAccount({ accountNumber: account.accountNumber, bankSlug: account.bankSlug, providerAccountId: account.providerAccountId });
-      const updated = (await repository.updateVirtualAccount(context, account.id, { status: refreshed.status, lastRequeryAt: new Date() }))!;
+      const updated = (await repository.updateVirtualAccount(context, account.id, {
+        status: refreshed.status,
+        accountNumber: refreshed.accountNumber,
+        accountName: refreshed.accountName,
+        bankName: refreshed.bankName,
+        bankSlug: refreshed.bankSlug,
+        lastRequeryAt: new Date(),
+      }))!;
       const becameActive = refreshed.status === "active" && account.status !== "active";
       if (refreshed.status === "active") await repository.markIndividualProfileVerified(context, operation.businessId);
       const profile = becameActive ? await repository.findProfile(context, operation.businessId) : undefined;
@@ -438,11 +502,12 @@ export class BankingService {
     type: ProviderCustomerType,
     forceNew: boolean,
     create: () => Promise<{ customerCode: string }>,
+    identity?: { registeredBusinessName: string; registrationNumber: string; bvn: string },
   ): Promise<string> {
     if (!forceNew && profile?.providerCustomerCode && profile.providerCustomerType === type) return profile.providerCustomerCode;
     const { customerCode } = await create();
     await this.run(operation, (context) =>
-      repository.saveProviderCustomer(context, operation.businessId, { providerCustomerCode: customerCode, providerCustomerType: type, notificationEmail: operation.userEmail }),
+      repository.saveProviderCustomer(context, operation.businessId, { providerCustomerCode: customerCode, providerCustomerType: type, notificationEmail: operation.userEmail, identity }),
     );
     return customerCode;
   }
@@ -496,31 +561,45 @@ export class BankingService {
   }
 
   private async submitStoredKybDocuments(customerCode: string, input: SubmitKybInput, uploads: readonly repository.KybUploadRow[]): Promise<void> {
-    const file = (uploadId: string | undefined, kind: BusinessDocument["kind"]): BusinessDocument | null => {
+    const file = (uploadId: string | undefined, documentType: string): BusinessDocument | null => {
       const upload = uploads.find((candidate) => candidate.id === uploadId);
       if (!upload) return null;
-      return { kind, file: { mimeType: upload.mimeType, fileName: upload.objectKey.split("/").pop() ?? kind, load: () => objectStorage.getObjectBytes(upload.objectKey) } };
+      return {
+        documentType,
+        file: {
+          mimeType: upload.mimeType,
+          fileName: upload.objectKey.split("/").pop() ?? documentType,
+          load: () => objectStorage.getObjectBytes(upload.objectKey),
+        },
+      };
     };
     const documents = [
-      file(input.certificateOfIncorporationUploadId, "certificate_of_incorporation"),
-      file(input.statusReportUploadId, "status_report"),
-      file(input.proofOfAddressUploadId, "proof_of_address"),
+      file(input.certificateOfIncorporationUploadId, "CERTIFICATE_OF_INCORPORATION"),
+      file(input.statusReportUploadId, "CAC_STATUS_REPORT"),
+      file(input.statusReportUploadId, "MEMORANDUM_OF_ASSOCIATION"),
+      file(input.proofOfAddressUploadId, "PROOF_OF_ADDRESS"),
       // Anchor's KYB documents list has one director-ID slot; it takes the
       // primary signatory's.
-      file(primaryDirector(input).idDocumentUploadId, "director_id"),
-      { kind: "registration_number" as const, text: input.registrationNumber },
-      input.taxIdentificationNumber ? { kind: "tax_identification_number" as const, text: input.taxIdentificationNumber } : null,
+      file(primaryDirector(input).idDocumentUploadId, "DIRECTOR_ID"),
+      { documentType: "RC_NUMBER", text: input.registrationNumber },
+      { documentType: "BN_NUMBER", text: input.registrationNumber },
+      input.taxIdentificationNumber ? { documentType: "TIN", text: input.taxIdentificationNumber } : null,
     ].filter((document): document is BusinessDocument => document !== null);
     await paymentProvider.submitBusinessDocuments({ customerCode, documents });
   }
 
   private async toReviewSummary(context: DatabaseContext, profile: BankingProfileRow, withDownloadUrls: boolean): Promise<KybReviewSummary> {
     const directors = await repository.listKybDirectors(context, profile.businessId);
-    const businessSlots: [KybReviewDocument["kind"], string | null][] = [
-      ["certificate_of_incorporation", profile.certificateOfIncorporationUploadId],
-      ["status_report", profile.statusReportUploadId],
-      ["proof_of_address", profile.proofOfAddressUploadId],
-    ];
+    const kybDocs = await repository.listKybDocuments(context, profile.businessId);
+    const docTypeToKind: Record<string, KybReviewDocument["kind"]> = {
+      CERTIFICATE_OF_INCORPORATION: "certificate_of_incorporation",
+      CAC_STATUS_REPORT: "status_report",
+      PROOF_OF_ADDRESS: "proof_of_address",
+    };
+    const businessSlots: [KybReviewDocument["kind"], string][] = kybDocs
+      .filter((d) => docTypeToKind[d.documentType])
+      .map((d) => [docTypeToKind[d.documentType]!, d.uploadId]);
+
     const uploadIds = [...businessSlots.map(([, id]) => id), ...directors.map((director) => director.idDocumentUploadId)].filter((id): id is string => !!id);
     const uploads = await repository.findUploads(context, uploadIds);
     const toDocument = async (kind: KybReviewDocument["kind"], uploadId: string | null): Promise<KybReviewDocument | null> => {
@@ -582,86 +661,89 @@ export class BankingService {
   }
 
   async requestWithdrawal(operation: BankingOperation, input: RequestWithdrawalInput): Promise<WithdrawalRow> {
-    return this.run(operation, async (context) => {
-      await requirePermission(context, operation.businessId, "banking.manage");
+    return this.run(operation, (context) => this.requestWithdrawalIn(context, operation, input));
+  }
 
-      if (await hasActiveHold(context, "business", operation.businessId)) {
-        throw forbiddenError("This business's wallet is on hold; contact support before withdrawing.");
-      }
+  /**
+   * The withdrawal flow inside a caller's transaction. Payables uses it to
+   * pay a bill: same checks, gating and provider call, with the withdrawal
+   * tied to the bill and gated by the bill-payment workflow instead.
+   */
+  async requestWithdrawalIn(context: DatabaseContext, operation: BankingPrincipal, input: RequestWithdrawalInput, bill?: WithdrawalBillLink): Promise<WithdrawalRow> {
+    await requirePermission(context, operation.businessId, "banking.manage");
 
-      const existing = await repository.findWithdrawalByIdempotencyKey(context, operation.businessId, input.idempotencyKey);
-      if (existing) return existing;
+    if (await hasActiveHold(context, "business", operation.businessId)) {
+      throw forbiddenError("This business's wallet is on hold; contact support before withdrawing.");
+    }
 
-      const profile = await repository.findProfile(context, operation.businessId);
-      if (profile?.kycStatus !== "verified") throw validationError("Complete banking verification before sending money from your wallet");
+    const existing = await repository.findWithdrawalByIdempotencyKey(context, operation.businessId, input.idempotencyKey);
+    if (existing) return existing;
 
-      const balance = await repository.getAvailableBalance(context, operation.businessId);
-      if (BigInt(input.amountMinor) > BigInt(balance)) throw validationError("Insufficient wallet balance");
+    const profile = await repository.findProfile(context, operation.businessId);
+    if (!profile || profile.kycStatus === "not_started") {
+      throw validationError("You haven't set up a business account yet. Set one up in Banking to send money from Scripe.", { reason: "banking_not_set_up" });
+    }
+    if (profile.kycStatus === "pending") {
+      throw validationError("Your business account is still being verified. You can send money once it's approved.", { reason: "banking_pending" });
+    }
+    if (profile.kycStatus !== "verified") {
+      throw validationError(
+        `We couldn't verify your business account${profile.kycFailureReason ? `: ${profile.kycFailureReason}` : ""}. Fix it in Banking to send money from Scripe.`,
+        { reason: "banking_failed" },
+      );
+    }
 
-      const withdrawalAmount = BigInt(input.amountMinor);
-      if (withdrawalAmount >= LARGE_WITHDRAWAL_HIGH_MINOR) {
-        await recordSignal(context, {
-          entityType: "business",
-          entityId: operation.businessId,
-          signalType: withdrawalAmount >= LARGE_WITHDRAWAL_CRITICAL_MINOR ? "very_large_withdrawal" : "large_withdrawal",
-          description: `Withdrawal of ${input.amountMinor} ${ASSET_CODE} minor units requested`,
-          severity: withdrawalAmount >= LARGE_WITHDRAWAL_CRITICAL_MINOR ? "critical" : "high",
-          metadata: { amountMinor: input.amountMinor, assetCode: ASSET_CODE, requestedBy: operation.userId },
-        });
-      }
+    const balance = await repository.getAvailableBalance(context, operation.businessId);
+    if (BigInt(input.amountMinor) > BigInt(balance)) {
+      throw validationError(`Your wallet has ${formatNaira(balance)} available. Top up to send ${formatNaira(String(input.amountMinor))}.`, { reason: "insufficient_balance" });
+    }
 
-      const membership = await authorizationRepository.findMembershipByUserId(context, operation.businessId, operation.userId);
-      const isOwner = membership?.roles.some((role) => role.code === "owner") ?? false;
-
-      // Gated FIRST, before anything is written — a blocked submission
-      // (ineligible submitter, a step with zero eligible approvers) throws
-      // with nothing created, so there's nothing to compensate/reverse.
-      const withdrawalId = randomUUID();
-      const gate = await this.approvals.gateSubmission(context, operation.businessId, "withdrawal", {
-        subjectType: "withdrawal",
-        subjectId: withdrawalId,
-        amountMinor: String(input.amountMinor),
-        assetCode: ASSET_CODE,
-        requestedBy: operation.userId,
-        requestedByEmail: profile.email ?? "",
-        requestedByIsOwner: isOwner,
+    const withdrawalAmount = BigInt(input.amountMinor);
+    if (withdrawalAmount >= LARGE_WITHDRAWAL_HIGH_MINOR) {
+      await recordSignal(context, {
+        entityType: "business",
+        entityId: operation.businessId,
+        signalType: withdrawalAmount >= LARGE_WITHDRAWAL_CRITICAL_MINOR ? "very_large_withdrawal" : "large_withdrawal",
+        description: `Withdrawal of ${input.amountMinor} ${ASSET_CODE} minor units requested`,
+        severity: withdrawalAmount >= LARGE_WITHDRAWAL_CRITICAL_MINOR ? "critical" : "high",
+        metadata: { amountMinor: input.amountMinor, assetCode: ASSET_CODE, requestedBy: operation.userId },
       });
+    }
 
-      const reference = `wd_${randomUUID()}`;
+    const membership = await authorizationRepository.findMembershipByUserId(context, operation.businessId, operation.userId);
+    const isOwner = membership?.roles.some((role) => role.code === "owner") ?? false;
 
-      if (gate.gated) {
-        // The debit is posted now, at gate time, not deferred until
-        // approval — the whole point is closing the double-spend window a
-        // pending-for-hours approval would otherwise open: a second
-        // concurrent withdrawal request must see this amount already
-        // reserved, which the "pending" status already achieves since
-        // getAvailableBalance sums pending+posted.
-        const withdrawal = await repository.createWithdrawal(context, operation.businessId, operation.userId, {
-          id: withdrawalId,
-          amountMinor: String(input.amountMinor),
-          assetCode: ASSET_CODE,
-          bankCode: input.bankCode,
-          accountNumber: input.accountNumber,
-          accountName: input.accountName,
-          providerReference: reference,
-          idempotencyKey: input.idempotencyKey,
-          status: "awaitingApproval",
-        });
-        await repository.postWalletTransaction(context, operation.businessId, {
-          type: "withdrawal",
-          direction: "debit",
-          status: "pending",
-          assetCode: ASSET_CODE,
-          amountMinor: String(input.amountMinor),
-          provider: paymentProvider.name,
-          providerReference: reference,
-          description: "Wallet withdrawal",
-          metadata: { withdrawalId: withdrawal.id, approvalRequestId: gate.requestId },
-        });
-        await this.logAction(context, operation, "banking.withdrawal_awaiting_approval", "withdrawal", withdrawal.id, { amountMinor: input.amountMinor, approvalRequestId: gate.requestId });
-        return withdrawal;
-      }
+    // Gated FIRST, before anything is written — a blocked submission
+    // (ineligible submitter, a step with zero eligible approvers) throws
+    // with nothing created, so there's nothing to compensate/reverse.
+    const withdrawalId = randomUUID();
+    const submission = {
+      subjectType: "withdrawal" as const,
+      subjectId: withdrawalId,
+      amountMinor: String(input.amountMinor),
+      assetCode: ASSET_CODE,
+      requestedBy: operation.userId,
+      requestedByEmail: profile.email ?? "",
+      requestedByIsOwner: isOwner,
+      pendingPayload: bill ? { billId: bill.billId, billNumber: bill.billNumber, supplierName: bill.supplierName } : undefined,
+    };
+    // A transfer created from a bill never goes out by itself: it always
+    // waits for the Bills approvers (or the owners). Other withdrawals are
+    // gated only when the Transfers workflow is switched on.
+    const gate: { gated: boolean; requestId?: string } = bill
+      ? { gated: true, requestId: (await this.approvals.gateAlways(context, operation.businessId, "bill_payment", submission)).requestId }
+      : await this.approvals.gateSubmission(context, operation.businessId, "withdrawal", submission);
+    const description = bill ? `Bill payment · ${bill.billNumber}` : "Wallet withdrawal";
 
+    const reference = `wd_${randomUUID()}`;
+
+    if (gate.gated) {
+      // The debit is posted now, at gate time, not deferred until
+      // approval — the whole point is closing the double-spend window a
+      // pending-for-hours approval would otherwise open: a second
+      // concurrent withdrawal request must see this amount already
+      // reserved, which the "pending" status already achieves since
+      // getAvailableBalance sums pending+posted.
       const withdrawal = await repository.createWithdrawal(context, operation.businessId, operation.userId, {
         id: withdrawalId,
         amountMinor: String(input.amountMinor),
@@ -671,6 +753,8 @@ export class BankingService {
         accountName: input.accountName,
         providerReference: reference,
         idempotencyKey: input.idempotencyKey,
+        status: "awaitingApproval",
+        billId: bill?.billId ?? null,
       });
       await repository.postWalletTransaction(context, operation.businessId, {
         type: "withdrawal",
@@ -680,14 +764,39 @@ export class BankingService {
         amountMinor: String(input.amountMinor),
         provider: paymentProvider.name,
         providerReference: reference,
-        description: "Wallet withdrawal",
-        metadata: { withdrawalId: withdrawal.id },
+        description,
+        metadata: { withdrawalId: withdrawal.id, approvalRequestId: gate.requestId, billId: bill?.billId },
       });
+      await this.logAction(context, operation, "banking.withdrawal_awaiting_approval", "withdrawal", withdrawal.id, { amountMinor: input.amountMinor, approvalRequestId: gate.requestId });
+      return withdrawal;
+    }
 
-      const finalized = await this.callProviderAndFinalize(context, operation.businessId, withdrawal.id, reference, input.accountName, input.accountNumber, input.bankCode, String(input.amountMinor), profile.email);
-      await this.logAction(context, operation, "banking.withdrawal_requested", "withdrawal", withdrawal.id, { amountMinor: input.amountMinor });
-      return finalized;
+    const withdrawal = await repository.createWithdrawal(context, operation.businessId, operation.userId, {
+      id: withdrawalId,
+      amountMinor: String(input.amountMinor),
+      assetCode: ASSET_CODE,
+      bankCode: input.bankCode,
+      accountNumber: input.accountNumber,
+      accountName: input.accountName,
+      providerReference: reference,
+      idempotencyKey: input.idempotencyKey,
+      billId: bill?.billId ?? null,
     });
+    await repository.postWalletTransaction(context, operation.businessId, {
+      type: "withdrawal",
+      direction: "debit",
+      status: "pending",
+      assetCode: ASSET_CODE,
+      amountMinor: String(input.amountMinor),
+      provider: paymentProvider.name,
+      providerReference: reference,
+      description,
+      metadata: { withdrawalId: withdrawal.id, billId: bill?.billId },
+    });
+
+    const finalized = await this.callProviderAndFinalize(context, operation.businessId, withdrawal.id, reference, input.accountName, input.accountNumber, input.bankCode, String(input.amountMinor), profile.email, description);
+    await this.logAction(context, operation, "banking.withdrawal_requested", "withdrawal", withdrawal.id, { amountMinor: input.amountMinor, billId: bill?.billId });
+    return finalized;
   }
 
   /**
@@ -728,7 +837,29 @@ export class BankingService {
       if (!claimed) return;
 
       const profile = await repository.findProfile(context, operation.businessId);
-      await this.callProviderAndFinalize(context, operation.businessId, withdrawal.id, withdrawal.providerReference, withdrawal.accountName, withdrawal.accountNumber, withdrawal.bankCode, withdrawal.amountMinor, profile?.email ?? null);
+      try {
+        await this.callProviderAndFinalize(context, operation.businessId, withdrawal.id, withdrawal.providerReference, withdrawal.accountName, withdrawal.accountNumber, withdrawal.bankCode, withdrawal.amountMinor, profile?.email ?? null, withdrawal.billId ? "Bill payment" : "Wallet withdrawal");
+      } catch (error) {
+        // The approval is already recorded by now, so a provider failure
+        // can't just roll back to "awaiting approval" — nobody could act on
+        // it again and the money would stay held. Fail it and give the
+        // money back instead; a bill it was paying stays owing.
+        const reason = error instanceof AppError ? error.message : "The bank couldn't take this transfer";
+        await repository.updateWithdrawal(context, withdrawal.id, { status: "failed", failureReason: reason });
+        await repository.postWalletTransaction(context, operation.businessId, {
+          type: "reversal",
+          direction: "credit",
+          status: "posted",
+          assetCode: withdrawal.assetCode,
+          amountMinor: withdrawal.amountMinor,
+          provider: paymentProvider.name,
+          providerReference: `${withdrawal.providerReference}:reversal`,
+          description: "Withdrawal reversal — the bank couldn't take the transfer",
+          metadata: { withdrawalId: withdrawal.id },
+        });
+        await this.logAction(context, operation, "banking.withdrawal_failed", "withdrawal", withdrawal.id, { reason });
+        return;
+      }
       await this.logAction(context, operation, "banking.withdrawal_approved", "withdrawal", withdrawal.id, {});
     });
   }
@@ -743,6 +874,7 @@ export class BankingService {
     bankCode: string,
     amountMinor: string,
     customerEmail: string | null,
+    reason: string,
   ): Promise<WithdrawalRow> {
     const virtualAccount = await repository.findCurrentVirtualAccount(context, businessId);
     // Some providers (e.g. Brails) require the sender's registered
@@ -758,7 +890,7 @@ export class BankingService {
       amountMinor,
       recipientCode: recipient.recipientCode,
       reference,
-      reason: "Wallet withdrawal",
+      reason,
       sourceAccountId: virtualAccount?.providerAccountId,
       customerEmail,
     });
@@ -767,6 +899,9 @@ export class BankingService {
       transferRecipientCode: recipient.recipientCode,
       providerTransferCode: transfer.transferCode,
     });
+    // A provider that confirms on the spot never sends the webhook that
+    // would otherwise settle a bill payment.
+    if (transfer.status === "success") await repository.settleBillWithdrawal(context, withdrawalId);
     return finalized!;
   }
 
@@ -781,6 +916,7 @@ export class BankingService {
 
       if (transfer.status === "success") {
         await repository.markWalletTransactionPosted(context, paymentProvider.name, withdrawal.providerReference);
+        await repository.settleBillWithdrawal(context, withdrawal.id);
       } else if (transfer.status === "failed") {
         await repository.postWalletTransaction(context, operation.businessId, {
           type: "reversal",

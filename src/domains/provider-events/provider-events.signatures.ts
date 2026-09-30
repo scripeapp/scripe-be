@@ -23,11 +23,16 @@ export function verifyFlutterwaveSignature(header: string | undefined): boolean 
   return safeEqual(hash, header);
 }
 
-/** Anchor: Base64(HMAC-SHA1(rawBody, key=webhook token)), header x-anchor-signature. https://docs.getanchor.co/docs/verify-webhooks */
+/**
+ * Anchor: Base64 of the *hex text* of HMAC-SHA1(rawBody, key=webhook token),
+ * header x-anchor-signature — every sample in
+ * https://docs.getanchor.co/docs/verify-webhooks base64-encodes the hex
+ * digest string, not the raw digest bytes.
+ */
 export function verifyAnchorSignature(rawBody: Buffer, signature: string | undefined): boolean {
   const token = loadEnvironment().ANCHOR_WEBHOOK_TOKEN;
   if (!token || !signature) return false;
-  const expected = createHmac("sha1", token).update(rawBody).digest("base64");
+  const expected = Buffer.from(createHmac("sha1", token).update(rawBody).digest("hex")).toString("base64");
   return safeEqual(expected, signature);
 }
 

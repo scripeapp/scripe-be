@@ -228,6 +228,56 @@ export class ApprovalsService {
   }
 
   /**
+   * Like gateSubmission, but the subject can never go through unapproved:
+   * used for transfers created from bills. It uses the active workflow
+   * covering `type`, else the business's workflow of that type even while
+   * it is switched off (the switch only decides whether the optional
+   * gating in gateSubmission applies), else the business owners. The
+   * requester may approve their own request only when they are the one
+   * eligible approver, so a one-person business can still get through.
+   */
+  async gateAlways(context: DatabaseContext, businessId: string, type: Exclude<WorkflowType, "all">, input: GateSubmissionInput): Promise<{ requestId: string }> {
+    const workflow = (await repository.findActiveWorkflow(context, businessId, type)) ?? (await repository.findLatestWorkflowOfType(context, businessId, type));
+
+    let steps: RequestStep[];
+    if (workflow && workflow.groups.length > 0) {
+      if (workflow.submitters.length > 0) {
+        const allowed = workflow.submitters.some((submitter) => submitter.userId === input.requestedBy || (input.requestedByEmail && submitter.email === input.requestedByEmail));
+        if (!allowed) throw forbiddenError("You are not allowed to submit into this approval workflow");
+      }
+      steps = buildStepsSnapshot(workflow, BigInt(input.amountMinor), input.requestedBy, input.requestedByEmail, input.requestedByIsOwner, "onlyIfSole");
+    } else {
+      const owners = await repository.listOwnerApprovers(context, businessId);
+      const approvers = soleOrOthers(owners.map((owner) => ({ userId: owner.userId, email: owner.email, name: owner.name, role: "Owner" })), input.requestedBy, input.requestedByEmail);
+      if (approvers.length === 0) throw validationError("This business has no owner who can approve this payment");
+      steps = [{
+        groupId: "owners",
+        title: "Owner approval",
+        position: 0,
+        requireAll: false,
+        sequential: false,
+        status: "pending",
+        approvers: approvers.map((approver, position) => ({ userId: approver.userId, email: approver.email, name: approver.name, position, decision: null, decidedAt: null })),
+      }];
+    }
+
+    const firstStepApproverIds = steps[0]?.approvers.map((approver) => approver.userId).filter((id): id is string => id !== null) ?? [];
+    const requestId = await repository.createApprovalRequest(context, businessId, {
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+      workflowId: workflow && workflow.groups.length > 0 ? workflow.id : null,
+      workflowName: workflow && workflow.groups.length > 0 ? workflow.name : "Owner approval",
+      requestedBy: input.requestedBy,
+      amountMinor: input.amountMinor,
+      assetCode: input.assetCode,
+      steps,
+      pendingApproverIds: firstStepApproverIds,
+      pendingPayload: input.pendingPayload,
+    });
+    return { requestId };
+  }
+
+  /**
    * Records one actor's decision on the current open step, re-evaluates
    * step and request completion, and writes with an optimistic-concurrency
    * compare-and-swap — exactly 2 attempts (matching legacy), each a full
@@ -332,16 +382,31 @@ function ruleMatchesAmount(rule: WorkflowRule, amountMinor: bigint): boolean {
  * narrowest-range-wins, matching legacy's actual `.find()` semantics (see
  * the design doc's misleading "narrowest range" framing vs. what's coded).
  */
-export function buildStepsSnapshot(workflow: Workflow, amountMinor: bigint, requesterId: string, requesterEmail: string, requesterIsOwner: boolean): RequestStep[] {
+/**
+ * How the requester's own name on a step is treated. "ownerExempt" is the
+ * workflow's own no-self-approval setting (owners are always exempt);
+ * "onlyIfSole" drops the requester unless nobody else could approve.
+ */
+export type SelfApproval = "ownerExempt" | "onlyIfSole";
+
+function soleOrOthers(approvers: ApproverRef[], requesterId: string, requesterEmail: string): ApproverRef[] {
+  const isRequester = (approver: ApproverRef) => approver.userId === requesterId || Boolean(requesterEmail && approver.email === requesterEmail);
+  const others = approvers.filter((approver) => !isRequester(approver));
+  return others.length > 0 ? others : approvers.filter(isRequester);
+}
+
+export function buildStepsSnapshot(workflow: Workflow, amountMinor: bigint, requesterId: string, requesterEmail: string, requesterIsOwner: boolean, selfApproval: SelfApproval = "ownerExempt"): RequestStep[] {
   return workflow.groups.map((group: WorkflowGroup, index): RequestStep => {
     const matchedRule = group.rules.find((rule) => !isFallbackRule(rule) && ruleMatchesAmount(rule, amountMinor)) ?? group.rules.find((rule) => isFallbackRule(rule));
 
     const rawApprovers: ApproverRef[] = matchedRule && matchedRule.approvers.length > 0 ? matchedRule.approvers : group.approvers;
 
     const filteredApprovers =
-      workflow.noSelfApproval && !requesterIsOwner
-        ? rawApprovers.filter((approver) => approver.userId !== requesterId && !(requesterEmail && approver.email === requesterEmail))
-        : rawApprovers;
+      selfApproval === "onlyIfSole"
+        ? soleOrOthers(rawApprovers, requesterId, requesterEmail)
+        : workflow.noSelfApproval && !requesterIsOwner
+          ? rawApprovers.filter((approver) => approver.userId !== requesterId && !(requesterEmail && approver.email === requesterEmail))
+          : rawApprovers;
 
     if (filteredApprovers.length === 0) {
       throw validationError(`"${group.title}" has no eligible approvers for this amount — add an approver (or turn off no-self-approval) before submitting`);

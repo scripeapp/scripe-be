@@ -3,10 +3,13 @@
  * belongs here. Routes are registered only after the capability and contract are
  * approved.
  */
-import { Router } from "express"; import { getDatabase } from "../../db/database.js"; import { requireAuth } from "../../middleware/auth.js"; import { ApprovalsService } from "../approvals/approvals.service.js"; import { PayablesController } from "./payables.controller.js"; import { PayablesService } from "./payables.service.js";
+import { Router } from "express"; import { getDatabase } from "../../db/database.js"; import { requireAuth } from "../../middleware/auth.js"; import { ApprovalsService } from "../approvals/approvals.service.js"; import { BankingService } from "../banking/banking.service.js"; import { PayablesController } from "./payables.controller.js"; import { PayablesService } from "./payables.service.js";
 export function createPayablesRouter(): Router {
   const router = Router();
-  const controller = new PayablesController(new PayablesService(getDatabase(), new ApprovalsService(getDatabase())));
+  const controller = new PayablesController((() => {
+    const approvals = new ApprovalsService(getDatabase());
+    return new PayablesService(getDatabase(), approvals, new BankingService(getDatabase(), approvals));
+  })());
   const base = "/api/businesses/:businessId/payables";
   router.use(base, requireAuth);
 
@@ -21,6 +24,7 @@ export function createPayablesRouter(): Router {
   router.post(`${base}/bills/:billId/reject`, controller.rejectBill);
   router.delete(`${base}/bills/:billId`, controller.deleteBill);
   router.post(`${base}/bills/:billId/payments`, controller.allocatePayment);
+  router.post(`${base}/bills/:billId/transfers`, controller.payBill);
 
   return router;
 }

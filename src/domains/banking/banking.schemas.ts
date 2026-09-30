@@ -42,8 +42,18 @@ const REGISTRATION_PREFIX = { limited_liability: "RC", sole_proprietorship: "BN"
 
 const MAX_DIRECTORS = 10;
 
+const addressSchema = z.object({
+  streetAddress: z.string().trim().min(1).max(255),
+  apartment: z.string().trim().max(255).optional().nullable(),
+  city: z.string().trim().min(1).max(100),
+  state: z.string().trim().min(1).max(100),
+  postalCode: z.string().trim().min(4, "Enter the postal code").max(20),
+  countryCode: z.literal("NG", { errorMap: () => ({ message: "Only Nigerian businesses can be verified" }) }).default("NG"),
+});
+
 const directorSchema = z.preprocess((val: any) => {
   if (val && typeof val === "object") {
+    const rawResidential = val.residentialAddress ?? val.residential_address ?? val.homeAddress ?? val.home_address;
     return {
       fullName: val.fullName ?? val.full_name,
       email: val.email,
@@ -54,6 +64,18 @@ const directorSchema = z.preprocess((val: any) => {
       idNumber: val.idNumber ?? val.id_number,
       idDocumentUploadId: val.idDocumentUploadId ?? val.id_document_upload_id,
       isPrimary: val.isPrimary ?? val.is_primary ?? false,
+      role: val.role ?? "director",
+      ownershipPercent: val.ownershipPercent ?? val.ownership_percent ?? 0,
+      title: val.title ?? null,
+      nationality: val.nationality ?? "NG",
+      residentialAddress: rawResidential && (rawResidential.streetAddress || rawResidential.street_address || rawResidential.addressLine1 || rawResidential.address_line_1) ? {
+        streetAddress: rawResidential.streetAddress ?? rawResidential.street_address ?? rawResidential.addressLine1 ?? rawResidential.address_line_1,
+        apartment: rawResidential.apartment ?? rawResidential.addressLine2 ?? rawResidential.address_line_2,
+        city: rawResidential.city,
+        state: rawResidential.state,
+        postalCode: rawResidential.postalCode ?? rawResidential.postal_code ?? rawResidential.postcode,
+        countryCode: rawResidential.countryCode ?? rawResidential.country_code ?? rawResidential.country ?? "NG",
+      } : undefined,
     };
   }
   return val;
@@ -67,6 +89,11 @@ const directorSchema = z.preprocess((val: any) => {
   idNumber: z.string().trim().min(5).max(30),
   idDocumentUploadId: uploadId,
   isPrimary: z.boolean(),
+  role: z.enum(["director", "owner", "director_owner"]).default("director"),
+  ownershipPercent: z.coerce.number().min(0).max(100).default(0),
+  title: z.string().trim().max(80).optional().nullable(),
+  nationality: z.string().trim().regex(/^[A-Z]{2}$/).default("NG"),
+  residentialAddress: addressSchema.optional().nullable(),
 }).superRefine((director, context) => {
   if (director.idType === "nin" && !/^\d{11}$/.test(director.idNumber)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["idNumber"], message: "Enter an 11 digit NIN" });
@@ -80,6 +107,7 @@ const directorSchema = z.preprocess((val: any) => {
 export const submitKybSchema = z.preprocess((val: any) => {
   if (val && typeof val === "object") {
     const rawAddress = val.address ?? val.businessAddress ?? {};
+    const rawRegisteredAddress = val.registeredAddress ?? val.registered_address;
     return {
       businessType: val.businessType ?? val.business_type,
       registeredBusinessName: val.registeredBusinessName ?? val.registered_business_name ?? val.businessName ?? val.business_name,
@@ -90,6 +118,8 @@ export const submitKybSchema = z.preprocess((val: any) => {
       description: val.description,
       businessCategory: val.businessCategory ?? val.business_category ?? val.category ?? val.industry,
       annualRevenue: val.annualRevenue ?? val.annual_revenue ?? val.revenue,
+      businessEmail: val.businessEmail ?? val.business_email,
+      businessPhone: val.businessPhone ?? val.business_phone,
       address: {
         streetAddress: rawAddress.streetAddress ?? rawAddress.street_address ?? rawAddress.addressLine1 ?? rawAddress.address_line_1,
         apartment: rawAddress.apartment ?? rawAddress.addressLine2 ?? rawAddress.address_line_2,
@@ -98,6 +128,14 @@ export const submitKybSchema = z.preprocess((val: any) => {
         postalCode: rawAddress.postalCode ?? rawAddress.postal_code ?? rawAddress.postcode,
         countryCode: rawAddress.countryCode ?? rawAddress.country_code ?? rawAddress.country ?? "NG",
       },
+      registeredAddress: rawRegisteredAddress && (rawRegisteredAddress.streetAddress || rawRegisteredAddress.street_address || rawRegisteredAddress.addressLine1 || rawRegisteredAddress.address_line_1) ? {
+        streetAddress: rawRegisteredAddress.streetAddress ?? rawRegisteredAddress.street_address ?? rawRegisteredAddress.addressLine1 ?? rawRegisteredAddress.address_line_1,
+        apartment: rawRegisteredAddress.apartment ?? rawRegisteredAddress.addressLine2 ?? rawRegisteredAddress.address_line_2,
+        city: rawRegisteredAddress.city,
+        state: rawRegisteredAddress.state,
+        postalCode: rawRegisteredAddress.postalCode ?? rawRegisteredAddress.postal_code ?? rawRegisteredAddress.postcode,
+        countryCode: rawRegisteredAddress.countryCode ?? rawRegisteredAddress.country_code ?? rawRegisteredAddress.country ?? "NG",
+      } : undefined,
       directors: val.directors,
       certificateOfIncorporationUploadId: val.certificateOfIncorporationUploadId ?? val.certificate_of_incorporation_upload_id,
       statusReportUploadId: val.statusReportUploadId ?? val.status_report_upload_id,
@@ -115,14 +153,10 @@ export const submitKybSchema = z.preprocess((val: any) => {
   description: z.string().trim().max(1000).optional(),
   businessCategory: z.string().trim().min(1, "Select a business category").max(100),
   annualRevenue: z.string().trim().max(100).optional(),
-  address: z.object({
-    streetAddress: z.string().trim().min(1).max(255),
-    apartment: z.string().trim().max(255).optional().nullable(),
-    city: z.string().trim().min(1).max(100),
-    state: z.string().trim().min(1).max(100),
-    postalCode: z.string().trim().min(4, "Enter the postal code").max(20),
-    countryCode: z.literal("NG", { errorMap: () => ({ message: "Only Nigerian businesses can be verified" }) }),
-  }),
+  businessEmail: z.string().trim().email().max(255).optional(),
+  businessPhone: z.string().trim().regex(/^\+?[0-9]{10,14}$/, "Enter a valid phone number").optional(),
+  address: addressSchema,
+  registeredAddress: addressSchema.optional().nullable(),
   directors: z.array(directorSchema).min(1, "Add at least one director").max(MAX_DIRECTORS, `Add at most ${MAX_DIRECTORS} directors`),
   certificateOfIncorporationUploadId: uploadId,
   statusReportUploadId: uploadId.optional(),
@@ -145,10 +179,30 @@ export const submitKybSchema = z.preprocess((val: any) => {
   }
 }).transform((input) => {
   const hasPrimary = input.directors.some((director) => director.isPrimary);
+  const hasOwner = input.directors.some((director) => director.role === "owner" || director.role === "director_owner");
+  const directors = input.directors.map((director, index) => {
+    const isPrimary = hasPrimary ? director.isPrimary : index === 0;
+    let role = director.role;
+    let ownershipPercent = director.ownershipPercent;
+    if (!hasOwner && isPrimary) {
+      role = "director_owner";
+      if (ownershipPercent === 0) ownershipPercent = 100;
+    }
+    return {
+      ...director,
+      isPrimary,
+      role,
+      ownershipPercent,
+    };
+  });
+  const primary = directors.find((d) => d.isPrimary) ?? directors[0]!;
   return {
     ...input,
+    businessEmail: input.businessEmail ?? primary.email,
+    businessPhone: input.businessPhone ?? primary.phone,
+    registeredAddress: input.registeredAddress ?? input.address,
     registrationNumber: `${REGISTRATION_PREFIX[input.businessType]}${input.registrationNumber.replace(/^(RC|BN|IT)[\s-]*/i, "")}`,
-    directors: input.directors.map((director, index) => ({ ...director, isPrimary: hasPrimary ? director.isPrimary : index === 0 })),
+    directors,
   };
 }));
 

@@ -196,8 +196,8 @@ describe("corporate KYB", () => {
     const response = await submitKyb(owner.cookies, businessId, { ...payload, directors });
     expect(response.status).toBe(200);
 
-    const [[customer]] = mockProvider.createBusinessCustomer.mock.calls as unknown as [[{ directors: { firstName: string; isPrimary: boolean }[] }]];
-    expect(customer.directors.map((officer) => [officer.firstName, officer.isPrimary])).toEqual([
+    const [[customer]] = mockProvider.createBusinessCustomer.mock.calls as unknown as [[{ people: { firstName: string; isPrimary: boolean }[] }]];
+    expect(customer.people.map((officer) => [officer.firstName, officer.isPrimary])).toEqual([
       ["Adaeze", false],
       ["Tunde", true],
     ]);
@@ -244,9 +244,9 @@ describe("corporate KYB", () => {
     expect(response.status).toBe(200);
     expect((response.body as { data: { kyc: { status: string } } }).data.kyc.status).toBe("pending");
 
-    const createInput = mockProvider.createBusinessCustomer.mock.calls[0] as unknown as [{ registrationNumber: string; directors: { lastName: string; middleName: string }[] }];
+    const createInput = mockProvider.createBusinessCustomer.mock.calls[0] as unknown as [{ registrationNumber: string; people: { lastName: string; middleName: string }[] }];
     expect(createInput[0].registrationNumber).toBe("RC1234567");
-    expect(createInput[0].directors[0]).toMatchObject({ lastName: "Okafor", middleName: "Grace" });
+    expect(createInput[0].people[0]).toMatchObject({ lastName: "Okafor", middleName: "Grace" });
 
     const stored = await migratorPool.query<{ bvn: string; providerCustomerType: string; notificationEmail: string }>(
       `select "bvn", "providerCustomerType", "notificationEmail" from app.banking_profiles where "businessId" = $1`,

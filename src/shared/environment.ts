@@ -20,6 +20,15 @@ const EnvironmentSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  /**
+   * Development only: keep uploads on local disk (./.local-storage) behind
+   * the same presigned-URL flow as R2, so features that need file uploads
+   * (e.g. banking KYB) work without R2 credentials. Refused in production.
+   */
+  LOCAL_OBJECT_STORAGE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url(),
   AUTH_COOKIE_DOMAIN: z.string().default("localhost"),
@@ -90,6 +99,13 @@ const EnvironmentSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["R2_ACCOUNT_ID"],
       message: "R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME must be set together or not at all.",
+    });
+  }
+  if (environment.NODE_ENV === "production" && environment.LOCAL_OBJECT_STORAGE) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["LOCAL_OBJECT_STORAGE"],
+      message: "LOCAL_OBJECT_STORAGE is for development only.",
     });
   }
   if (environment.NODE_ENV === "production" && r2Configured === 0) {

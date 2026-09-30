@@ -1,13 +1,15 @@
 import { loadEnvironment } from "../../shared/environment.js";
-import { serviceUnavailableError } from "../../shared/errors.js";
+import { serviceUnavailableError, validationError, type AppError } from "../../shared/errors.js";
 import type {
   BankAccountResolution,
   BusinessCustomerInput,
   BusinessDocument,
-  BusinessDocumentKind,
   BusinessDocumentSubmissionResult,
+  BusinessPersonInput,
   KybAddress,
+  KybIdType,
   KybRegistrationType,
+  RequiredBusinessDocument,
   CustomerValidationResult,
   DedicatedAccountResult,
   PaymentProviderGateway,
@@ -15,12 +17,28 @@ import type {
   TransferResult,
 } from "../payment-provider.js";
 
+interface AnchorIncludedItem {
+  id: string;
+  type: string;
+  attributes: {
+    accountNumber?: string;
+    accountName?: string;
+    bank?: { id?: string; name?: string; nipCode?: string };
+    status?: string;
+    isDefault?: boolean;
+    permanent?: boolean;
+    currency?: string;
+    [key: string]: unknown;
+  };
+}
+
 interface AnchorJsonApiDocument<TAttributes> {
   data: {
     id: string;
     type: string;
     attributes: TAttributes;
   };
+  included?: AnchorIncludedItem[];
 }
 
 interface AnchorJsonApiList<TAttributes> {
@@ -31,8 +49,14 @@ interface AnchorDocumentAttributes {
   documentType?: string;
   type?: string;
   description?: string;
+  /** FILE or TEXT. */
+  format?: string;
   submitted?: boolean;
   verified?: boolean;
+}
+
+interface AnchorBusinessCustomerAttributes {
+  officers?: { officerId?: string }[];
 }
 
 interface AnchorCustomerAttributes {
@@ -84,24 +108,22 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
     return { apiKey: environment.ANCHOR_API_KEY, baseUrl: environment.ANCHOR_BASE_URL };
   }
 
-  private async request<T>(method: "GET" | "POST", path: string, body?: Record<string, unknown>): Promise<AnchorJsonApiDocument<T>> {
+  private async request<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: Record<string, unknown>): Promise<AnchorJsonApiDocument<T>> {
     const { apiKey, baseUrl } = this.config();
     const response = await fetch(`${baseUrl}${path}`, {
       method,
       headers: { "x-anchor-key": apiKey, accept: "application/json", "content-type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Anchor API error (${response.status}): ${errorBody}`);
-    }
-    return (await response.json()) as AnchorJsonApiDocument<T>;
+    if (!response.ok) throw await anchorError(method, path, response);
+    const text = await response.text();
+    return (text ? JSON.parse(text) : { data: {} }) as AnchorJsonApiDocument<T>;
   }
 
   private async requestList<T>(method: "GET", path: string): Promise<AnchorJsonApiList<T>> {
     const { apiKey, baseUrl } = this.config();
     const response = await fetch(`${baseUrl}${path}`, { method, headers: { "x-anchor-key": apiKey, accept: "application/json" } });
-    if (!response.ok) throw new Error(`Anchor API error (${response.status}): ${await response.text()}`);
+    if (!response.ok) throw await anchorError(method, path, response);
     const body = (await response.json()) as { data?: AnchorJsonApiList<T>["data"] };
     return { data: Array.isArray(body.data) ? body.data : [] };
   }
@@ -110,7 +132,7 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
     const { apiKey, baseUrl } = this.config();
     // No content-type header: fetch sets the multipart boundary itself.
     const response = await fetch(`${baseUrl}${path}`, { method: "POST", headers: { "x-anchor-key": apiKey, accept: "application/json" }, body: form });
-    if (!response.ok) throw new Error(`Anchor API error (${response.status}): ${await response.text()}`);
+    if (!response.ok) throw await anchorError("POST", path, response);
   }
 
   async createCustomer(input: { email: string; firstName: string; lastName: string; phone: string }): Promise<{ customerCode: string }> {
@@ -139,9 +161,9 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
             businessName: input.businessName,
             // Anchor's example sends a BVN here without defining it; for the
             // entities we onboard it is the primary director's BVN.
-            businessBvn: primaryDirector(input).bvn,
+            businessBvn: primaryPerson(input).bvn,
             registrationType: ANCHOR_REGISTRATION_TYPE[input.registrationType],
-            industry: input.industry,
+            industry: toAnchorIndustry(input.industry),
             country: input.address.country,
             dateOfRegistration: input.dateOfRegistration,
             description: input.description ?? undefined,
@@ -150,23 +172,51 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
           contact: {
             email: { general: input.email },
             phoneNumber: toLocalPhone(input.phone),
-            address: { main: toAnchorAddress(input.address), registered: toAnchorAddress(input.address) },
+            address: { main: toAnchorAddress(input.address), registered: toAnchorAddress(input.registeredAddress) },
           },
-          officers: input.directors.map((director) => ({
-            role: "DIRECTOR",
-            fullName: { firstName: director.firstName, lastName: director.lastName, middleName: director.middleName ?? undefined },
-            nationality: director.nationality,
-            address: toAnchorAddress(director.address),
-            dateOfBirth: director.dateOfBirth,
-            email: director.email,
-            phoneNumber: toLocalPhone(director.phone),
-            bvn: director.bvn,
-            title: "Director",
-          })),
+          officers: input.people.flatMap(toAnchorOfficers),
         },
       },
     });
     return { customerCode: document.data.id };
+  }
+
+  /**
+   * https://docs.getanchor.co/docs/manage-business-customers — the business
+   * details and addresses are patched in place; officers are replaced by
+   * adding the current ones before removing the old (a customer can't be
+   * left with none).
+   */
+  async updateBusinessCustomer(customerCode: string, input: BusinessCustomerInput): Promise<void> {
+    await this.request("PATCH", `/businesses/${customerCode}`, {
+      data: {
+        type: "BusinessCustomerV2",
+        attributes: {
+          businessName: input.businessName,
+          registrationType: ANCHOR_REGISTRATION_TYPE[input.registrationType],
+          dateOfRegistration: input.dateOfRegistration,
+          address: { main: toAnchorAddress(input.address), registered: toAnchorAddress(input.registeredAddress) },
+        },
+      },
+    });
+    const existing = await this.request<AnchorBusinessCustomerAttributes>("GET", `/customers/${customerCode}`);
+    const staleOfficerIds = (existing.data.attributes.officers ?? []).map((officer) => officer.officerId).filter((id): id is string => !!id);
+    for (const officer of input.people.flatMap(toAnchorOfficers)) {
+      await this.request("POST", `/businesses/${customerCode}/officers`, { data: { type: "BusinessOfficer", attributes: officer } });
+    }
+    for (const officerId of staleOfficerIds) {
+      await this.request("DELETE", `/businesses/${customerCode}/officers/${officerId}`);
+    }
+  }
+
+  /** https://docs.getanchor.co/docs/business-customer-creation#required-business-documents — depends on registration type and date. */
+  async requiredBusinessDocuments(input: { registrationType: KybRegistrationType; dateOfRegistration: string }): Promise<RequiredBusinessDocument[]> {
+    const query = new URLSearchParams({ registrationType: ANCHOR_REGISTRATION_TYPE[input.registrationType], registrationDate: input.dateOfRegistration });
+    const list = await this.requestList<AnchorDocumentAttributes>("GET", `/documents?${query.toString()}`);
+    return list.data.map((document) => {
+      const type = document.attributes.type ?? document.attributes.documentType ?? "";
+      return { type, description: document.attributes.description ?? type, input: ANCHOR_TEXT_DOCUMENTS.has(type) ? "text" : "file" };
+    });
   }
 
   /** https://docs.getanchor.co/docs/business-customer-kyb — the decision arrives as customer.identification.* webhooks. */
@@ -187,8 +237,7 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
     for (const request of requested.data) {
       const documentType = request.attributes.documentType ?? request.attributes.type ?? "";
       if (request.attributes.submitted || request.attributes.verified) continue;
-      const kind = anchorDocumentKind(documentType);
-      const document = kind ? input.documents.find((candidate) => candidate.kind === kind) : undefined;
+      const document = input.documents.find((candidate) => candidate.documentType === documentType);
       if (!document || (!document.file && !document.text)) {
         missing.push(documentType);
         continue;
@@ -235,26 +284,96 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
         relationships: { customer: { data: { id: input.customerCode, type: isCorporate ? "BusinessCustomer" : "IndividualCustomer" } } },
       },
     });
-    return toResult(document.data.id, document.data.attributes);
+    let result = toResult(document.data.id, document.data.attributes, document.included);
+    if (result.status === "active" && !result.accountNumber) {
+      result = await this.fetchActiveAccountNumber(document.data.id, result);
+    }
+    return result;
   }
 
   async requeryDedicatedAccount(input: { providerAccountId: string | null }): Promise<DedicatedAccountResult> {
     if (!input.providerAccountId) throw new Error("Cannot requery an Anchor deposit account without its provider id.");
-    const document = await this.request<AnchorAccountAttributes>("GET", `/accounts/${input.providerAccountId}`);
-    return toResult(document.data.id, document.data.attributes);
+    const document = await this.request<AnchorAccountAttributes>("GET", `/accounts/${input.providerAccountId}?include=AccountNumber`);
+    let result = toResult(document.data.id, document.data.attributes, document.included);
+    if (result.status === "active" && !result.accountNumber) {
+      result = await this.fetchActiveAccountNumber(input.providerAccountId, result);
+    }
+    return result;
+  }
+
+  private async fetchActiveAccountNumber(accountId: string, current: DedicatedAccountResult): Promise<DedicatedAccountResult> {
+    try {
+      const accountDoc = await this.request<AnchorAccountAttributes>("GET", `/accounts/${accountId}?include=AccountNumber`);
+      const fromDoc = toResult(accountDoc.data.id, accountDoc.data.attributes, accountDoc.included);
+      if (fromDoc.accountNumber) return fromDoc;
+
+      const numbersList = await this.requestList<{
+        accountNumber?: string;
+        accountName?: string;
+        bank?: { id?: string; name?: string; nipCode?: string };
+        status?: string;
+      }>("GET", `/account-numbers?AccountId=${accountId}`);
+      const activeNumber =
+        numbersList.data.find((entry) => entry.attributes.accountNumber && (!entry.attributes.status || entry.attributes.status === "ACTIVE")) ??
+        numbersList.data[0];
+      if (activeNumber?.attributes.accountNumber && !activeNumber.attributes.accountNumber.includes("*")) {
+        return {
+          ...current,
+          accountNumber: activeNumber.attributes.accountNumber,
+          accountName: activeNumber.attributes.accountName ?? current.accountName,
+          bankName: activeNumber.attributes.bank?.name ?? current.bankName,
+          bankSlug: activeNumber.attributes.bank?.nipCode ?? current.bankSlug,
+        };
+      }
+    } catch (error) {
+      console.warn(`Anchor account number resolution for ${accountId} deferred:`, error);
+    }
+    return current;
+  }
+
+  private normalizeBankCode(bankCode: string): string {
+    const CBN_TO_NIP: Record<string, string> = {
+      "044": "000014", // Access Bank
+      "023": "000009", // Citibank Nigeria
+      "050": "000010", // Ecobank Nigeria
+      "070": "000007", // Fidelity Bank
+      "011": "000016", // First Bank of Nigeria
+      "214": "000003", // First City Monument Bank
+      "058": "000013", // Guaranty Trust Bank
+      "030": "000020", // Heritage Bank
+      "082": "000002", // Keystone Bank
+      "50211": "090267", // Kuda Bank
+      "50515": "090405", // Moniepoint MFB
+      "999992": "100004", // OPay
+      "999991": "100033", // PalmPay
+      "076": "000008", // Polaris Bank
+      "101": "000023", // Providus Bank
+      "221": "000012", // Stanbic IBTC Bank
+      "068": "000021", // Standard Chartered Bank
+      "232": "000001", // Sterling Bank
+      "100": "000022", // Suntrust Bank
+      "032": "000018", // Union Bank of Nigeria
+      "033": "000004", // United Bank for Africa
+      "215": "000011", // Unity Bank
+      "035": "000017", // Wema Bank
+      "057": "000015", // Zenith Bank
+    };
+    return CBN_TO_NIP[bankCode] ?? bankCode;
   }
 
   async resolveBankAccount(accountNumber: string, bankCode: string): Promise<BankAccountResolution> {
-    const document = await this.request<AnchorVerifyAccountAttributes>("GET", `/payments/verify-account/${bankCode}/${accountNumber}`);
+    const resolvedBankCode = this.normalizeBankCode(bankCode);
+    const document = await this.request<AnchorVerifyAccountAttributes>("GET", `/payments/verify-account/${resolvedBankCode}/${accountNumber}`);
     if (!document.data.attributes.accountName) throw new Error("Anchor could not resolve this account.");
     return { accountName: document.data.attributes.accountName };
   }
 
   async createTransferRecipient(input: { name: string; accountNumber: string; bankCode: string }): Promise<TransferRecipientResult> {
+    const resolvedBankCode = this.normalizeBankCode(input.bankCode);
     const document = await this.request<AnchorCounterPartyAttributes>("POST", "/counterparties", {
       data: {
         type: "CounterParty",
-        attributes: { bankCode: input.bankCode, accountName: input.name, accountNumber: input.accountNumber, verifyName: true },
+        attributes: { bankCode: resolvedBankCode, accountName: input.name, accountNumber: input.accountNumber, verifyName: true },
       },
     });
     return { recipientCode: document.data.id };
@@ -282,16 +401,73 @@ export class AnchorPaymentProviderGateway implements PaymentProviderGateway {
   }
 }
 
+/**
+ * Turns an Anchor error response into something a merchant can act on.
+ * A 400 about what they entered (an invalid BVN, a bad date) shows Anchor's
+ * own message; anything that is our side's problem — credentials, our
+ * organisation's fee balance, Anchor being down — reads as temporarily
+ * unavailable, with the detail logged for us.
+ */
+async function anchorError(method: string, path: string, response: Response): Promise<AppError> {
+  const text = await response.text();
+  let detail = text;
+  try {
+    const parsed = JSON.parse(text) as { errors?: { detail?: string; title?: string }[] };
+    detail = parsed.errors?.map((error) => error.detail ?? error.title).filter(Boolean).join("; ") || text;
+  } catch {
+    // not JSON; keep the raw text
+  }
+  console.warn(`Anchor API error (${response.status}) on ${method} ${path}: ${detail}`);
+  const ours = response.status === 401 || response.status === 403 || response.status >= 500 || /insufficient balance/i.test(detail);
+  if (ours || (response.status !== 400 && response.status !== 422)) return serviceUnavailableError("Banking is temporarily unavailable. Please try again shortly.");
+  return validationError(`Our banking partner couldn't accept this: ${detail}`, { provider: "anchor" });
+}
+
 function toTransferStatus(status: AnchorTransferAttributes["status"]): TransferResult["status"] {
-  if (status === "COMPLETED") return "success";
+  if (status === "COMPLETED" || (status as string) === "SUCCESSFUL") return "success";
   if (status === "FAILED" || status === "REVERSED") return "failed";
   return "processing";
 }
 
-function primaryDirector(input: BusinessCustomerInput) {
-  const director = input.directors.find((candidate) => candidate.isPrimary);
-  if (!director) throw new Error("A business customer needs a primary director");
-  return director;
+function primaryPerson(input: BusinessCustomerInput): BusinessPersonInput {
+  const person = input.people.find((candidate) => candidate.isPrimary);
+  if (!person) throw new Error("A business customer needs a primary signatory");
+  return person;
+}
+
+/** Anchor's document types whose value is text (sent as textData), not a file. */
+const ANCHOR_TEXT_DOCUMENTS = new Set(["RC_NUMBER", "BN_NUMBER", "CAC_IT_NUMBER", "TIN"]);
+
+const ANCHOR_ID_TYPE: Record<KybIdType, string> = {
+  nin: "NIN_SLIP",
+  passport: "PASSPORT",
+  drivers_license: "DRIVERS_LICENSE",
+  voters_card: "VOTERS_CARD",
+};
+
+/**
+ * Anchor gives each officer one role, so someone who is both a director and
+ * a shareholder is sent as two officers (confirmed against the sandbox: it
+ * accepts the pair and treats the OWNER entry as satisfying the ownership
+ * requirement).
+ */
+function toAnchorOfficers(person: BusinessPersonInput) {
+  const base = {
+    fullName: { firstName: person.firstName, lastName: person.lastName, middleName: person.middleName ?? undefined },
+    nationality: person.nationality,
+    address: toAnchorAddress(person.address),
+    dateOfBirth: person.dateOfBirth,
+    email: person.email,
+    phoneNumber: toLocalPhone(person.phone),
+    bvn: person.bvn,
+    title: person.title,
+    identificationType: ANCHOR_ID_TYPE[person.idType],
+    idDocumentNumber: person.idNumber,
+  };
+  const officers = [];
+  if (person.role === "director" || person.role === "director_owner") officers.push({ ...base, role: "DIRECTOR", percentageOwned: 0 });
+  if (person.role === "owner" || person.role === "director_owner") officers.push({ ...base, role: "OWNER", percentageOwned: person.ownershipPercent });
+  return officers;
 }
 
 /**
@@ -305,16 +481,31 @@ const ANCHOR_REGISTRATION_TYPE: Record<KybRegistrationType, string> = {
   ngo_cooperative: "Incorporated_Trustees",
 };
 
-/** Anchor document types from its KYB guide (FORM_CAC_3, RC_NUMBER, CERTIFICATE_OF_INCORPORATION, PROOF_OF_ADDRESS) plus close variants. */
-function anchorDocumentKind(documentType: string): BusinessDocumentKind | null {
-  const type = documentType.toUpperCase();
-  if (type.includes("CERTIFICATE_OF_INCORPORATION") || type.includes("CERTIFICATE_OF_REGISTRATION")) return "certificate_of_incorporation";
-  if (type.includes("PROOF_OF_ADDRESS") || type.includes("UTILITY")) return "proof_of_address";
-  if (type === "RC_NUMBER" || type === "BN_NUMBER" || type.includes("REGISTRATION_NUMBER")) return "registration_number";
-  if (type === "TIN" || type.includes("TAX_IDENTIFICATION")) return "tax_identification_number";
-  if (type.includes("STATUS_REPORT") || type.startsWith("FORM_CAC") || type.includes("MEMART")) return "status_report";
-  if (type.includes("DIRECTOR") || type.includes("IDENTITY") || type.includes("ID_CARD") || type.includes("PASSPORT")) return "director_id";
-  return null;
+
+/**
+ * Anchor's industry is a fixed list (the "Industry" tab under Registration
+ * Types and Industry in https://docs.getanchor.co/docs/business-customer-creation).
+ * Our KYB form offers broader categories, mapped here; an Anchor value is
+ * passed through as-is.
+ */
+const ANCHOR_INDUSTRY: Record<string, string> = {
+  "Pharmacy & Healthcare": "Health_Pharmacies",
+  "Retail & Supermarket": "Retail",
+  "Food & Beverage / Restaurant": "Hospitality_Restaurants",
+  "Fashion & Apparel": "Commerce_PhysicalGoods",
+  "Electronics & Gadgets": "Commerce_PhysicalGoods",
+  "Beauty & Personal Care": "Commerce_PhysicalServices",
+  "Automotive & Transportation": "Commerce_Automobiles",
+  "Information Technology": "Commerce_DigitalServices",
+  "Consulting & Professional Services": "Commerce_ProfessionalServices",
+  "Education & Training": "Education_VocationalTraining",
+  "Real Estate & Construction": "Commerce_RealEstate",
+  "Agriculture & Farming": "Agriculture_AgriculturalServices",
+  Other: "OtherProfessionalServices",
+};
+
+function toAnchorIndustry(category: string): string {
+  return ANCHOR_INDUSTRY[category.trim()] ?? category.trim();
 }
 
 function toAnchorState(state: string): string {
@@ -343,15 +534,27 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function toResult(id: string, attributes: AnchorAccountAttributes): DedicatedAccountResult {
-  const accountNumber = attributes.virtualNuban?.accountNumber ?? attributes.accountNumber ?? null;
-  const status: DedicatedAccountResult["status"] = attributes.status === "ACTIVE" ? "active" : attributes.status === "CLOSED" || attributes.status === "REJECTED" ? "failed" : "pending";
+function toResult(id: string, attributes: AnchorAccountAttributes, included?: AnchorIncludedItem[]): DedicatedAccountResult {
+  const accountNumItem = included?.find((item) => item.type === "AccountNumber" && item.attributes?.accountNumber);
+
+  let accountNumber = attributes.virtualNuban?.accountNumber ?? accountNumItem?.attributes?.accountNumber ?? attributes.accountNumber ?? null;
+  if (accountNumber && accountNumber.includes("*")) {
+    accountNumber = accountNumItem?.attributes?.accountNumber ?? null;
+  }
+
+  const bankName = attributes.virtualNuban?.bankName ?? accountNumItem?.attributes?.bank?.name ?? attributes.bank?.name ?? null;
+  const bankSlug = accountNumItem?.attributes?.bank?.nipCode ?? attributes.bank?.nipCode ?? null;
+  const accountName = accountNumItem?.attributes?.accountName ?? attributes.accountName ?? null;
+
+  const status: DedicatedAccountResult["status"] =
+    attributes.status === "ACTIVE" ? "active" : attributes.status === "CLOSED" || attributes.status === "REJECTED" ? "failed" : "pending";
+
   return {
     providerAccountId: id,
     accountNumber,
-    accountName: attributes.accountName ?? null,
-    bankName: attributes.virtualNuban?.bankName ?? attributes.bank?.name ?? null,
-    bankSlug: attributes.bank?.nipCode ?? null,
+    accountName,
+    bankName,
+    bankSlug,
     assignmentReference: null,
     status,
   };

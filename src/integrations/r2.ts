@@ -2,6 +2,7 @@ import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectComm
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { loadEnvironment } from "../shared/environment.js";
 import { serviceUnavailableError } from "../shared/errors.js";
+import { LocalObjectStorage } from "./local-object-storage.js";
 
 const UPLOAD_URL_TTL_SECONDS = 600;
 const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 300;
@@ -97,4 +98,30 @@ function isNotFound(error: unknown): boolean {
   return withMetadata.name === "NotFound" || withMetadata.$metadata?.httpStatusCode === 404;
 }
 
-export const objectStorage: ObjectStorage = new R2ObjectStorage();
+/** Picks R2, or local disk when LOCAL_OBJECT_STORAGE is on (development only), on first use. */
+class ConfiguredObjectStorage implements ObjectStorage {
+  private chosen: ObjectStorage | undefined;
+
+  private resolve(): ObjectStorage {
+    this.chosen ??= loadEnvironment().LOCAL_OBJECT_STORAGE ? new LocalObjectStorage() : new R2ObjectStorage();
+    return this.chosen;
+  }
+
+  async createPresignedUploadUrl(key: string, contentType: string, contentLength: number): Promise<PresignedUpload> {
+    return await this.resolve().createPresignedUploadUrl(key, contentType, contentLength);
+  }
+  async createPresignedDownloadUrl(key: string, expiresInSeconds?: number): Promise<string> {
+    return await this.resolve().createPresignedDownloadUrl(key, expiresInSeconds);
+  }
+  async headObject(key: string): Promise<ObjectMetadata> {
+    return await this.resolve().headObject(key);
+  }
+  async deleteObject(key: string): Promise<void> {
+    return await this.resolve().deleteObject(key);
+  }
+  async getObjectBytes(key: string): Promise<Uint8Array> {
+    return await this.resolve().getObjectBytes(key);
+  }
+}
+
+export const objectStorage: ObjectStorage = new ConfiguredObjectStorage();

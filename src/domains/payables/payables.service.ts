@@ -3,7 +3,20 @@
  * payment allocation domain belong here.
  */
 import { randomUUID } from "node:crypto";
-import type { Database } from "../../db/database.types.js"; import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import type { ApprovalsService } from "../approvals/approvals.service.js"; import * as authorizationRepository from "../authorization/authorization.repository.js"; import * as authorization from "../authorization/authorization.service.js"; import { notFoundError, validationError } from "../../shared/errors.js"; import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js"; import type { JournalLineInput } from "../accounting/accounting.types.js"; import { postJournalEntry, resolveExpenseAccountCode } from "../accounting/accounting.service.js"; import * as repo from "./payables.repository.js"; import type { AllocatePaymentInput, AllocatePaymentResult, BillLineInput, CreateBillInput, ListBillsFilter, PayablesOperation, UpdateBillInput } from "./payables.types.js";
+import type { Database } from "../../db/database.types.js";
+import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
+import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
+import { withIdentity } from "../../db/principal.js";
+import type { ApprovalsService } from "../approvals/approvals.service.js";
+import type { BankingService } from "../banking/banking.service.js";
+import * as authorizationRepository from "../authorization/authorization.repository.js";
+import * as authorization from "../authorization/authorization.service.js";
+import { AppError, notFoundError, validationError } from "../../shared/errors.js";
+import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js";
+import type { JournalLineInput } from "../accounting/accounting.types.js";
+import { postJournalEntry, resolveExpenseAccountCode, seedDefaultChartOfAccounts } from "../accounting/accounting.service.js";
+import * as repo from "./payables.repository.js";
+import type { AllocatePaymentInput, AllocatePaymentResult, BillLineInput, CreateBillInput, ListBillsFilter, PayablesOperation, PayBillInput, UpdateBillInput } from "./payables.types.js";
 
 /**
  * Bills go straight from "draft" (createBill's only reachable status - see
@@ -19,6 +32,7 @@ import type { Database } from "../../db/database.types.js"; import { withDatabas
  * construction regardless of whether the caller's totals reconcile.
  */
 async function postBillCreatedJournal(context: DatabaseContext, businessId: string, userId: string, billId: string, billType: string, assetCode: string, lines: readonly BillLineInput[]): Promise<void> {
+  await seedDefaultChartOfAccounts(context, businessId);
   const expenseTotals = new Map<string, bigint>();
   let taxTotal = 0n;
   for (const line of lines) {
@@ -53,6 +67,7 @@ export class PayablesService {
   constructor(
     private readonly database: Database,
     private readonly approvals: ApprovalsService,
+    private readonly banking: BankingService,
   ) {}
 
   async listBills(o: PayablesOperation, filters: ListBillsFilter) {
@@ -76,7 +91,8 @@ export class PayablesService {
       if (!bill) throw notFoundError("Bill not found");
       const lines = await repo.listBillLines(c, o.businessId, billId);
       const allocations = await repo.listBillAllocations(c, o.businessId, billId);
-      return { bill, lines, allocations };
+      const transfers = await repo.listBillTransfers(c, o.businessId, billId);
+      return { bill, lines, allocations, transfers };
     });
   }
 
@@ -113,6 +129,51 @@ export class PayablesService {
       const deleted = await repo.deleteBill(c, o.businessId, billId);
       if (!deleted) throw notFoundError("Bill not found");
       return { success: true };
+    });
+  }
+
+  /**
+   * "Confirm payment": creates a transfer from the business wallet to the
+   * vendor's bank account, tied to the bill. Nothing moves yet — the amount
+   * is held in the wallet and the transfer always waits for approval (the
+   * Bills workflow, or the owners). Once approved it goes to the provider,
+   * and the bill is only marked paid when the transfer succeeds — see
+   * app.settle_bill_withdrawal. A failed or rejected transfer leaves the
+   * bill owing and returns the money to the wallet.
+   */
+  async payBill(o: PayablesOperation, billId: string, input: PayBillInput) {
+    return this.run(o, async (c) => {
+      await authorization.requirePermission(c, o.businessId, "payables.manage");
+
+      const bill = await repo.findBillForTransfer(c, o.businessId, billId);
+      if (!bill) throw notFoundError("Bill not found");
+      if (bill.status !== "approved" && bill.status !== "partially_paid") throw validationError("Only an approved bill that still has something owing can be paid");
+      if (bill.assetCode !== "NGN") throw validationError("Only naira bills can be paid from the wallet");
+      if (!bill.bankCode || !bill.accountNumber || !bill.accountName) {
+        throw validationError(`Add bank details for ${bill.supplierName ?? "this vendor"} before paying from your wallet`);
+      }
+
+      const payable = BigInt(bill.totalMinor) - BigInt(bill.amountPaidMinor) - BigInt(bill.inFlightMinor);
+      if (payable <= 0n) throw validationError("Everything owed on this bill is already paid or on its way");
+      const amount = input.amountMinor === undefined ? payable : BigInt(input.amountMinor);
+      if (amount > payable) throw validationError("That's more than is left to pay on this bill");
+
+      const withdrawal = await this.banking.requestWithdrawalIn(
+        c,
+        o,
+        { amountMinor: Number(amount), bankCode: bill.bankCode, accountNumber: bill.accountNumber, accountName: bill.accountName, idempotencyKey: input.idempotencyKey },
+        { billId: bill.id, billNumber: bill.billNumber, supplierName: bill.supplierName },
+      );
+      return {
+        transfer: {
+          id: withdrawal.id,
+          amountMinor: String(withdrawal.amountMinor),
+          status: withdrawal.status,
+          providerReference: withdrawal.providerReference,
+          failureReason: withdrawal.failureReason,
+        },
+        gated: withdrawal.status === "awaitingApproval",
+      };
     });
   }
 
@@ -181,5 +242,12 @@ export class PayablesService {
     });
   }
 
-  private run<T>(o: PayablesOperation, work: Parameters<typeof withDatabaseContext<T>>[2]): Promise<T> { return withDatabaseContext(this.database, withIdentity(o.requestId, o.userId, o.businessId), work); }
+  private async run<T>(o: PayablesOperation, work: Parameters<typeof withDatabaseContext<T>>[2]): Promise<T> {
+    try {
+      return await withDatabaseContext(this.database, withIdentity(o.requestId, o.userId, o.businessId), work);
+    } catch (error) {
+      if (error instanceof AppError || error instanceof DatabaseError) throw error;
+      throw normalizeDatabaseError(error);
+    }
+  }
 }

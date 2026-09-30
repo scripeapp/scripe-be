@@ -45,14 +45,29 @@ export interface BusinessCustomerInput {
   readonly industry: string;
   readonly description?: string | null;
   readonly website?: string | null;
+  /** The business's own contact email and phone. */
   readonly email: string;
   readonly phone: string;
+  /** Where the business operates. */
   readonly address: KybAddress;
-  /** Every director is sent to the provider as an officer; exactly one is the primary signatory. */
-  readonly directors: readonly BusinessDirectorInput[];
+  /** The address on its CAC registration. */
+  readonly registeredAddress: KybAddress;
+  /** Every director and every shareholder owning 5% or more; exactly one director is the primary signatory. */
+  readonly people: readonly BusinessPersonInput[];
 }
 
-export interface BusinessDirectorInput {
+export type KybPersonRole = "director" | "owner" | "director_owner";
+export type KybIdType = "nin" | "passport" | "drivers_license" | "voters_card";
+
+/** Anchor's officer title list; every person needs one. */
+export const KYB_OFFICER_TITLES = ["CEO", "COO", "CFO", "President", "CIO", "VP", "Treasurer", "Controller", "Manager", "Partner", "Member"] as const;
+export type KybOfficerTitle = (typeof KYB_OFFICER_TITLES)[number];
+
+export interface BusinessPersonInput {
+  readonly role: KybPersonRole;
+  /** 0 for a director who holds no shares. */
+  readonly ownershipPercent: number;
+  readonly title: KybOfficerTitle;
   readonly isPrimary: boolean;
   readonly firstName: string;
   readonly lastName: string;
@@ -64,19 +79,23 @@ export interface BusinessDirectorInput {
   readonly dateOfBirth: string;
   /** ISO 3166-1 alpha-2. */
   readonly nationality: string;
+  /** Home address. */
   readonly address: KybAddress;
+  readonly idType: KybIdType;
+  readonly idNumber: string;
 }
 
-export type BusinessDocumentKind =
-  | "certificate_of_incorporation"
-  | "status_report"
-  | "proof_of_address"
-  | "director_id"
-  | "registration_number"
-  | "tax_identification_number";
+/** A document a provider requires for a business, by its own type code (e.g. CERTIFICATE_OF_INCORPORATION, RC_NUMBER). */
+export interface RequiredBusinessDocument {
+  readonly type: string;
+  readonly description: string;
+  /** Text documents (registration number, TIN) are filled from the form's fields, not uploaded. */
+  readonly input: "file" | "text";
+}
 
 export interface BusinessDocument {
-  readonly kind: BusinessDocumentKind;
+  /** The provider's document type code. */
+  readonly documentType: string;
   /** File-backed documents — loaded lazily so only documents the provider actually asks for are downloaded. */
   readonly file?: { readonly mimeType: string; readonly fileName: string; load(): Promise<Uint8Array> };
   /** Text-backed documents (RC/BN number, TIN). */
@@ -123,6 +142,14 @@ export interface PaymentProviderGateway {
   readonly verifiesBusinesses: boolean;
   createCustomer(input: { email: string; firstName: string; lastName: string; phone: string }): Promise<{ customerCode: string }>;
   createBusinessCustomer(input: BusinessCustomerInput): Promise<{ customerCode: string }>;
+  /**
+   * Brings an existing, not-yet-verified business customer in line with a
+   * corrected submission (details, addresses, officers) — the provider
+   * refuses a second customer with the same name.
+   */
+  updateBusinessCustomer(customerCode: string, input: BusinessCustomerInput): Promise<void>;
+  /** The documents the provider needs for this registration type and date. */
+  requiredBusinessDocuments(input: { registrationType: KybRegistrationType; dateOfRegistration: string }): Promise<RequiredBusinessDocument[]>;
   /** Starts the provider's KYB for a business customer. Never synchronously "verified" — the decision arrives by webhook or review. */
   submitBusinessVerification(input: { customerCode: string }): Promise<CustomerValidationResult>;
   /** Uploads whichever documents the provider has requested for this business customer. */
@@ -199,6 +226,14 @@ class UnconfiguredPaymentProviderGateway implements PaymentProviderGateway {
     this.unavailable();
   }
 
+  updateBusinessCustomer(): Promise<void> {
+    this.unavailable();
+  }
+
+  requiredBusinessDocuments(): Promise<RequiredBusinessDocument[]> {
+    this.unavailable();
+  }
+
   createBusinessCustomer(): Promise<{ customerCode: string }> {
     this.unavailable();
   }
@@ -257,6 +292,14 @@ class SelectedPaymentProviderGateway implements PaymentProviderGateway {
 
   createBusinessCustomer(...args: Parameters<PaymentProviderGateway["createBusinessCustomer"]>): ReturnType<PaymentProviderGateway["createBusinessCustomer"]> {
     return this.resolve().createBusinessCustomer(...args);
+  }
+
+  updateBusinessCustomer(...args: Parameters<PaymentProviderGateway["updateBusinessCustomer"]>): ReturnType<PaymentProviderGateway["updateBusinessCustomer"]> {
+    return this.resolve().updateBusinessCustomer(...args);
+  }
+
+  requiredBusinessDocuments(...args: Parameters<PaymentProviderGateway["requiredBusinessDocuments"]>): ReturnType<PaymentProviderGateway["requiredBusinessDocuments"]> {
+    return this.resolve().requiredBusinessDocuments(...args);
   }
 
   submitBusinessVerification(...args: Parameters<PaymentProviderGateway["submitBusinessVerification"]>): ReturnType<PaymentProviderGateway["submitBusinessVerification"]> {

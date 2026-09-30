@@ -131,23 +131,19 @@ export async function recordWalletDeposit(
   return result.rows[0] ?? { found: false, businessId: null, email: null, accountNumber: null, bankName: null, businessName: null };
 }
 
-export interface KybDocumentsForCustomer {
+export interface KybDocumentsForCustomerRow {
   readonly businessId: string;
   readonly registrationNumber: string | null;
   readonly taxIdentificationNumber: string | null;
-  readonly certificateOfIncorporationKey: string | null;
-  readonly certificateOfIncorporationMimeType: string | null;
-  readonly statusReportKey: string | null;
-  readonly statusReportMimeType: string | null;
-  readonly proofOfAddressKey: string | null;
-  readonly proofOfAddressMimeType: string | null;
-  readonly directorIdDocumentKey: string | null;
-  readonly directorIdDocumentMimeType: string | null;
+  readonly documentType: string | null;
+  readonly objectKey: string | null;
+  readonly mimeType: string | null;
 }
 
-export async function findKybDocumentsForCustomer(context: DatabaseContext, providerCustomerCode: string): Promise<KybDocumentsForCustomer | undefined> {
-  const result = await sql<KybDocumentsForCustomer>`
+export async function findKybDocumentsForCustomer(context: DatabaseContext, providerCustomerCode: string): Promise<readonly KybDocumentsForCustomerRow[]> {
+  const result = await sql<KybDocumentsForCustomerRow>`
     select * from app.banking_kyb_documents_for_customer(${providerCustomerCode})
   `.execute(context.transaction);
-  return result.rows[0];
+  return result.rows;
 }
+
