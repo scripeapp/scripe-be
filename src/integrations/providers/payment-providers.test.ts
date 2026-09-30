@@ -16,6 +16,16 @@ function anchorGateway(): PaymentProviderGateway {
   return new AnchorPaymentProviderGateway();
 }
 
+function jsonResponse(data: unknown, status = 200) {
+  const jsonStr = JSON.stringify(data);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(data),
+    text: () => Promise.resolve(jsonStr),
+  };
+}
+
 const MINIMAL_ENV = {
   DATABASE_URL: "postgres://scripe_app@localhost:5432/scripe_test",
   BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
@@ -184,10 +194,7 @@ describe("AnchorPaymentProviderGateway", () => {
   });
 
   it("creates a customer with the x-anchor-key header and JSON:API body", async () => {
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: { id: "cust_123", type: "IndividualCustomer", attributes: {} } }),
-    });
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "cust_123", type: "IndividualCustomer", attributes: {} } }));
     global.fetch = fetchMock;
 
     const gateway = anchorGateway();
@@ -203,7 +210,7 @@ describe("AnchorPaymentProviderGateway", () => {
   });
 
   it("always reports pending status for BVN validation, since Anchor confirms it asynchronously", async () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "v1", type: "Verification", attributes: {} } }) });
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "v1", type: "Verification", attributes: {} } }));
     const gateway = anchorGateway();
     const result = await gateway.validateCustomerBvn({
       customerCode: "cust_123",
@@ -217,33 +224,34 @@ describe("AnchorPaymentProviderGateway", () => {
   });
 
   it("maps a 202-accepted account creation with no account number yet to pending", async () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "acc_1", type: "DepositAccount", attributes: { status: "PENDING" } } }) });
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "acc_1", type: "DepositAccount", attributes: { status: "PENDING" } } }, 202));
     const gateway = anchorGateway();
     const result = await gateway.createDedicatedAccount({ customerCode: "cust_123", email: "a@b.com", firstName: "A", lastName: "B", phone: "+2348000000000" });
     expect(result).toMatchObject({ providerAccountId: "acc_1", accountNumber: null, status: "pending" });
   });
 
   it("maps an active requery with a virtual NUBAN to an active result", async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          data: { id: "acc_1", type: "DepositAccount", attributes: { status: "ACTIVE", virtualNuban: { accountNumber: "1234567890", bankName: "Providus" } } },
-        }),
-    });
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse({
+        data: { id: "acc_1", type: "DepositAccount", attributes: { status: "ACTIVE", virtualNuban: { accountNumber: "1234567890", bankName: "Providus" } } },
+      }),
+    );
     const gateway = anchorGateway();
     const result = await gateway.requeryDedicatedAccount({ accountNumber: null, bankSlug: null, providerAccountId: "acc_1" });
     expect(result).toMatchObject({ accountNumber: "1234567890", bankName: "Providus", status: "active" });
   });
 
   it("throws on a non-ok HTTP response instead of silently succeeding", async () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 422, text: () => Promise.resolve('{"error":"invalid bvn"}') });
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ error: "invalid bvn" }, 422));
     const gateway = anchorGateway();
-    await expect(gateway.createCustomer({ email: "a@b.com", firstName: "A", lastName: "B", phone: "+2348000000000" })).rejects.toThrow(/Anchor API error/);
+    await expect(gateway.createCustomer({ email: "a@b.com", firstName: "A", lastName: "B", phone: "+2348000000000" })).rejects.toThrow(/couldn't accept this: .*invalid bvn/);
+    // Our side's problems (bad key, our fee balance) read as unavailable, not as the merchant's fault.
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ errors: [{ detail: "Insufficient balance" }] }, 400));
+    await expect(gateway.createCustomer({ email: "a@b.com", firstName: "A", lastName: "B", phone: "+2348000000000" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
   });
 
   it("resolves a bank account via the verify-account endpoint", async () => {
-    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "v1", type: "AccountVerification", attributes: { accountName: "Ada Lovelace" } } }) });
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "v1", type: "AccountVerification", attributes: { accountName: "Ada Lovelace" } } }));
     global.fetch = fetchMock;
 
     const gateway = anchorGateway();
@@ -251,11 +259,11 @@ describe("AnchorPaymentProviderGateway", () => {
 
     expect(result).toEqual({ accountName: "Ada Lovelace" });
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.sandbox.getanchor.co/api/v1/payments/verify-account/058/0123456789");
+    expect(url).toBe("https://api.sandbox.getanchor.co/api/v1/payments/verify-account/000013/0123456789");
   });
 
   it("creates a counterparty with verifyName enabled", async () => {
-    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "cp_1", type: "CounterParty", attributes: {} } }) });
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "cp_1", type: "CounterParty", attributes: {} } }));
     global.fetch = fetchMock;
 
     const gateway = anchorGateway();
@@ -264,7 +272,7 @@ describe("AnchorPaymentProviderGateway", () => {
     expect(result).toEqual({ recipientCode: "cp_1" });
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string) as { data: { attributes: { verifyName: boolean; bankCode: string } } };
-    expect(body.data.attributes).toMatchObject({ bankCode: "058", verifyName: true });
+    expect(body.data.attributes).toMatchObject({ bankCode: "000013", verifyName: true });
   });
 
   it("requires a source deposit account id to initiate a transfer", async () => {
@@ -273,10 +281,9 @@ describe("AnchorPaymentProviderGateway", () => {
   });
 
   it("initiates a NIP transfer with the correct relationships and maps COMPLETED to success", async () => {
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: { id: "tr_1", type: "NIPTransfer", attributes: { reference: "ref1", status: "COMPLETED" } } }),
-    });
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse({ data: { id: "tr_1", type: "NIPTransfer", attributes: { reference: "ref1", status: "COMPLETED" } } }),
+    );
     global.fetch = fetchMock;
 
     const gateway = anchorGateway();
@@ -290,17 +297,29 @@ describe("AnchorPaymentProviderGateway", () => {
   });
 
   it("finalizeTransfer re-checks status without needing an OTP, since Anchor has no OTP step", async () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "tr_1", type: "NIPTransfer", attributes: { reference: "ref1", status: "FAILED" } } }) });
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "tr_1", type: "NIPTransfer", attributes: { reference: "ref1", status: "FAILED" } } }));
     const gateway = anchorGateway();
     const result = await gateway.finalizeTransfer({ transferCode: "tr_1", otp: "" });
     expect(result).toEqual({ transferCode: "tr_1", status: "failed", reference: "ref1" });
   });
 
   it("creates a business customer with every director as an officer and the primary's BVN as businessBvn", async () => {
-    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "biz_1", type: "BusinessCustomer", attributes: {} } }) });
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "biz_1", type: "BusinessCustomer", attributes: {} } }));
     global.fetch = fetchMock;
     const address = { addressLine1: "1 Marina Road", city: "Lagos Island", state: "Lagos", postalCode: "101001", country: "NG" };
-    const director = { lastName: "Okafor", email: "a@example.com", phone: "+2348031234567", dateOfBirth: "1988-02-01", nationality: "NG", address };
+    const person = {
+      lastName: "Okafor",
+      email: "a@example.com",
+      phone: "+2348031234567",
+      dateOfBirth: "1988-02-01",
+      nationality: "NG",
+      address,
+      role: "director" as const,
+      ownershipPercent: 0,
+      title: "Manager" as const,
+      idType: "nin" as const,
+      idNumber: "12345678901",
+    };
     await anchorGateway().createBusinessCustomer({
       businessName: "Acme Ventures Limited",
       registrationType: "limited_liability",
@@ -310,9 +329,10 @@ describe("AnchorPaymentProviderGateway", () => {
       email: "a@example.com",
       phone: "+2348031234567",
       address,
-      directors: [
-        { ...director, isPrimary: false, firstName: "Adaeze", bvn: "22222222226" },
-        { ...director, isPrimary: true, firstName: "Tunde", bvn: "33333333337" },
+      registeredAddress: address,
+      people: [
+        { ...person, isPrimary: false, firstName: "Adaeze", bvn: "22222222226" },
+        { ...person, isPrimary: true, firstName: "Tunde", bvn: "33333333337" },
       ],
     });
     const body = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body) as {
@@ -324,7 +344,7 @@ describe("AnchorPaymentProviderGateway", () => {
   });
 
   it("opens a CURRENT deposit account for a business customer", async () => {
-    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { id: "acc_1", type: "DepositAccount", attributes: { status: "PENDING" } } }) });
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ data: { id: "acc_1", type: "DepositAccount", attributes: { status: "PENDING" } } }));
     global.fetch = fetchMock;
     await anchorGateway().createDedicatedAccount({ customerCode: "biz_1", email: "a@example.com", firstName: "A", lastName: "B", phone: "0803", accountType: "CORPORATE" });
     const body = JSON.parse((fetchMock.mock.calls[0] as [string, { body: string }])[1].body) as {
@@ -332,5 +352,93 @@ describe("AnchorPaymentProviderGateway", () => {
     };
     expect(body.data.attributes.productName).toBe("CURRENT");
     expect(body.data.relationships.customer.data.type).toBe("BusinessCustomer");
+  });
+
+  it("resolves unmasked AccountNumber from included relationship when deposit account is active", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          id: "acc_corp_1",
+          type: "DepositAccount",
+          attributes: {
+            status: "ACTIVE",
+            accountNumber: "******9800",
+            accountName: "Sprout Meals Limited",
+            bank: { name: "CORESTEP MICROFINANCE BANK", nipCode: "090365" },
+          },
+        },
+        included: [
+          {
+            id: "num_1",
+            type: "AccountNumber",
+            attributes: {
+              accountNumber: "2962576964",
+              accountName: "Sprout Meals Limited",
+              bank: { name: "PROVIDUS BANK", nipCode: "000023" },
+              status: "ACTIVE",
+            },
+          },
+        ],
+      }),
+    );
+    global.fetch = fetchMock;
+    const result = await anchorGateway().createDedicatedAccount({
+      customerCode: "biz_1",
+      email: "a@example.com",
+      firstName: "A",
+      lastName: "B",
+      phone: "0803",
+      accountType: "CORPORATE",
+    });
+
+    expect(result).toMatchObject({
+      providerAccountId: "acc_corp_1",
+      accountNumber: "2962576964",
+      bankName: "PROVIDUS BANK",
+      bankSlug: "000023",
+      accountName: "Sprout Meals Limited",
+      status: "active",
+    });
+  });
+
+  it("requeryDedicatedAccount requests ?include=AccountNumber and resolves unmasked details", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          id: "acc_corp_2",
+          type: "DepositAccount",
+          attributes: {
+            status: "ACTIVE",
+            accountNumber: "******7470",
+          },
+        },
+        included: [
+          {
+            id: "num_2",
+            type: "AccountNumber",
+            attributes: {
+              accountNumber: "0123456789",
+              bank: { name: "PROVIDUS BANK", nipCode: "000023" },
+              accountName: "Sprout Meals",
+            },
+          },
+        ],
+      }),
+    );
+    global.fetch = fetchMock;
+    const result = await anchorGateway().requeryDedicatedAccount({ accountNumber: null, bankSlug: null, providerAccountId: "acc_corp_2" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/accounts/acc_corp_2?include=AccountNumber"),
+      expect.anything(),
+    );
+    expect(result).toMatchObject({
+      providerAccountId: "acc_corp_2",
+      accountNumber: "0123456789",
+      bankName: "PROVIDUS BANK",
+      bankSlug: "000023",
+      accountName: "Sprout Meals",
+      status: "active",
+    });
   });
 });

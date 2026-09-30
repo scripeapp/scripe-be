@@ -9,7 +9,8 @@ import { ApprovalsService } from "./approvals.service.js";
 export function createApprovalsRouter(): Router {
   const router = Router();
   const approvals = new ApprovalsService(getDatabase());
-  const controller = new ApprovalsController(approvals, new BankingService(getDatabase(), approvals), new PayablesService(getDatabase(), approvals));
+  const banking = new BankingService(getDatabase(), approvals);
+  const controller = new ApprovalsController(approvals, banking, new PayablesService(getDatabase(), approvals, banking));
   const workflowsBase = "/api/businesses/:businessId/approval-workflows";
   const requestsBase = "/api/businesses/:businessId/approvals";
 

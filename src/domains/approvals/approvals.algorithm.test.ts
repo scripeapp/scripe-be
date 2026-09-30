@@ -130,6 +130,25 @@ describe("buildStepsSnapshot", () => {
     expect(steps[0]!.approvers.map((a) => a.userId)).toEqual([REQUESTER]);
   });
 
+  describe("onlyIfSole (transfers created from bills)", () => {
+    it("drops the requester, even an owner, when someone else can approve", () => {
+      const wf = workflow({ noSelfApproval: false, groups: [group({ approvers: [approver({ id: REQUESTER }), approver({ id: APPROVER_A })] })] });
+      const steps = buildStepsSnapshot(wf, 1000n, REQUESTER, "", true, "onlyIfSole");
+      expect(steps[0]!.approvers.map((a) => a.userId)).toEqual([APPROVER_A]);
+    });
+
+    it("keeps the requester when they are the only approver, so a one-person business can approve its own payment", () => {
+      const wf = workflow({ groups: [group({ approvers: [approver({ id: REQUESTER })] })] });
+      const steps = buildStepsSnapshot(wf, 1000n, REQUESTER, "", false, "onlyIfSole");
+      expect(steps[0]!.approvers.map((a) => a.userId)).toEqual([REQUESTER]);
+    });
+
+    it("still throws when the step has no approvers at all", () => {
+      const wf = workflow({ groups: [group({ approvers: [] })] });
+      expect(() => buildStepsSnapshot(wf, 1000n, REQUESTER, "", true, "onlyIfSole")).toThrow();
+    });
+  });
+
   it("throws a 422 when a step ends up with zero eligible approvers", () => {
     expect(() => buildStepsSnapshot(workflow({ groups: [group({ title: "Finance", approvers: [approver({ id: REQUESTER })] })] }), 1000n, REQUESTER, "requester@example.com", false)).toThrow(
       /Finance.*no eligible approvers/,

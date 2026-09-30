@@ -174,8 +174,21 @@ export interface BankingKybDirectors {
   isPrimary: Generated<boolean>;
   lastName: string;
   middleName: string | null;
+  nationality: Generated<string>;
+  ownershipPercent: Generated<Numeric>;
   phone: string;
   position: number;
+  residentialAddress: Json | null;
+  role: Generated<string>;
+  title: string | null;
+}
+
+export interface BankingKybDocuments {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  documentType: string;
+  id: Generated<string>;
+  uploadId: string;
 }
 
 export interface BankingKycAttempts {
@@ -190,10 +203,11 @@ export interface BankingProfiles {
   annualRevenue: string | null;
   businessAddress: Json | null;
   businessCategory: string | null;
+  businessEmail: string | null;
   businessId: string;
+  businessPhone: string | null;
   businessType: Generated<string | null>;
   bvn: string | null;
-  certificateOfIncorporationUploadId: string | null;
   createdAt: Generated<Timestamp>;
   dateOfRegistration: Timestamp | null;
   description: string | null;
@@ -209,12 +223,11 @@ export interface BankingProfiles {
   lastName: string | null;
   notificationEmail: string | null;
   phone: string | null;
-  proofOfAddressUploadId: string | null;
   providerCustomerCode: string | null;
   providerCustomerType: string | null;
+  registeredAddress: Json | null;
   registeredBusinessName: string | null;
   registrationNumber: string | null;
-  statusReportUploadId: string | null;
   taxIdentificationNumber: string | null;
   updatedAt: Generated<Timestamp>;
   website: string | null;
@@ -1961,6 +1974,7 @@ export interface Withdrawals {
   amountMinor: Int8;
   assetCode: Generated<string>;
   bankCode: string;
+  billId: string | null;
   businessId: string;
   createdAt: Generated<Timestamp>;
   failureReason: string | null;
@@ -1968,6 +1982,7 @@ export interface Withdrawals {
   idempotencyKey: string | null;
   providerReference: string;
   providerTransferCode: string | null;
+  purpose: Generated<string>;
   requestedBy: string | null;
   status: Generated<string>;
   transferRecipientCode: string | null;
@@ -1986,6 +2001,7 @@ export interface DB {
   approval_workflows: ApprovalWorkflows;
   audit_events: AuditEvents;
   banking_kyb_directors: BankingKybDirectors;
+  banking_kyb_documents: BankingKybDocuments;
   banking_kyc_attempts: BankingKycAttempts;
   banking_profiles: BankingProfiles;
   beneficial_owners: BeneficialOwners;

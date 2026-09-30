@@ -42,12 +42,14 @@ describe("provider-events signature verification", () => {
   });
 
   describe("verifyAnchorSignature", () => {
-    it("accepts a correctly computed Base64(HMAC-SHA1) signature and rejects a wrong one", () => {
+    it("accepts Base64 of the hex HMAC-SHA1 digest (Anchor's documented format) and rejects anything else", () => {
       process.env = { ...MINIMAL_ENV, ANCHOR_WEBHOOK_TOKEN: "anchor-token" };
-      const body = Buffer.from(JSON.stringify({ type: "customer.identification.approved", data: { id: "cust_1" } }));
-      const validSignature = createHmac("sha1", "anchor-token").update(body).digest("base64");
+      const body = Buffer.from(JSON.stringify({ data: { id: "evt_1", type: "customer.identification.approved" } }));
+      const validSignature = Buffer.from(createHmac("sha1", "anchor-token").update(body).digest("hex")).toString("base64");
 
       expect(verifyAnchorSignature(body, validSignature)).toBe(true);
+      // Base64 of the raw digest bytes is not what Anchor sends.
+      expect(verifyAnchorSignature(body, createHmac("sha1", "anchor-token").update(body).digest("base64"))).toBe(false);
       expect(verifyAnchorSignature(body, "d29uZw==")).toBe(false);
       expect(verifyAnchorSignature(body, undefined)).toBe(false);
     });

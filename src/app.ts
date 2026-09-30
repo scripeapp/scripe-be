@@ -38,6 +38,8 @@ import { createReceiptsRouter } from "./domains/receipts/receipts.routes.js";
 import { createReturnsRouter } from "./domains/returns/returns.routes.js";
 import { createBankingRouter } from "./domains/banking/banking.routes.js";
 import { createProviderEventsRouter } from "./domains/provider-events/provider-events.routes.js";
+import { createLocalStorageRouter } from "./integrations/local-object-storage.js";
+import { loadEnvironment } from "./shared/environment.js";
 import { createApprovalsRouter } from "./domains/approvals/approvals.routes.js";
 import { createPlatformRouter } from "./domains/platform/platform.routes.js";
 import { createCommunicationsRouter } from "./domains/communications/communications.routes.js";
@@ -67,6 +69,10 @@ export function createApp(): Express {
   // they're mounted with their own raw-body parser before the app-wide
   // JSON parser — same reasoning as Better Auth above.
   app.use(createProviderEventsRouter());
+
+  // Development-only upload/download endpoint for LOCAL_OBJECT_STORAGE;
+  // takes raw file bytes, so it also sits before the JSON parser.
+  if (loadEnvironment().LOCAL_OBJECT_STORAGE) app.use(createLocalStorageRouter());
 
   app.use(express.json());
 

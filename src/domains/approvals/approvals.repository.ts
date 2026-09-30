@@ -92,6 +92,26 @@ export async function findActiveWorkflow(context: DatabaseContext, businessId: s
   return hydrated[0];
 }
 
+/** The most recently created workflow of exactly `type`, switched on or off. */
+export async function findLatestWorkflowOfType(context: DatabaseContext, businessId: string, type: Exclude<WorkflowType, "all">): Promise<Workflow | undefined> {
+  const result = await sql<WorkflowRow>`
+    select ${sql.raw(WORKFLOW_COLUMNS)} from app.approval_workflows
+    where "businessId" = ${businessId}::uuid and "type" = ${type}
+    order by "createdAt" desc
+    limit 1
+  `.execute(context.transaction);
+  const hydrated = await hydrateWorkflows(context, result.rows);
+  return hydrated[0];
+}
+
+/** The business's owners, as approvers — see app.business_owner_approvers. */
+export async function listOwnerApprovers(context: DatabaseContext, businessId: string): Promise<{ userId: string; email: string; name: string }[]> {
+  const result = await sql<{ userId: string; email: string; name: string }>`
+    select "userId", "email", "name" from app.business_owner_approvers(${businessId}::uuid)
+  `.execute(context.transaction);
+  return result.rows;
+}
+
 /** True if an active workflow already covers `type` — used for a friendly pre-check before the DB's partial unique index would otherwise reject with a raw conflict. */
 export async function hasConflictingActiveWorkflow(context: DatabaseContext, businessId: string, type: WorkflowType, excludeWorkflowId?: string): Promise<boolean> {
   const coverageTypes = type === "all" ? ["withdrawal", "bill_payment", "all"] : [type, "all"];
@@ -221,7 +241,7 @@ export async function createApprovalRequest(
   input: {
     subjectType: SubjectType;
     subjectId: string;
-    workflowId: string;
+    workflowId: string | null;
     workflowName: string;
     requestedBy: string;
     amountMinor: string;

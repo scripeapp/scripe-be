@@ -1,3 +1,4 @@
+import { sql } from "kysely";
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { anonymousPrincipal } from "../../db/principal.js";
@@ -18,17 +19,46 @@ import { loadEnvironment } from "../../shared/environment.js";
 
 type JsonRecord = Record<string, unknown>;
 
-function toBusinessDocuments(stored: repository.KybDocumentsForCustomer): BusinessDocument[] {
-  const file = (key: string | null, mimeType: string | null, kind: BusinessDocument["kind"]): BusinessDocument | null =>
-    key ? { kind, file: { mimeType: mimeType ?? "application/octet-stream", fileName: key.split("/").pop() ?? kind, load: () => objectStorage.getObjectBytes(key) } } : null;
-  return [
-    file(stored.certificateOfIncorporationKey, stored.certificateOfIncorporationMimeType, "certificate_of_incorporation"),
-    file(stored.statusReportKey, stored.statusReportMimeType, "status_report"),
-    file(stored.proofOfAddressKey, stored.proofOfAddressMimeType, "proof_of_address"),
-    file(stored.directorIdDocumentKey, stored.directorIdDocumentMimeType, "director_id"),
-    stored.registrationNumber ? { kind: "registration_number" as const, text: stored.registrationNumber } : null,
-    stored.taxIdentificationNumber ? { kind: "tax_identification_number" as const, text: stored.taxIdentificationNumber } : null,
-  ].filter((document): document is BusinessDocument => document !== null);
+function toBusinessDocuments(rows: readonly repository.KybDocumentsForCustomerRow[]): BusinessDocument[] {
+  const documents: BusinessDocument[] = [];
+  const first = rows[0];
+  if (!first) return documents;
+
+  if (first.registrationNumber) {
+    documents.push({ documentType: "RC_NUMBER", text: first.registrationNumber });
+    documents.push({ documentType: "BN_NUMBER", text: first.registrationNumber });
+  }
+  if (first.taxIdentificationNumber) {
+    documents.push({ documentType: "TIN", text: first.taxIdentificationNumber });
+  }
+
+  for (const row of rows) {
+    if (row.documentType && row.objectKey) {
+      const key = row.objectKey;
+      const mimeType = row.mimeType ?? "application/octet-stream";
+      const docType = row.documentType;
+      documents.push({
+        documentType: docType,
+        file: {
+          mimeType,
+          fileName: key.split("/").pop() ?? docType,
+          load: () => objectStorage.getObjectBytes(key),
+        },
+      });
+      if (docType === "CAC_STATUS_REPORT") {
+        documents.push({
+          documentType: "MEMORANDUM_OF_ASSOCIATION",
+          file: {
+            mimeType,
+            fileName: key.split("/").pop() ?? "MEMORANDUM_OF_ASSOCIATION",
+            load: () => objectStorage.getObjectBytes(key),
+          },
+        });
+      }
+    }
+  }
+
+  return documents;
 }
 
 function parseJson(rawBody: Buffer): JsonRecord {
@@ -174,32 +204,37 @@ export class ProviderEventsService {
   }
 
   /**
-   * Anchor's exact webhook envelope isn't confirmed against a live payload
-   * in this pass (docs describe event type names but not the wrapping
-   * shape) — this defensively checks a couple of plausible top-level field
-   * names ("type" and "event") rather than assuming one. Verify against a
-   * real sandbox delivery before relying on this in production.
+   * Anchor's envelope (https://docs.getanchor.co/docs/webhooks-overview):
+   * `data` is the Event itself — `data.id` is the event's own id and
+   * `data.type` the event type — and what it is about sits under
+   * `data.relationships` (e.g. relationships.customer.data.id). Attributes
+   * are minimal unless the webhook was created with supportIncluded.
+   * Events other than customer.identification.* still read `data.id` as
+   * their subject and must be checked against real sandbox deliveries
+   * (every payload is kept in provider_events).
    */
   async handleAnchorWebhook(rawBody: Buffer, signature: string | undefined, requestId: string): Promise<boolean> {
     const signatureValid = verifyAnchorSignature(rawBody, signature);
     const body = parseJson(rawBody);
     const resource = asRecord(body.data);
     const attributes = asRecord(resource.attributes);
-    const eventType = asString(body.type) ?? asString(body.event) ?? "unknown";
+    const eventType = asString(resource.type) ?? asString(body.type) ?? asString(body.event) ?? "unknown";
     const resourceId = asString(resource.id);
+    const relationshipId = (name: string) => asString(asRecord(asRecord(asRecord(resource.relationships)[name]).data).id);
 
     await this.ingest("anchor", eventType, resourceId, signatureValid, body, requestId, async (context) => {
       if (eventType.startsWith("customer.identification.")) {
-        if (!resourceId) return "ignored";
+        const customerId = relationshipId("customer");
+        if (!customerId) return "ignored";
         if (eventType === "customer.identification.awaitingDocument") {
-          const stored = await repository.findKybDocumentsForCustomer(context, resourceId);
-          if (!stored) return "ignored";
-          const result = await paymentProvider.submitBusinessDocuments({ customerCode: resourceId, documents: toBusinessDocuments(stored) });
-          if (result.missing.length > 0) console.warn(`Anchor requested KYB documents we don't hold for ${stored.businessId}:`, result.missing);
+          const stored = await repository.findKybDocumentsForCustomer(context, customerId);
+          if (!stored || stored.length === 0) return "ignored";
+          const result = await paymentProvider.submitBusinessDocuments({ customerCode: customerId, documents: toBusinessDocuments(stored) });
+          if (result.missing.length > 0) console.warn(`Anchor requested KYB documents we don't hold for ${stored[0]?.businessId}:`, result.missing);
           return "processed";
         }
         if (eventType === "customer.identification.approved") {
-          const result = await repository.markBankingKycStatus(context, resourceId, "verified", null);
+          const result = await repository.markBankingKycStatus(context, customerId, "verified", null);
           if (result.found && result.email) {
             const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
             void emailSender.sendBankingKybApproved(result.email, {
@@ -212,7 +247,7 @@ export class ProviderEventsService {
         }
         if (eventType === "customer.identification.rejected" || eventType === "customer.identification.error") {
           const reason = asString(attributes.reason) ?? asString(attributes.message) ?? "KYC rejected by provider";
-          const result = await repository.markBankingKycStatus(context, resourceId, "failed", reason);
+          const result = await repository.markBankingKycStatus(context, customerId, "failed", reason);
           if (result.found && result.email) {
             const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
             void emailSender.sendBankingKybFailed(result.email, {
@@ -230,8 +265,12 @@ export class ProviderEventsService {
       if (eventType === "account.opened" || eventType === "accountNumber.created") {
         if (!resourceId) return "ignored";
         const virtualNuban = asRecord(attributes.virtualNuban);
+        let candidateAccountNumber = asString(virtualNuban.accountNumber) ?? asString(attributes.accountNumber);
+        if (candidateAccountNumber && candidateAccountNumber.includes("*")) {
+          candidateAccountNumber = null;
+        }
         const result = await repository.markVirtualAccountStatus(context, resourceId, "active", {
-          accountNumber: asString(virtualNuban.accountNumber) ?? asString(attributes.accountNumber),
+          accountNumber: candidateAccountNumber,
           accountName: asString(attributes.accountName),
           bankName: asString(virtualNuban.bankName) ?? asString(asRecord(attributes.bank).name),
         });
@@ -409,11 +448,18 @@ export class ProviderEventsService {
         return;
       }
 
+      // A database error inside `process` aborts the transaction; rolling
+      // back to this savepoint keeps the logged event so it can be marked
+      // failed with the reason, instead of the whole delivery 500ing and
+      // leaving no trace.
+      await sql`savepoint provider_event_process`.execute(context.transaction);
       try {
         const outcome = await process(context);
+        await sql`release savepoint provider_event_process`.execute(context.transaction);
         if (outcome === "processed") await repository.markProcessed(context, event.id);
         else await repository.markIgnored(context, event.id);
       } catch (error) {
+        await sql`rollback to savepoint provider_event_process`.execute(context.transaction);
         await repository.markFailed(context, event.id, error instanceof Error ? error.message : String(error));
       }
     });

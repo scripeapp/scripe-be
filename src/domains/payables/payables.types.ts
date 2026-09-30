@@ -34,6 +34,10 @@ export interface BillRow {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly supplierName?: string | null;
+  /** Detail view only: where a wallet payment for this bill goes. */
+  readonly supplierBankName?: string | null;
+  readonly supplierAccountNumber?: string | null;
+  readonly supplierAccountName?: string | null;
   readonly itemsCount?: number;
 }
 
@@ -80,4 +84,37 @@ export interface UpdateBillInput {
   readonly status?: "draft" | "approved" | "voided";
   readonly dueAt?: string | null;
   readonly notes?: string;
+}
+
+export interface BillTransferTarget {
+  readonly id: string;
+  readonly billNumber: string;
+  readonly status: string;
+  readonly assetCode: string;
+  readonly totalMinor: string;
+  readonly amountPaidMinor: string;
+  readonly inFlightMinor: string;
+  readonly supplierName: string | null;
+  readonly bankCode: string | null;
+  readonly accountNumber: string | null;
+  readonly accountName: string | null;
+}
+
+export interface BillTransferRow {
+  readonly id: string;
+  readonly amountMinor: string;
+  readonly status: "pending" | "awaitingApproval" | "processing" | "success" | "failed" | "rejected";
+  readonly providerReference: string;
+  readonly failureReason: string | null;
+  readonly createdAt: string;
+  readonly approvalRequestId: string | null;
+  /** The approval's steps snapshot (who approves, who has decided). */
+  readonly approvalSteps: unknown[] | null;
+  readonly pendingApproverIds: string[];
+}
+
+export interface PayBillInput {
+  /** Defaults to everything still owed that isn't already on its way. */
+  readonly amountMinor?: number;
+  readonly idempotencyKey: string;
 }

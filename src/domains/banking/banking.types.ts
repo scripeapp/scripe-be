@@ -41,9 +41,9 @@ export interface BankingProfileRow {
   readonly businessCategory: string | null;
   readonly annualRevenue: string | null;
   readonly businessAddress: BusinessAddressInput | null;
-  readonly certificateOfIncorporationUploadId: string | null;
-  readonly statusReportUploadId: string | null;
-  readonly proofOfAddressUploadId: string | null;
+  readonly businessEmail: string | null;
+  readonly businessPhone: string | null;
+  readonly registeredAddress: BusinessAddressInput | null;
   readonly dateOfRegistration: string | null;
   readonly providerCustomerType: ProviderCustomerType | null;
   /** The submitting user's verified account email — where banking notifications go. */
@@ -109,8 +109,17 @@ export interface WithdrawalRow {
   readonly idempotencyKey: string | null;
   readonly status: WithdrawalStatus;
   readonly failureReason: string | null;
+  readonly purpose: "withdrawal" | "bill_payment";
+  readonly billId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+/** The bill a withdrawal pays, when it is a bill payment. */
+export interface WithdrawalBillLink {
+  readonly billId: string;
+  readonly billNumber: string;
+  readonly supplierName: string | null;
 }
 
 export interface BankingOperation {
@@ -121,6 +130,8 @@ export interface BankingOperation {
   readonly userEmail: string;
   readonly userEmailVerified: boolean;
 }
+
+export type KybPersonRole = "director" | "owner" | "director_owner";
 
 /** One director of a business KYB submission. bvn, dateOfBirth and idNumber are encrypted at rest; decrypted by the repository. */
 export interface KybDirectorRow {
@@ -139,7 +150,21 @@ export interface KybDirectorRow {
   readonly idType: string;
   readonly idNumber: string;
   readonly idDocumentUploadId: string;
+  readonly role: KybPersonRole;
+  readonly ownershipPercent: string;
+  readonly title: string | null;
+  readonly nationality: string;
+  readonly residentialAddress: BusinessAddressInput | null;
 }
+
+export interface KybDocumentRow {
+  readonly id: string;
+  readonly businessId: string;
+  readonly documentType: string;
+  readonly uploadId: string;
+  readonly createdAt: Date;
+}
+
 
 export interface PlatformBankingOperation {
   readonly userId: string;

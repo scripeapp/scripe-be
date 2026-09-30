@@ -59,6 +59,11 @@ export class PayablesController {
     return { allocation: await this.service.allocatePayment(this.op(req, p.businessId), p.billId, schemas.allocatePayment.parse(req.body)) };
   }, 201);
 
+  readonly payBill = this.handle(async (req) => {
+    const p = schemas.params.required({ billId: true }).parse(req.params);
+    return await this.service.payBill(this.op(req, p.businessId), p.billId, schemas.payBill.parse(req.body));
+  }, 201);
+
   private op(req: Request, businessId: string) {
     return { userId: requireAuthContext(req).userId, businessId, requestId: req.requestId };
   }

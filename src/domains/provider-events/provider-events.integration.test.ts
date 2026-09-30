@@ -93,6 +93,42 @@ describe("provider-events domain", () => {
     expect(response.status).toBeGreaterThanOrEqual(400);
   });
 
+  /**
+   * Anchor's envelope, as documented: data.id is the event's own id,
+   * data.type the event type, and the customer sits under relationships.
+   * Signed as Base64 of the hex HMAC-SHA1 digest.
+   */
+  it("marks a business verified on Anchor's customer.identification.approved event", async () => {
+    process.env.ANCHOR_WEBHOOK_TOKEN = "anchor-test-token";
+    const owner = await authenticate("Anchor Owner");
+    const created = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie: owner.cookies, body: JSON.stringify({ displayName: "Anchor Co" }) });
+    const businessId = (created.body as { data: { business: { id: string } } }).data.business.id;
+    const customerId = `${Date.now()}-anc_bus_cst`;
+    const environment = (await import("@/shared/environment.js")).loadEnvironment();
+    const migrator = new (await import("pg")).Pool({ connectionString: environment.DATABASE_MIGRATE_URL ?? environment.DATABASE_URL });
+    try {
+      await migrator.query(`insert into app.banking_profiles ("businessId", "kycStatus", "providerCustomerCode", "providerCustomerType") values ($1, 'pending', $2, 'business')`, [businessId, customerId]);
+      const payload = JSON.stringify({
+        data: {
+          id: `${Date.now()}-anc_et`,
+          type: "customer.identification.approved",
+          attributes: { createdAt: "2026-09-29T10:00:00" },
+          relationships: { customer: { data: { id: customerId, type: "BusinessCustomer" } } },
+        },
+      });
+      const signature = Buffer.from(createHmac("sha1", "anchor-test-token").update(payload).digest("hex")).toString("base64");
+      const response = await request(server.baseUrl, "/api/webhooks/anchor", { method: "POST", body: payload, headers: { "x-anchor-signature": signature } });
+      expect(response.status).toBe(200);
+
+      const profile = await migrator.query<{ kycStatus: string }>(`select "kycStatus" from app.banking_profiles where "businessId" = $1`, [businessId]);
+      expect(profile.rows[0]!.kycStatus).toBe("verified");
+      const event = await migrator.query<{ eventType: string; status: string }>(`select "eventType", "status" from app.provider_events where "provider" = 'anchor' and "payload"->'data'->'relationships'->'customer'->'data'->>'id' = $1`, [customerId]);
+      expect(event.rows[0]).toMatchObject({ eventType: "customer.identification.approved", status: "processed" });
+    } finally {
+      await migrator.end();
+    }
+  });
+
   it("mounts all four provider webhook routes", async () => {
     for (const provider of ["paystack", "flutterwave", "anchor", "brails"]) {
       const response = await request(server.baseUrl, `/api/webhooks/${provider}`, { method: "POST", body: "{}" });
