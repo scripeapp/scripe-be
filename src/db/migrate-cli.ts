@@ -20,7 +20,9 @@ async function main(): Promise<void> {
   const migrateUrl = resolveMigrateUrl(environment);
   const resetAllowed =
     environment.NODE_ENV !== "production" && environment.ALLOW_DATABASE_RESET;
-  const results = await executeDatabaseCommand(migrateUrl, command, { resetAllowed });
+  const results = await executeDatabaseCommand(migrateUrl, command, {
+    resetAllowed,
+  }, environment.DATABASE_SSL_MODE);
   logResults(results);
 }
 

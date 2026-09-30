@@ -23,20 +23,48 @@ interface OutboundEmail {
  */
 /** Every interpolated value in an email body goes through this — business and director names are user-supplied, so an unescaped value is HTML injection into mail sent from our domain. */
 export function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export interface EmailSender {
   sendVerificationCode(to: string, code: string): Promise<void>;
   sendPasswordResetEmail(to: string, url: string): Promise<void>;
-  sendBusinessInvitation(to: string, params: BusinessInvitationEmail): Promise<void>;
+  sendBusinessInvitation(
+    to: string,
+    params: BusinessInvitationEmail,
+  ): Promise<void>;
   /** Arbitrary subject/body send used by the communications domain, sent as a business's own resolved sender rather than the platform's fixed templates above. */
-  sendTransactional(params: { to: string; subject: string; html: string; from?: string }): Promise<void>;
-  sendBankingKybSubmitted(to: string, params: BankingKybSubmittedEmail): Promise<void>;
-  sendBankingKybApproved(to: string, params: BankingKybApprovedEmail): Promise<void>;
-  sendBankingKybFailed(to: string, params: BankingKybFailedEmail): Promise<void>;
-  sendVirtualAccountIssued(to: string, params: VirtualAccountIssuedEmail): Promise<void>;
-  sendVirtualAccountDeposit(to: string, params: VirtualAccountDepositEmail): Promise<void>;
+  sendTransactional(params: {
+    to: string;
+    subject: string;
+    html: string;
+    from?: string;
+  }): Promise<void>;
+  sendBankingKybSubmitted(
+    to: string,
+    params: BankingKybSubmittedEmail,
+  ): Promise<void>;
+  sendBankingKybApproved(
+    to: string,
+    params: BankingKybApprovedEmail,
+  ): Promise<void>;
+  sendBankingKybFailed(
+    to: string,
+    params: BankingKybFailedEmail,
+  ): Promise<void>;
+  sendVirtualAccountIssued(
+    to: string,
+    params: VirtualAccountIssuedEmail,
+  ): Promise<void>;
+  sendVirtualAccountDeposit(
+    to: string,
+    params: VirtualAccountDepositEmail,
+  ): Promise<void>;
 }
 
 export interface BusinessInvitationEmail {
@@ -102,7 +130,10 @@ export class PlunkEmailSender implements EmailSender {
     });
   }
 
-  async sendBusinessInvitation(to: string, params: BusinessInvitationEmail): Promise<void> {
+  async sendBusinessInvitation(
+    to: string,
+    params: BusinessInvitationEmail,
+  ): Promise<void> {
     await this.send({
       to,
       subject: `You've been invited to join ${params.businessName} on Scripe`,
@@ -114,11 +145,19 @@ export class PlunkEmailSender implements EmailSender {
     });
   }
 
-  async sendTransactional(params: { to: string; subject: string; html: string; from?: string }): Promise<void> {
+  async sendTransactional(params: {
+    to: string;
+    subject: string;
+    html: string;
+    from?: string;
+  }): Promise<void> {
     await this.send({ ...params, logHint: "transactional" });
   }
 
-  async sendBankingKybSubmitted(to: string, params: BankingKybSubmittedEmail): Promise<void> {
+  async sendBankingKybSubmitted(
+    to: string,
+    params: BankingKybSubmittedEmail,
+  ): Promise<void> {
     await this.send({
       to,
       subject: `Your business verification is under review — Scripe`,
@@ -135,7 +174,10 @@ export class PlunkEmailSender implements EmailSender {
     });
   }
 
-  async sendBankingKybApproved(to: string, params: BankingKybApprovedEmail): Promise<void> {
+  async sendBankingKybApproved(
+    to: string,
+    params: BankingKybApprovedEmail,
+  ): Promise<void> {
     await this.send({
       to,
       subject: `Your business verification has been approved! — Scripe`,
@@ -151,7 +193,10 @@ export class PlunkEmailSender implements EmailSender {
     });
   }
 
-  async sendBankingKybFailed(to: string, params: BankingKybFailedEmail): Promise<void> {
+  async sendBankingKybFailed(
+    to: string,
+    params: BankingKybFailedEmail,
+  ): Promise<void> {
     await this.send({
       to,
       subject: `Action required: Update your business verification — Scripe`,
@@ -168,7 +213,10 @@ export class PlunkEmailSender implements EmailSender {
     });
   }
 
-  async sendVirtualAccountIssued(to: string, params: VirtualAccountIssuedEmail): Promise<void> {
+  async sendVirtualAccountIssued(
+    to: string,
+    params: VirtualAccountIssuedEmail,
+  ): Promise<void> {
     await this.send({
       to,
       subject: `Your dedicated corporate account is ready — Scripe`,
@@ -188,7 +236,10 @@ export class PlunkEmailSender implements EmailSender {
     });
   }
 
-  async sendVirtualAccountDeposit(to: string, params: VirtualAccountDepositEmail): Promise<void> {
+  async sendVirtualAccountDeposit(
+    to: string,
+    params: VirtualAccountDepositEmail,
+  ): Promise<void> {
     await this.send({
       to,
       subject: `Deposit received: ${params.amountFormatted} into your business account — Scripe`,
@@ -220,7 +271,7 @@ export class PlunkEmailSender implements EmailSender {
       return;
     }
 
-    const response = await fetch("https://api.useplunk.com/v1/send", {
+    const response = await fetch("https://next-api.useplunk.com/v1/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -230,16 +281,16 @@ export class PlunkEmailSender implements EmailSender {
         to: email.to,
         subject: email.subject,
         body: email.html,
-        ...(email.from ?? environment.PLUNK_FROM_EMAIL
+        ...((email.from ?? environment.PLUNK_FROM_EMAIL)
           ? { from: email.from ?? environment.PLUNK_FROM_EMAIL }
           : {}),
       }),
     });
 
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as
-        | PlunkSendResponse
-        | null;
+      const body = (await response
+        .json()
+        .catch(() => null)) as PlunkSendResponse | null;
       throw new Error(
         `Plunk send failed (${response.status}): ${
           body?.message ?? response.statusText

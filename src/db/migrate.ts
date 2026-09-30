@@ -36,8 +36,12 @@ export async function executeDatabaseCommand(
   databaseUrl: string,
   command: MigrationCommand,
   options: DatabaseCommandOptions = {},
+  sslMode: "disable" | "require" = "disable",
 ): Promise<MigrationResult[]> {
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ...(sslMode === "require" ? { ssl: { rejectUnauthorized: true } } : {}),
+  });
   try {
     const database = createMigrationDatabase(pool);
     if (command === "reset") {
