@@ -11,6 +11,10 @@ const EMAIL_VERIFICATION_CODE_TTL_SECONDS = 600;
 const EMAIL_VERIFICATION_MAX_ATTEMPTS = 5;
 const EMAIL_VERIFICATION_RATE_LIMIT = { window: 300, max: 10 } as const;
 
+function passkeyRpId(cookieDomain: string): string {
+  return cookieDomain.replace(/^\./, "");
+}
+
 let authInstance: ReturnType<typeof createAuth> | undefined;
 
 function createAuth() {
@@ -49,7 +53,13 @@ function createAuth() {
     },
     socialProviders,
     plugins: [
-      passkey(),
+      passkey({
+        // The browser validates rpID against the page origin (www.scripe.app),
+        // not the API host, so it must be the shared parent domain.
+        rpID: passkeyRpId(environment.AUTH_COOKIE_DOMAIN),
+        rpName: "Scripe",
+        origin: [new URL(environment.FRONTEND_URL).origin, ...environment.AUTH_TRUSTED_ORIGINS],
+      }),
       emailOTP({
         otpLength: EMAIL_VERIFICATION_CODE_LENGTH,
         expiresIn: EMAIL_VERIFICATION_CODE_TTL_SECONDS,
