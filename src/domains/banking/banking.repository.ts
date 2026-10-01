@@ -9,6 +9,7 @@ import type {
   ProviderCustomerType,
   KycStatus,
   ListWalletTransactionsFilter,
+  ListWithdrawalsFilter,
   VirtualAccountRow,
   VirtualAccountStatus,
   WalletTransactionDirection,
@@ -571,4 +572,34 @@ export async function claimWithdrawalForProcessing(context: DatabaseContext, id:
 /** Settles the bill a succeeded bill-payment withdrawal paid (a no-op for any other withdrawal, or if already settled). */
 export async function settleBillWithdrawal(context: DatabaseContext, withdrawalId: string): Promise<void> {
   await sql`select app.settle_bill_withdrawal(${withdrawalId}::uuid)`.execute(context.transaction);
+}
+
+export async function listWithdrawals(
+  context: DatabaseContext,
+  businessId: string,
+  filter: ListWithdrawalsFilter = {},
+): Promise<{ withdrawals: WithdrawalRow[]; totalCount: number }> {
+  const limit = Math.max(1, Math.min(100, filter.limit ?? 50));
+  const offset = Math.max(0, filter.offset ?? 0);
+
+  const rows = (await sql<WithdrawalRow>`
+    select ${sql.raw(WITHDRAWAL_COLUMNS)}
+    from app.withdrawals
+    where "businessId" = ${businessId}::uuid
+      and (${filter.status ?? null}::text is null or "status" = ${filter.status ?? null})
+    order by "createdAt" desc
+    limit ${limit} offset ${offset}
+  `.execute(context.transaction)).rows;
+
+  const countRow = (await sql<{ count: string }>`
+    select count(*)::text as count
+    from app.withdrawals
+    where "businessId" = ${businessId}::uuid
+      and (${filter.status ?? null}::text is null or "status" = ${filter.status ?? null})
+  `.execute(context.transaction)).rows[0];
+
+  return {
+    withdrawals: rows,
+    totalCount: Number(countRow?.count ?? 0),
+  };
 }

@@ -23,6 +23,7 @@ export function createBankingRouter(): Router {
   router.post(`${base}/virtual-account`, controller.requestVirtualAccount);
   router.post(`${base}/virtual-account/requery`, controller.requeryVirtualAccount);
   router.get(`${base}/transactions`, controller.listWalletTransactions);
+  router.get(`${base}/withdrawals`, controller.listWithdrawals);
   router.post(`${base}/withdrawals`, controller.requestWithdrawal);
   router.post(`${base}/withdrawals/finalize`, controller.finalizeWithdrawal);
 

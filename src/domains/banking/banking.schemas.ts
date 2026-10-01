@@ -266,3 +266,9 @@ export const listWalletTransactionsQuerySchema = z.object({
   offset: z.coerce.number().int().nonnegative().optional(),
 });
 
+export const listWithdrawalsQuerySchema = z.object({
+  status: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+  offset: z.coerce.number().int().nonnegative().optional(),
+});
+

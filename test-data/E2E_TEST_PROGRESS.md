@@ -29,12 +29,12 @@ Tracking doc so anyone can continue from where testing stopped. Test data: [`spr
 | 11 | Store → Bookings | 🟢 | **Service bookings Phases 1–2 built (2026-09-29).** Staff-made bookings (`POST /api/store/bookings`, confirmed, no hold), walk-ins, add-on extra time, per-staff durations, service versions (variants), drag-to-move, staff commission + Staff earnings report, list/calendar redesigned to Figma. Still needs a manual click-through; see `docs/SERVICE_BOOKINGS_DESIGN.md` "Status". Earlier note: | **Backend + FE page complete**: BE booking engine (evolved tables, slot engine, reserve/slots/list/status endpoints) + staff commission report. FE Bookings page built & wired (calendar day/week, quick book, list, status panel via `Bookings/` module), Store→Bookings **nav re-added**, obsolete scheduling-era UI files removed, FE `tsc --noEmit` clean + lint clean. Remaining: POS till slice (price resolution, order-from-booking, tips, deposits). |
 | 12 | Store → Point of Sale | 🟢 | `GET /api/store/pos/analytics` **built & verified** (200) — POS-channel gross sales / orders / discounts / returns + daily chart. UI renders fully. **Till slice built (migration 0066 + POS domain + FE page)**: booking-order pricing (`POST /store/pos/order/preview|order`), order-from-booking with tips (`app.booking_tips`), deposits netted off tendered, commission report carries `tipsMinor`. Verified: `pos-till.integration.test.ts` (2 tests) + FE bookings panel/tip flow wired. |
 | 13 | Orders | 🟢 | Audited end to end via the till (2026-09-29): sell → order listed → detail → fulfil → receipt → shift close. 10 bugs fixed, see "Orders audit" below. |
-| 14 | Payments | ⬜ | Not started |
+| 14 | Payments | 🟢 | Audited & verified: Added missing `GET /api/businesses/:id/banking/withdrawals` backend endpoint (verified by integration test); added interactive `PaymentDetailsDrawer` on transaction rows; payments list/filters and checkout routes verified. |
 | 15 | Customers | ⬜ | Not started |
 | 16 | Banking | ⬜ | Not started |
 
 ## Next to test
-➡️ Resume audit at **Module 14 — Payments**, then 15 Customers, 16 Banking. Also still worth a manual click-through: Store → Bookings (calendar → quick book → booking panel → till).
+➡️ Resume audit at **Module 15 — Customers**, then 16 Banking. Also still worth a manual click-through: Store → Bookings (calendar → quick book → booking panel → till).
 
 ## Orders audit (Module 13) — 2026-09-29 ✅
 Tested as a cashier would: register created → shift opened (₦10,000 float) → 3 till sales (cash with modifiers, card) → orders list/detail → fulfil → receipt → shift closed and reconciled. Bugs found and fixed:

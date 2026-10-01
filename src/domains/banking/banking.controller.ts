@@ -93,6 +93,12 @@ export class BankingController {
     return { transactions: result.transactions, totalCount: result.totalCount };
   });
 
+  readonly listWithdrawals = this.handle(async (request) => {
+    const filter = schemas.listWithdrawalsQuerySchema.parse(request.query);
+    const result = await this.service.listWithdrawals(this.operation(request), filter);
+    return { withdrawals: result.withdrawals, totalCount: result.totalCount };
+  });
+
   readonly requestWithdrawal = this.handle(
     async (request) => ({ withdrawal: await this.service.requestWithdrawal(this.operation(request), schemas.requestWithdrawalSchema.parse(request.body)) }),
     201,

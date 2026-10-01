@@ -27,6 +27,7 @@ import type {
   KybReviewStatus,
   KybReviewSummary,
   ListWalletTransactionsFilter,
+  ListWithdrawalsFilter,
   PlatformBankingOperation,
   ProviderCustomerType,
   RequestVirtualAccountInput,
@@ -657,6 +658,13 @@ export class BankingService {
     return this.run(operation, async (context) => {
       await requirePermission(context, operation.businessId, "banking.read");
       return repository.listWalletTransactions(context, operation.businessId, filter);
+    });
+  }
+
+  async listWithdrawals(operation: BankingOperation, filter: ListWithdrawalsFilter): Promise<{ withdrawals: WithdrawalRow[]; totalCount: number }> {
+    return this.run(operation, async (context) => {
+      await requirePermission(context, operation.businessId, "banking.read");
+      return repository.listWithdrawals(context, operation.businessId, filter);
     });
   }
 

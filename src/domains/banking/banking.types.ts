@@ -260,3 +260,9 @@ export interface ListWalletTransactionsFilter {
   readonly limit?: number;
   readonly offset?: number;
 }
+
+export interface ListWithdrawalsFilter {
+  readonly status?: string;
+  readonly limit?: number;
+  readonly offset?: number;
+}

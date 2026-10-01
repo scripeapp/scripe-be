@@ -153,6 +153,17 @@ describe("banking domain", () => {
     expect(body.data.totalCount).toBe(0);
   });
 
+  it("lists withdrawals for a business", async () => {
+    const owner = await authenticate("Withdrawals List Owner");
+    const businessId = await createBusiness(owner.cookies, "Withdrawals List Co");
+
+    const response = await request(server.baseUrl, `/api/businesses/${businessId}/banking/withdrawals`, { cookie: owner.cookies });
+    expect(response.status).toBe(200);
+    const body = response.body as { data: { withdrawals: unknown[]; totalCount: number } };
+    expect(body.data.withdrawals).toEqual([]);
+    expect(body.data.totalCount).toBe(0);
+  });
+
   it("rejects cross-tenant banking access", async () => {
     const owner = await authenticate("Isolated Banking Owner");
     const outsider = await authenticate("Isolated Banking Outsider");
