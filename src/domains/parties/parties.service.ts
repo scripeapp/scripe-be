@@ -99,6 +99,7 @@ export class PartiesService {
     return this.run(operation, async (context) => {
       await this.authorize(context, operation.businessId, "party.manage");
       if (!(await repository.updateCustomer(context, operation.businessId, partyId, { lifecycleState: "inactive" }))) throw notFoundError("Customer not found");
+      await repository.archiveParty(context, operation.businessId, partyId);
     });
   }
 
@@ -126,6 +127,7 @@ export class PartiesService {
     return this.run(operation, async (context) => {
       await this.authorize(context, operation.businessId, "party.manage");
       if (!(await repository.updateSupplier(context, operation.businessId, partyId, { status: "archived" }))) throw notFoundError("Supplier not found");
+      await repository.archiveParty(context, operation.businessId, partyId);
     });
   }
 

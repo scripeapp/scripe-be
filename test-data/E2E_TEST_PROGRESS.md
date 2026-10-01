@@ -30,11 +30,11 @@ Tracking doc so anyone can continue from where testing stopped. Test data: [`spr
 | 12 | Store → Point of Sale | 🟢 | `GET /api/store/pos/analytics` **built & verified** (200) — POS-channel gross sales / orders / discounts / returns + daily chart. UI renders fully. **Till slice built (migration 0066 + POS domain + FE page)**: booking-order pricing (`POST /store/pos/order/preview|order`), order-from-booking with tips (`app.booking_tips`), deposits netted off tendered, commission report carries `tipsMinor`. Verified: `pos-till.integration.test.ts` (2 tests) + FE bookings panel/tip flow wired. |
 | 13 | Orders | 🟢 | Audited end to end via the till (2026-09-29): sell → order listed → detail → fulfil → receipt → shift close. 10 bugs fixed, see "Orders audit" below. |
 | 14 | Payments | 🟢 | Audited & verified: Added missing `GET /api/businesses/:id/banking/withdrawals` backend endpoint (verified by integration test); added interactive `PaymentDetailsDrawer` on transaction rows; payments list/filters and checkout routes verified. |
-| 15 | Customers | ⬜ | Not started |
+| 15 | Customers | 🟢 | Audited & verified end-to-end: Full customer CRUD, contact/address associations, CRM contacts listing & lifecycle filtering, ContactDetails wired to live customer orders/transactions/timeline/spend/segments, and archiving properly cascades to omit archived parties from CRM list. |
 | 16 | Banking | ⬜ | Not started |
 
 ## Next to test
-➡️ Resume audit at **Module 15 — Customers**, then 16 Banking. Also still worth a manual click-through: Store → Bookings (calendar → quick book → booking panel → till).
+➡️ Resume audit at **Module 16 — Banking**. Also still worth a manual click-through: Store → Bookings (calendar → quick book → booking panel → till).
 
 ## Orders audit (Module 13) — 2026-09-29 ✅
 Tested as a cashier would: register created → shift opened (₦10,000 float) → 3 till sales (cash with modifiers, card) → orders list/detail → fulfil → receipt → shift closed and reconciled. Bugs found and fixed:
@@ -172,3 +172,13 @@ Reading Anchor's docs against our code turned up four bugs that meant **no Ancho
 - **From the docs**: business accounts are `CURRENT` (we send that); the account number arrives separately (`accountNumber.created`); money into a deposit account is `nip.inbound.*`, and to a virtual NUBAN `payment.received`/`payment.settled` (we only handle `payment.received`/`payin.received` so far). Test funds: Dashboard → Accounts → Deposit Accounts → **Simulate Transfer**. The webhook can be created by API with our own token and `supportIncluded: true` (full resources in each event).
 - **Blocked**: the `trycloudflare.com` quick tunnel doesn't resolve on the dev network (DNS). The Anchor sandbox API is reachable.
 - Tests: new Anchor approval webhook test (documented payload shape), local storage tests, signature test updated. Full backend suite: 362 passing.
+
+## Customers audit (Module 15) — 2026-10-01 ✅
+Audited customer lifecycle, CRM contacts listing, contact details drawers, segment management, and campaigns:
+1. **[Orders party query fix]**: in `orders.repository.ts` (`findOrderWithLines`), the query was attempting to select `"name"`, `"email"`, `"phone"` directly from `app.parties` (which only has `"displayName"`). Fixed to query `"displayName"` and resolve primary email/phone from `app.party_contacts`.
+2. **[Customer-scoped orders filter]**: added `customerId` query parameter support to `GET /api/businesses/:businessId/orders` (schemas, repository, service, controller), enabling filtered customer order histories.
+3. **[Customer archive cascade]**: in `parties.service.ts`, `archiveCustomer` and `archiveSupplier` now call `repository.archiveParty`, setting `status = 'archived'` in `app.parties`. Previously, deleting a customer only marked their account inactive while leaving the party active, causing them to still appear in the CRM list.
+4. **[CRM contact adapters]**: updated `toCrmContact` in `Scripe-fe/src/queries/customers/adapters.ts` to surface `source`, `orders_count`, `lifetime_value`, `last_order_at` at top-level so lifecycle tabs (Repeat vs Lapsed) and source badges work accurately.
+5. **[ContactDetails live data]**: replaced non-existent `/crm/contacts/:id/activities` call in `ContactDetails.tsx` with live customer orders from `ordersApi`, generating transactional history, customer purchase timeline, and live segment memberships.
+6. **[Verification]**: added customer integration tests in `parties.integration.test.ts` (customer create, contact & address attachment, detail lookup, update, list, and soft-delete/archive). All 4 parties integration tests passing; frontend TypeScript check clean (`tsc --noEmit` 0 errors).
+

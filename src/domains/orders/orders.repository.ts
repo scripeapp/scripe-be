@@ -26,7 +26,11 @@ const ORDER_WITH_CONTEXT = sql`
 
 export async function find(c: DatabaseContext, businessId: string, orderId: string): Promise<OrderRow | undefined> { return (await sql<OrderRow>`${ORDER_WITH_CONTEXT} where o."businessId"=${businessId}::uuid and o."id"=${orderId}::uuid`.execute(c.transaction)).rows[0]; }
 export async function lines(c: DatabaseContext, businessId: string, orderId: string): Promise<OrderLineRow[]> { return (await sql<OrderLineRow>`select * from app.order_lines where "businessId"=${businessId}::uuid and "orderId"=${orderId}::uuid order by "createdAt","id"`.execute(c.transaction)).rows; }
-export async function list(c: DatabaseContext, businessId: string, status?: string, limit = 50): Promise<OrderRow[]> { const statusSql: RawBuilder<unknown> = status ? sql`and o."status"=${status}` : sql``; return (await sql<OrderRow>`${ORDER_WITH_CONTEXT} where o."businessId"=${businessId}::uuid ${statusSql} order by o."createdAt" desc,o."id" desc limit ${limit}`.execute(c.transaction)).rows; }
+export async function list(c: DatabaseContext, businessId: string, status?: string, limit = 50, customerId?: string): Promise<OrderRow[]> {
+  const statusSql: RawBuilder<unknown> = status ? sql`and o."status"=${status}` : sql``;
+  const customerSql: RawBuilder<unknown> = customerId ? sql`and o."customerPartyId"=${customerId}::uuid` : sql``;
+  return (await sql<OrderRow>`${ORDER_WITH_CONTEXT} where o."businessId"=${businessId}::uuid ${statusSql} ${customerSql} order by o."createdAt" desc,o."id" desc limit ${limit}`.execute(c.transaction)).rows;
+}
 
 export interface PricedLine { readonly line: CartLineRow; readonly productId: string; readonly sku: string | null; readonly description: string; readonly unitMinor: string; readonly lineTotalMinor: string; }
 
@@ -102,13 +106,18 @@ export async function findPublicOrderByReference(
   let customerPhone: string | undefined;
 
   if (order.customerPartyId) {
-    const party = (await sql<{ name: string; email: string | null; phone: string | null }>`
-      select "name", "email", "phone" from app.parties where "id"=${order.customerPartyId}::uuid
+    const party = (await sql<{ displayName: string }>`
+      select "displayName" from app.parties where "id"=${order.customerPartyId}::uuid
     `.execute(c.transaction)).rows[0];
     if (party) {
-      customerName = party.name;
-      customerEmail = party.email ?? undefined;
-      customerPhone = party.phone ?? undefined;
+      customerName = party.displayName;
+      const contacts = (await sql<{ kind: string; value: string }>`
+        select "kind", "value" from app.party_contacts
+        where "partyId"=${order.customerPartyId}::uuid and "status"='active'
+        order by "isPrimary" desc, "createdAt"
+      `.execute(c.transaction)).rows;
+      customerEmail = contacts.find((c) => c.kind === "email")?.value;
+      customerPhone = contacts.find((c) => c.kind === "phone")?.value;
     }
   }
 

@@ -66,4 +66,85 @@ describe("parties domain", () => {
     expect(updated.status).toBe(200);
     expect((updated.body as { data: { supplier: { supplierAccount: { accountName: string } } } }).data.supplier.supplierAccount.accountName).toBe("Acme Supplies Nigeria Ltd");
   });
+
+  it("creates, updates, lists, and archives a customer with contacts and addresses", async () => {
+    const owner = await actor("Customer Owner");
+    const businessResponse = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie: owner.cookies, body: JSON.stringify({ displayName: "Customer CRM Co" }) });
+    const business = (businessResponse.body as { data: { business: { id: string } } }).data.business;
+    const base = `/api/businesses/${business.id}`;
+
+    // 1. Create customer
+    const created = await request(server.baseUrl, `${base}/customers`, {
+      method: "POST",
+      cookie: owner.cookies,
+      body: JSON.stringify({
+        kind: "person",
+        displayName: "Chioma Adeleke",
+        customer: { acquisitionChannel: "store", lifecycleState: "active" },
+      }),
+    });
+    expect(created.status).toBe(201);
+    const customerPartyId = (created.body as { data: { customer: { id: string } } }).data.customer.id;
+
+    // 2. Add contacts
+    const emailContact = await request(server.baseUrl, `${base}/parties/${customerPartyId}/contacts`, {
+      method: "POST",
+      cookie: owner.cookies,
+      body: JSON.stringify({ kind: "email", value: "chioma@example.com", isPrimary: true }),
+    });
+    expect(emailContact.status).toBe(201);
+
+    const phoneContact = await request(server.baseUrl, `${base}/parties/${customerPartyId}/contacts`, {
+      method: "POST",
+      cookie: owner.cookies,
+      body: JSON.stringify({ kind: "phone", value: "+2348012345678", isPrimary: true }),
+    });
+    expect(phoneContact.status).toBe(201);
+
+    // 3. Add address
+    const address = await request(server.baseUrl, `${base}/parties/${customerPartyId}/addresses`, {
+      method: "POST",
+      cookie: owner.cookies,
+      body: JSON.stringify({ kind: "shipping", line1: "15 Admiralty Way", city: "Lekki", state: "Lagos", isDefault: true }),
+    });
+    expect(address.status).toBe(201);
+
+    // 4. Retrieve customer detail
+    const detail = await request(server.baseUrl, `${base}/customers/${customerPartyId}`, { cookie: owner.cookies });
+    expect(detail.status).toBe(200);
+    const customer = (detail.body as { data: { customer: { displayName: string; contacts: unknown[]; addresses: unknown[]; customerAccount: { acquisitionChannel: string } } } }).data.customer;
+    expect(customer.displayName).toBe("Chioma Adeleke");
+    expect(customer.contacts.length).toBe(2);
+    expect(customer.addresses.length).toBe(1);
+    expect(customer.customerAccount.acquisitionChannel).toBe("store");
+
+    // 5. Update customer
+    const updateRes = await request(server.baseUrl, `${base}/customers/${customerPartyId}`, {
+      method: "PATCH",
+      cookie: owner.cookies,
+      body: JSON.stringify({ displayName: "Chioma Adeleke-Balogun" }),
+    });
+    expect(updateRes.status).toBe(200);
+
+    // 6. List customers
+    const listRes = await request(server.baseUrl, `${base}/customers`, { cookie: owner.cookies });
+    expect(listRes.status).toBe(200);
+    const list = (listRes.body as { data: { parties: { id: string; displayName: string }[] } }).data.parties;
+    expect(list.length).toBe(1);
+    expect(list[0]!.id).toBe(customerPartyId);
+    expect(list[0]!.displayName).toBe("Chioma Adeleke-Balogun");
+
+    // 7. Archive customer
+    const archiveRes = await request(server.baseUrl, `${base}/customers/${customerPartyId}`, {
+      method: "DELETE",
+      cookie: owner.cookies,
+    });
+    expect(archiveRes.status).toBe(200);
+
+    // 8. Verify list omits archived customer
+    const listAfterArchive = await request(server.baseUrl, `${base}/customers`, { cookie: owner.cookies });
+    expect(listAfterArchive.status).toBe(200);
+    const listAfter = (listAfterArchive.body as { data: { parties: unknown[] } }).data.parties;
+    expect(listAfter.length).toBe(0);
+  });
 });
