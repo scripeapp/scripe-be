@@ -46,10 +46,16 @@ export class BankingController {
     if (!status.virtualAccount) {
       return null;
     }
+    const bank = NIGERIAN_BANKS.find(
+      (b) =>
+        b.name.toLowerCase() === status.virtualAccount?.bankName?.toLowerCase() ||
+        b.code === status.virtualAccount?.bankName,
+    );
     return {
       subaccount_code: status.virtualAccount.providerAccountId || "",
       business_name: status.virtualAccount.accountName || "",
-      settlement_bank: status.virtualAccount.bankName || "",
+      settlement_bank: bank?.code || status.virtualAccount.bankName || "",
+      settlement_bank_name: status.virtualAccount.bankName || "",
       account_number: status.virtualAccount.accountNumber || "",
     };
   });

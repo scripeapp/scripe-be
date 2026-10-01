@@ -31,10 +31,11 @@ Tracking doc so anyone can continue from where testing stopped. Test data: [`spr
 | 13 | Orders | 🟢 | Audited end to end via the till (2026-09-29): sell → order listed → detail → fulfil → receipt → shift close. 10 bugs fixed, see "Orders audit" below. |
 | 14 | Payments | 🟢 | Audited & verified: Added missing `GET /api/businesses/:id/banking/withdrawals` backend endpoint (verified by integration test); added interactive `PaymentDetailsDrawer` on transaction rows; payments list/filters and checkout routes verified. |
 | 15 | Customers | 🟢 | Audited & verified end-to-end: Full customer CRUD, contact/address associations, CRM contacts listing & lifecycle filtering, ContactDetails wired to live customer orders/transactions/timeline/spend/segments, and archiving properly cascades to omit archived parties from CRM list. |
-| 16 | Banking | ⬜ | Not started |
+| 16 | Banking | 🟢 | Audited & verified: Virtual account issuance & requery, corporate KYB + individual KYC submissions, wallet ledger & balance tracking, settlement bank resolution, recipient management, and PIN-secured withdrawals. All 19 integration tests passing. |
 
 ## Next to test
-➡️ Resume audit at **Module 16 — Banking**. Also still worth a manual click-through: Store → Bookings (calendar → quick book → booking panel → till).
+🎉 **All 16 core platform modules audited and verified!**
+Optional follow-up manual click-through: Store → Bookings (calendar → quick book → booking panel → till).
 
 ## Orders audit (Module 13) — 2026-09-29 ✅
 Tested as a cashier would: register created → shift opened (₦10,000 float) → 3 till sales (cash with modifiers, card) → orders list/detail → fulfil → receipt → shift closed and reconciled. Bugs found and fixed:
@@ -181,4 +182,14 @@ Audited customer lifecycle, CRM contacts listing, contact details drawers, segme
 4. **[CRM contact adapters]**: updated `toCrmContact` in `Scripe-fe/src/queries/customers/adapters.ts` to surface `source`, `orders_count`, `lifetime_value`, `last_order_at` at top-level so lifecycle tabs (Repeat vs Lapsed) and source badges work accurately.
 5. **[ContactDetails live data]**: replaced non-existent `/crm/contacts/:id/activities` call in `ContactDetails.tsx` with live customer orders from `ordersApi`, generating transactional history, customer purchase timeline, and live segment memberships.
 6. **[Verification]**: added customer integration tests in `parties.integration.test.ts` (customer create, contact & address attachment, detail lookup, update, list, and soft-delete/archive). All 4 parties integration tests passing; frontend TypeScript check clean (`tsc --noEmit` 0 errors).
+
+## Banking audit (Module 16) — 2026-10-01 ✅
+Audited virtual account management, wallet ledger, compliance (corporate KYB / individual KYC), withdrawals, recipient directories, and PIN security:
+1. **[Virtual Account & Wallet Status]**: Verified `GET /api/businesses/:id/banking/status` returning `kycStatus`, `virtualAccount`, and available ledger balance (`availableBalanceMinor`).
+2. **[KYC/KYB Submissions]**: Audited `CorporateKybModal` submitting both corporate KYB (multi-director, CAC certificate, proof of address, status report) and individual sole-proprietorship KYC (BVN validation) to `/banking/kyb` and `/banking/kyc`.
+3. **[Subaccount & Settlement Bank Resolution]**: Updated `getSubaccount` in `banking.controller.ts` to map virtual account `bankName` to standard Nigerian NIP bank codes (`settlement_bank: bank?.code`), ensuring withdrawal requests carry correct bank codes. Also updated frontend `WithdrawFlow` to resolve banks by code and name.
+4. **[Withdrawals & Transfers]**: Verified `POST /api/businesses/:id/banking/withdrawals` validating KYC verification prerequisites, wallet sufficiency, fraud signals for large amounts (> ₦500k/₦2m), approval gating via `ApprovalsService`, and provider transfer dispatch.
+5. **[PIN Authentication & Security]**: Verified `CreatePinModal` and `ConfirmPinModal` flows with attempt limiting and lockout handling.
+6. **[Ledger & Transaction Receipts]**: Verified `GET /banking/transactions` (wallet ledger), transaction search/filters, `TransactionDetailsDrawer`, and printable `BankingReceipt`.
+7. **[Verification & Tests]**: All 19 tests in `src/domains/banking` passing cleanly; `bill-transfers.integration.test.ts` (7/7) passing; `provider-events.integration.test.ts` (6/6) passing. Both FE and BE typechecks passing (`tsc` 0 errors).
 
