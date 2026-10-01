@@ -21,6 +21,8 @@ import { z } from "zod";
 import * as businesses from "../domains/businesses/businesses.schemas.js";
 import * as transfers from "../domains/transfers/transfers.schemas.js";
 import * as payroll from "../domains/payroll/payroll.schemas.js";
+import * as invoices from "../domains/invoices/invoices.schemas.js";
+import * as paylinks from "../domains/paylinks/paylinks.schemas.js";
 
 extendZodWithOpenApi(z);
 
@@ -51,6 +53,19 @@ const REQUEST_SCHEMAS: Record<string, Enrichment> = {
   "GET /api/businesses/:businessId/transfers": { query: transfers.listTransfersQuerySchema },
   "POST /api/businesses/:businessId/payroll/runs": { body: payroll.createRunSchema, summary: "Create a draft payroll run" },
   "GET /api/businesses/:businessId/payroll/runs": { query: payroll.listRunsQuerySchema },
+  "POST /api/businesses/:businessId/invoices": { body: invoices.createInvoiceSchema, summary: "Create a draft invoice" },
+  "PATCH /api/businesses/:businessId/invoices/:invoiceId": { body: invoices.updateInvoiceSchema, summary: "Update a draft invoice" },
+  "GET /api/businesses/:businessId/invoices": { query: invoices.listInvoicesQuery, summary: "List invoices with status/customer filters" },
+  "POST /api/businesses/:businessId/invoices/:invoiceId/send": { body: invoices.sendInvoiceSchema, summary: "Send invoice, create order and issue fiscal document" },
+  "POST /api/businesses/:businessId/invoices/:invoiceId/payments": { body: invoices.recordPaymentSchema, summary: "Record an offline payment against invoice" },
+  "GET /api/invoices/public/:token": { summary: "Public read for customer invoice by token" },
+  "POST /api/invoices/public/:token/pay": { summary: "Initiate public Paystack checkout for invoice balance" },
+  "GET /api/businesses/:businessId/paylinks": { query: paylinks.listPaylinksQuerySchema, summary: "List payment links" },
+  "POST /api/businesses/:businessId/paylinks": { body: paylinks.createPaylinkSchema, summary: "Create a payment link" },
+  "PATCH /api/businesses/:businessId/paylinks/:paylinkId": { body: paylinks.updatePaylinkSchema, summary: "Update a payment link" },
+  "GET /api/public/paylinks/:slug": { summary: "Public read for payment link by slug" },
+  "POST /api/public/paylinks/:slug/checkout": { body: paylinks.publicCheckoutSchema, summary: "Initiate public guest checkout for payment link" },
+  "GET /api/public/paylinks/checkout/:reference": { summary: "Check payment status for payment link checkout" },
 };
 
 /** Better Auth owns these; described inline so the login handshake is runnable. */

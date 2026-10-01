@@ -871,6 +871,54 @@ export interface InventoryLocations {
   status: Generated<string>;
 }
 
+export interface InvoiceLines {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  description: string;
+  discountMinor: Generated<Int8>;
+  id: Generated<string>;
+  invoiceId: string;
+  lineTotalMinor: Int8;
+  productVariantId: string | null;
+  quantity: Generated<Numeric>;
+  sortOrder: Generated<number>;
+  taxRateBps: Generated<number>;
+  unitPriceMinor: Int8;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface Invoices {
+  businessId: string;
+  channelId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string;
+  currency: Generated<string>;
+  customerPartyId: string | null;
+  discountMinor: Generated<Int8>;
+  dueDate: Timestamp;
+  fiscalDocumentId: string | null;
+  id: Generated<string>;
+  invoiceNumber: string | null;
+  issueDate: Generated<Timestamp>;
+  lastReminderAt: Timestamp | null;
+  notes: string | null;
+  orderId: string | null;
+  payToAccountName: string | null;
+  payToAccountNumber: string | null;
+  payToBankName: string | null;
+  payToVirtualAccountId: string | null;
+  publicToken: Generated<string>;
+  sentAt: Timestamp | null;
+  status: Generated<string>;
+  storeId: string;
+  subtotalMinor: Generated<Int8>;
+  taxMinor: Generated<Int8>;
+  terms: string | null;
+  totalMinor: Generated<Int8>;
+  updatedAt: Generated<Timestamp>;
+  voidedAt: Timestamp | null;
+}
+
 export interface JobAttempts {
   attemptNumber: number;
   error: string | null;
@@ -1030,7 +1078,7 @@ export interface OrderLines {
   id: Generated<string>;
   lineTotalMinor: Int8;
   orderId: string;
-  productVariantId: string;
+  productVariantId: string | null;
   quantity: number;
   selectedModifiers: Generated<Json>;
   sku: string | null;
@@ -1054,6 +1102,7 @@ export interface Orders {
   locationId: string | null;
   operatorStaffId: string | null;
   orderNumber: string;
+  paylinkId: string | null;
   paymentStatus: Generated<string>;
   posDeviceId: string | null;
   registerShiftId: string | null;
@@ -1108,6 +1157,33 @@ export interface PartyContacts {
   status: Generated<string>;
   updatedAt: Generated<Timestamp>;
   value: string;
+}
+
+export interface Paylinks {
+  amountMinor: Int8 | null;
+  amountType: Generated<string>;
+  businessId: string;
+  channelId: string;
+  collectAddress: Generated<boolean>;
+  collectName: Generated<boolean>;
+  collectPhone: Generated<boolean>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  currency: Generated<string>;
+  description: string | null;
+  expiresAt: Timestamp | null;
+  id: Generated<string>;
+  imageKey: string | null;
+  minAmountMinor: Int8 | null;
+  mode: string;
+  productVariantId: string | null;
+  redirectUrl: string | null;
+  slug: string;
+  status: Generated<string>;
+  storeId: string;
+  suggestedAmountsMinor: Generated<Json>;
+  title: string;
+  updatedAt: Generated<Timestamp>;
 }
 
 export interface PaymentAllocations {
@@ -2050,6 +2126,8 @@ export interface DB {
   goods_receipts: GoodsReceipts;
   inventory_items: InventoryItems;
   inventory_locations: InventoryLocations;
+  invoice_lines: InvoiceLines;
+  invoices: Invoices;
   job_attempts: JobAttempts;
   jobs: Jobs;
   journal_entries: JournalEntries;
@@ -2066,6 +2144,7 @@ export interface DB {
   parties: Parties;
   party_addresses: PartyAddresses;
   party_contacts: PartyContacts;
+  paylinks: Paylinks;
   payment_allocations: PaymentAllocations;
   payment_attempts: PaymentAttempts;
   payments: Payments;

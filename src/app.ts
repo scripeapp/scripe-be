@@ -36,6 +36,8 @@ import { createPaymentsRouter } from "./domains/payments/payments.routes.js";
 import { createFulfillmentRouter } from "./domains/fulfillment/fulfillment.routes.js";
 import { createReceiptsRouter } from "./domains/receipts/receipts.routes.js";
 import { createReturnsRouter } from "./domains/returns/returns.routes.js";
+import { createInvoicesRouter } from "./domains/invoices/invoices.routes.js";
+import { createPaylinksRouter } from "./domains/paylinks/paylinks.routes.js";
 import { createBankingRouter } from "./domains/banking/banking.routes.js";
 import { createProviderEventsRouter } from "./domains/provider-events/provider-events.routes.js";
 import { createLocalStorageRouter } from "./integrations/local-object-storage.js";
@@ -117,6 +119,8 @@ export function createApp(): Express {
   app.use(createFulfillmentRouter());
   app.use(createReceiptsRouter());
   app.use(createReturnsRouter());
+  app.use(createInvoicesRouter());
+  app.use(createPaylinksRouter());
   app.use(createBankingRouter());
   app.use(createApprovalsRouter());
   app.use(createPlatformRouter());

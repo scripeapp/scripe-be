@@ -44,6 +44,20 @@ export class PaystackCheckoutGateway implements CheckoutGateway {
   }
 
   async initializeCheckout(input: InitializeCheckoutInput): Promise<InitializedCheckout> {
+    const env = loadEnvironment();
+    if (!env.PAYSTACK_SECRET_KEY) {
+      if (env.NODE_ENV === "production") {
+        throw serviceUnavailableError("Paystack checkout is not configured (missing PAYSTACK_SECRET_KEY).");
+      }
+      console.log(`[paystack:dev] Initialized mock checkout ref=${input.reference} amount=${input.amountMinor}`);
+      const callback = input.callbackUrl || `${env.FRONTEND_URL}/payment-processing`;
+      const sep = callback.includes("?") ? "&" : "?";
+      return {
+        authorizationUrl: `${callback}${sep}reference=${encodeURIComponent(input.reference)}&status=success&mock=true`,
+        reference: input.reference,
+      };
+    }
+
     const data = await this.request<PaystackInitializeData>("POST", "/transaction/initialize", {
       amount: Number(input.amountMinor),
       email: input.email,
@@ -56,6 +70,17 @@ export class PaystackCheckoutGateway implements CheckoutGateway {
   }
 
   async verifyCheckout(reference: string): Promise<CheckoutVerification> {
+    const env = loadEnvironment();
+    if (!env.PAYSTACK_SECRET_KEY && env.NODE_ENV !== "production") {
+      return {
+        status: "success",
+        amountMinor: "0",
+        assetCode: "NGN",
+        paidAt: new Date().toISOString(),
+        failureReason: null,
+      };
+    }
+
     const data = await this.request<PaystackVerifyData>("GET", `/transaction/verify/${encodeURIComponent(reference)}`);
     return {
       status: data.status === "success" ? "success" : data.status === "abandoned" ? "pending" : "failed",
