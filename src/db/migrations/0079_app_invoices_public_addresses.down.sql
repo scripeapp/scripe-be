@@ -1,0 +1,2 @@
+-- 0079_app_invoices_public_addresses.down.sql
+-- No-op or restore previous get_public_invoice function definition if rolled back.

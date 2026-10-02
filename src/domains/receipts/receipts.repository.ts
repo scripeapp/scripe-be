@@ -26,7 +26,7 @@ export async function issueReceipt(
   await sql`select "id" from app.businesses where "id" = ${businessId}::uuid for update`.execute(context.transaction);
 
   const next = await sql<{ next: string }>`
-    select coalesce(max("sequence"), 0) + 1 as "next" from app.fiscal_documents where "businessId" = ${businessId}::uuid
+    select coalesce(max("sequence"), 0) + 1 as "next" from app.fiscal_documents where "businessId" = ${businessId}::uuid and "kind" = 'receipt'
   `.execute(context.transaction);
   const sequence = next.rows[0]!.next;
   const number = `RCT-${sequence.padStart(6, "0")}`;
@@ -37,6 +37,35 @@ export async function issueReceipt(
       "subtotalMinor", "taxMinor", "totalMinor", "createdBy"
     ) values (
       ${businessId}::uuid, ${orderId}::uuid, 'receipt', ${sequence}::bigint, ${number}, ${order.currency},
+      ${order.subtotalMinor}::bigint, ${order.taxMinor}::bigint, ${order.totalMinor}::bigint, ${userId}::uuid
+    )
+    returning "id", "businessId", "orderId", "kind", "sequence"::text, "number", "currency",
+      "subtotalMinor"::text, "taxMinor"::text, "totalMinor"::text, "issuedAt", "createdBy"
+  `.execute(context.transaction);
+  return result.rows[0]!;
+}
+
+export async function issueInvoice(
+  context: DatabaseContext,
+  businessId: string,
+  orderId: string,
+  userId: string | null,
+  order: OrderSnapshot,
+): Promise<FiscalDocumentRow> {
+  await sql`select "id" from app.businesses where "id" = ${businessId}::uuid for update`.execute(context.transaction);
+
+  const next = await sql<{ next: string }>`
+    select coalesce(max("sequence"), 0) + 1 as "next" from app.fiscal_documents where "businessId" = ${businessId}::uuid and "kind" = 'invoice'
+  `.execute(context.transaction);
+  const sequence = next.rows[0]!.next;
+  const number = `INV-${sequence.padStart(6, "0")}`;
+
+  const result = await sql<FiscalDocumentRow>`
+    insert into app.fiscal_documents (
+      "businessId", "orderId", "kind", "sequence", "number", "currency",
+      "subtotalMinor", "taxMinor", "totalMinor", "createdBy"
+    ) values (
+      ${businessId}::uuid, ${orderId}::uuid, 'invoice', ${sequence}::bigint, ${number}, ${order.currency},
       ${order.subtotalMinor}::bigint, ${order.taxMinor}::bigint, ${order.totalMinor}::bigint, ${userId}::uuid
     )
     returning "id", "businessId", "orderId", "kind", "sequence"::text, "number", "currency",

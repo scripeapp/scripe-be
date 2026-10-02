@@ -65,6 +65,34 @@ export interface EmailSender {
     to: string,
     params: VirtualAccountDepositEmail,
   ): Promise<void>;
+  sendInvoiceIssued(
+    to: string,
+    params: InvoiceIssuedEmail,
+  ): Promise<void>;
+  sendInvoiceReminder(
+    to: string,
+    params: InvoiceReminderEmail,
+  ): Promise<void>;
+}
+
+export interface InvoiceIssuedEmail {
+  readonly businessName: string;
+  readonly customerName: string;
+  readonly invoiceNumber: string;
+  readonly amountFormatted: string;
+  readonly dueDate: string;
+  readonly payUrl: string;
+  readonly notes?: string | null;
+}
+
+export interface InvoiceReminderEmail {
+  readonly businessName: string;
+  readonly customerName: string;
+  readonly invoiceNumber: string;
+  readonly amountFormatted: string;
+  readonly dueDate: string;
+  readonly payUrl: string;
+  readonly isOverdue?: boolean;
 }
 
 export interface BusinessInvitationEmail {
@@ -252,6 +280,87 @@ export class PlunkEmailSender implements EmailSender {
         `<p style="margin:24px 0"><a href="${escapeHtml(params.dashboardUrl)}" style="background-color:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:500;display:inline-block">View Transaction</a></p>` +
         `</div>`,
       logHint: `deposit_received=${params.amountFormatted}`,
+    });
+  }
+
+  async sendInvoiceIssued(
+    to: string,
+    params: InvoiceIssuedEmail,
+  ): Promise<void> {
+    await this.send({
+      to,
+      subject: `Invoice ${params.invoiceNumber} from ${params.businessName} — Scripe`,
+      html:
+        `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
+        `<div style="margin-bottom:20px;border-bottom:1px solid #e5e7eb;padding-bottom:12px">` +
+        `<h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">${escapeHtml(params.businessName)}</h2>` +
+        `</div>` +
+        `<p style="font-size:15px;line-height:22px;color:#374151">Hello ${escapeHtml(params.customerName)},</p>` +
+        `<p style="font-size:15px;line-height:22px;color:#374151">You have received invoice <strong>${escapeHtml(params.invoiceNumber)}</strong> from <strong>${escapeHtml(params.businessName)}</strong>.</p>` +
+        `<div style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:20px 0">` +
+        `<div style="display:flex;justify-content:space-between;margin-bottom:8px">` +
+        `<span style="color:#6b7280;font-size:13px">Invoice number:</span>` +
+        `<span style="font-weight:600;font-size:13px;color:#111827">${escapeHtml(params.invoiceNumber)}</span>` +
+        `</div>` +
+        `<div style="display:flex;justify-content:space-between;margin-bottom:8px">` +
+        `<span style="color:#6b7280;font-size:13px">Amount due:</span>` +
+        `<span style="font-weight:700;font-size:16px;color:#111827">${escapeHtml(params.amountFormatted)}</span>` +
+        `</div>` +
+        `<div style="display:flex;justify-content:space-between">` +
+        `<span style="color:#6b7280;font-size:13px">Due date:</span>` +
+        `<span style="font-weight:500;font-size:13px;color:#111827">${escapeHtml(params.dueDate)}</span>` +
+        `</div>` +
+        `</div>` +
+        (params.notes
+          ? `<p style="font-size:14px;color:#6b7280;font-style:italic;margin-bottom:20px">${escapeHtml(params.notes)}</p>`
+          : "") +
+        `<p style="margin:28px 0"><a href="${escapeHtml(params.payUrl)}" style="background-color:#FF5B1F;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:24px;font-weight:600;font-size:14px;display:inline-block">View & Pay Invoice</a></p>` +
+        `<p style="color:#9ca3af;font-size:12px;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px">` +
+        `If the button above does not work, visit: <br/><a href="${escapeHtml(params.payUrl)}" style="color:#FF5B1F">${escapeHtml(params.payUrl)}</a>` +
+        `</p>` +
+        `</div>`,
+      logHint: `invoice_issued=${params.invoiceNumber}`,
+    });
+  }
+
+  async sendInvoiceReminder(
+    to: string,
+    params: InvoiceReminderEmail,
+  ): Promise<void> {
+    const title = params.isOverdue
+      ? "Overdue Invoice Reminder"
+      : "Invoice Payment Reminder";
+    await this.send({
+      to,
+      subject: `Reminder: Invoice ${params.invoiceNumber} from ${params.businessName} — Scripe`,
+      html:
+        `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
+        `<div style="margin-bottom:20px;border-bottom:1px solid #e5e7eb;padding-bottom:12px">` +
+        `<h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">${escapeHtml(params.businessName)}</h2>` +
+        `</div>` +
+        `<h3 style="font-size:16px;font-weight:600;color:${params.isOverdue ? "#ef4444" : "#111827"};margin-bottom:12px">${title}</h3>` +
+        `<p style="font-size:15px;line-height:22px;color:#374151">Hello ${escapeHtml(params.customerName)},</p>` +
+        `<p style="font-size:15px;line-height:22px;color:#374151">This is a reminder regarding invoice <strong>${escapeHtml(params.invoiceNumber)}</strong> from <strong>${escapeHtml(params.businessName)}</strong>.</p>` +
+        `<div style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:20px 0">` +
+        `<div style="display:flex;justify-content:space-between;margin-bottom:8px">` +
+        `<span style="color:#6b7280;font-size:13px">Invoice number:</span>` +
+        `<span style="font-weight:600;font-size:13px;color:#111827">${escapeHtml(params.invoiceNumber)}</span>` +
+        `</div>` +
+        `<div style="display:flex;justify-content:space-between;margin-bottom:8px">` +
+        `<span style="color:#6b7280;font-size:13px">Amount due:</span>` +
+        `<span style="font-weight:700;font-size:16px;color:#111827">${escapeHtml(params.amountFormatted)}</span>` +
+        `</div>` +
+        `<div style="display:flex;justify-content:space-between">` +
+        `<span style="color:#6b7280;font-size:13px">Due date:</span>` +
+        `<span style="font-weight:500;font-size:13px;color:#111827">${escapeHtml(params.dueDate)}</span>` +
+        `</div>` +
+        `</div>` +
+        `<p style="margin:28px 0"><a href="${escapeHtml(params.payUrl)}" style="background-color:#FF5B1F;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:24px;font-weight:600;font-size:14px;display:inline-block">View & Pay Invoice</a></p>` +
+        `<p style="color:#9ca3af;font-size:12px;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px">` +
+        `If the button above does not work, visit: <br/><a href="${escapeHtml(params.payUrl)}" style="color:#FF5B1F">${escapeHtml(params.payUrl)}</a>` +
+        `</p>` +
+        `</div>`,
+      logHint: `invoice_reminder=${params.invoiceNumber}`,
     });
   }
 

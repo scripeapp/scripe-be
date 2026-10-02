@@ -5,6 +5,7 @@ export interface DashboardStats {
   readonly revenue: { readonly total: number; readonly paid_count: number };
   readonly total_orders: number;
   readonly total_customers: number;
+  readonly chart: { readonly date: string; readonly revenue: number }[];
 }
 
 /**
@@ -38,15 +39,52 @@ export async function getStats(
       and (${sinceIso}::timestamptz is null or "createdAt" >= ${sinceIso}::timestamptz)
   `.execute(context.transaction);
 
+  const chart = await sql<{ date: string; revenue: string }>`
+    with bounds as (
+      select coalesce(
+        ${sinceIso}::timestamptz,
+        (select min("createdAt") from app.payments where "businessId" = ${businessId}::uuid and "assetCode" = ${currency} and "status" = 'captured'),
+        now() - interval '30 days'
+      ) as start_time,
+      now() as end_time
+    ),
+    date_series as (
+      select generate_series(
+        date_trunc('day', (select start_time from bounds)),
+        date_trunc('day', (select end_time from bounds)),
+        '1 day'::interval
+      )::date as day
+    ),
+    daily_totals as (
+      select date_trunc('day', "createdAt")::date as day,
+             sum("amountMinor") as total
+      from app.payments
+      where "businessId" = ${businessId}::uuid
+        and "assetCode" = ${currency}
+        and "status" = 'captured'
+        and (${sinceIso}::timestamptz is null or "createdAt" >= ${sinceIso}::timestamptz)
+      group by 1
+    )
+    select to_char(ds.day, 'YYYY-MM-DD') as date,
+           coalesce(dt.total, 0)::text as revenue
+    from date_series ds
+    left join daily_totals dt on dt.day = ds.day
+    order by ds.day asc
+  `.execute(context.transaction);
+
   const r = revenue.rows[0];
   const o = orders.rows[0];
   return {
     revenue: {
-      total: Number(r?.total ?? 0),
+      total: Number(r?.total ?? 0) / 100,
       paid_count: Number(r?.paid_count ?? 0),
     },
     total_orders: Number(o?.total_orders ?? 0),
     total_customers: Number(o?.total_customers ?? 0),
+    chart: chart.rows.map((row) => ({
+      date: row.date,
+      revenue: Number(row.revenue ?? 0) / 100,
+    })),
   };
 }
 
@@ -104,11 +142,11 @@ export async function getPosAnalytics(
 
   const s = summary.rows[0];
   return {
-    gross_sales: Number(s?.gross ?? 0),
+    gross_sales: Number(s?.gross ?? 0) / 100,
     orders_count: Number(s?.orders ?? 0),
-    discounts_total: Number(s?.discounts ?? 0),
-    returns_total: Number(s?.returns ?? 0),
-    sales_chart: chart.rows.map((row) => ({ date: row.date, value: Number(row.value) })),
+    discounts_total: Number(s?.discounts ?? 0) / 100,
+    returns_total: Number(s?.returns ?? 0) / 100,
+    sales_chart: chart.rows.map((row) => ({ date: row.date, value: Number(row.value) / 100 })),
   };
 }
 
@@ -166,7 +204,7 @@ export async function getStoreAnalytics(
 
   const summary = revenue.rows[0];
   const result: StoreAnalytics = {
-    total_revenue: Number(summary?.total ?? 0),
+    total_revenue: Number(summary?.total ?? 0) / 100,
     total_orders: Number(summary?.total_orders ?? 0),
     total_customers: Number(summary?.total_customers ?? 0),
     total_products: Number(products.rows[0]?.total_products ?? 0),
@@ -194,7 +232,7 @@ export async function getStoreAnalytics(
   return {
     ...result,
     locations: locations.rows.map((row) => {
-      const netSales = Number(row.net_sales ?? 0);
+      const netSales = Number(row.net_sales ?? 0) / 100;
       const transactions = Number(row.transactions ?? 0);
       return {
         id: row.id,

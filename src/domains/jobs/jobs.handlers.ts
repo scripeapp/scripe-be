@@ -1,6 +1,7 @@
 import { withDatabaseContext } from "../../db/database-context.js";
 import type { Database } from "../../db/database.types.js";
 import { anonymousPrincipal } from "../../db/principal.js";
+import { runInvoiceOverdueSweep } from "../invoices/invoices.service.js";
 import { runDunningSweep } from "../subscriptions/subscriptions.service.js";
 import * as uploadsRepository from "../uploads/uploads.repository.js";
 import * as repository from "./jobs.repository.js";
@@ -12,6 +13,9 @@ const RESCHEDULE_INTERVAL_MS = 60 * 60 * 1000;
 
 const DUNNING_CHECK_JOB_TYPE = "subscriptions.dunning_check";
 const DUNNING_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+const INVOICE_OVERDUE_SWEEP_JOB_TYPE = "invoices.overdue_sweep";
+const INVOICE_OVERDUE_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The one concrete task this slice ships: sweeps app.uploads for rows left
@@ -46,10 +50,25 @@ function dunningCheckHandler(database: Database) {
   };
 }
 
+/**
+ * Daily invoice overdue sweep: finds open invoices that are past their due date
+ * and have remaining balances, and sends automated reminder emails to customers.
+ */
+function invoiceOverdueSweepHandler(database: Database) {
+  return async (): Promise<{ rescheduleAt: Date }> => {
+    const { remindersSent } = await withDatabaseContext(database, anonymousPrincipal("job-scheduler"), (context) =>
+      runInvoiceOverdueSweep(context),
+    );
+    if (remindersSent > 0) console.log(`[jobs] invoice overdue sweep: ${remindersSent} reminder(s) sent`);
+    return { rescheduleAt: new Date(Date.now() + INVOICE_OVERDUE_SWEEP_INTERVAL_MS) };
+  };
+}
+
 /** Registers every built-in job handler and seeds their first run - called once from server.ts, never from app.ts (so it never runs under the test harness). */
 export function registerBuiltinJobHandlers(scheduler: JobScheduler, database: Database): void {
   scheduler.register(UPLOAD_EXPIRY_JOB_TYPE, expireStalePendingUploadsHandler(database));
   scheduler.register(DUNNING_CHECK_JOB_TYPE, dunningCheckHandler(database));
+  scheduler.register(INVOICE_OVERDUE_SWEEP_JOB_TYPE, invoiceOverdueSweepHandler(database));
 }
 
 /** Idempotent: only seeds a recurring job if one isn't already pending/running, so restarts don't pile up duplicates. */
@@ -57,5 +76,6 @@ export async function seedBuiltinJobs(database: Database): Promise<void> {
   await withDatabaseContext(database, anonymousPrincipal("job-scheduler-seed"), async (context) => {
     await repository.ensureRecurringJob(context, UPLOAD_EXPIRY_JOB_TYPE, 5);
     await repository.ensureRecurringJob(context, DUNNING_CHECK_JOB_TYPE, 5);
+    await repository.ensureRecurringJob(context, INVOICE_OVERDUE_SWEEP_JOB_TYPE, 5);
   });
 }
