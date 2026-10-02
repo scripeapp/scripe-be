@@ -119,20 +119,24 @@ begin
       p."name" as product_name,
       v."name" as variant_name,
       v."sku",
-      p."description"
+      p."description",
+      pr."amountMinor" as price_minor
     into prod
     from app.product_variants v
     join app.products p on p."id" = v."productId" and p."businessId" = v."businessId"
+    left join app.product_prices pr on pr."productVariantId" = v."id" and pr."status" = 'active' and pr."locationId" is null
     where v."id" = pl."productVariantId" and v."businessId" = pl."businessId"
+    order by pr."effectiveFrom" desc nulls last
     limit 1;
 
-    if prod is not null then
+    if FOUND then
       prod_json := jsonb_build_object(
         'name', case when prod.variant_name is not null and prod.variant_name <> 'Default'
                   then prod.product_name || ' (' || prod.variant_name || ')'
                   else prod.product_name end,
         'sku', prod."sku",
-        'description', prod."description"
+        'description', prod."description",
+        'priceMinor', case when prod.price_minor is not null then prod.price_minor::text else null end
       );
     end if;
   end if;
@@ -148,7 +152,10 @@ begin
     'description', pl."description",
     'imageKey', pl."imageKey",
     'amountType', pl."amountType",
-    'amountMinor', case when pl."amountMinor" is not null then pl."amountMinor"::text else null end,
+    'amountMinor', case 
+      when pl."amountMinor" is not null and pl."amountMinor" > 0 then pl."amountMinor"::text
+      when prod_json is not null and prod_json->>'priceMinor' is not null then prod_json->>'priceMinor'
+      else null end,
     'minAmountMinor', case when pl."minAmountMinor" is not null then pl."minAmountMinor"::text else null end,
     'suggestedAmountsMinor', pl."suggestedAmountsMinor",
     'currency', pl."currency",
