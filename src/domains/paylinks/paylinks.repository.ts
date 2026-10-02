@@ -105,7 +105,7 @@ export async function createPaylink(
       ${input.collectPhone ?? true},
       ${input.collectAddress ?? false},
       ${input.redirectUrl ?? null},
-      'active',
+      ${input.status ?? 'active'},
       ${input.expiresAt ? new Date(input.expiresAt) : null},
       ${userId}::uuid
     )

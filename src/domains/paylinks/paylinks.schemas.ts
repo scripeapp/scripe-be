@@ -42,6 +42,7 @@ export const createPaylinkSchema = z.object({
   redirectUrl: z.string().trim().url().max(500).optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
   storeId: z.string().uuid().optional().nullable(),
+  status: z.enum(["active", "paused"]).default("active"),
 });
 
 export const updatePaylinkSchema = z.object({

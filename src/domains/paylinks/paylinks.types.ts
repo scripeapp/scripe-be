@@ -64,6 +64,7 @@ export interface CreatePaylinkInput {
   readonly redirectUrl?: string | null;
   readonly expiresAt?: string | null;
   readonly storeId?: string | null;
+  readonly status?: PaylinkStatus;
 }
 
 export interface UpdatePaylinkInput {
