@@ -1,8 +1,12 @@
 import { sql } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
+import { loadEnvironment } from "../../shared/environment.js";
 import { conflictError } from "../../shared/errors.js";
 import type {
   CreatePaylinkInput,
+  DeliveryAddress,
+  PaylinkAmountType,
+  PaylinkMode,
   PaylinkPaymentSummary,
   PaylinkRow,
   PaylinkStatus,
@@ -10,19 +14,54 @@ import type {
   UpdatePaylinkInput,
 } from "./paylinks.types.js";
 
+export function publicPaylinkUrl(slug: string): string {
+  return `${loadEnvironment().FRONTEND_URL.replace(/\/+$/, "")}/pay/${slug}`;
+}
+
 export async function findDefaultStore(
   context: DatabaseContext,
   businessId: string,
 ): Promise<{ id: string; currency: string } | undefined> {
-  const result = await sql<{ id: string }>`
-    select "id"
-    from app.stores
-    where "businessId" = ${businessId}::uuid and "status" <> 'archived'
-    order by "createdAt"
+  const result = await sql<{ id: string; currency: string | null }>`
+    select s."id", b."defaultCurrency" as "currency"
+    from app.stores s
+    join app.businesses b on b."id" = s."businessId"
+    where s."businessId" = ${businessId}::uuid and s."status" <> 'archived'
+    order by s."createdAt"
     limit 1
   `.execute(context.transaction);
-  if (!result.rows[0]) return undefined;
-  return { id: result.rows[0].id, currency: "NGN" };
+  const row = result.rows[0];
+  if (!row) return undefined;
+  return { id: row.id, currency: row.currency ?? "NGN" };
+}
+
+export async function countActivePaylinks(context: DatabaseContext, businessId: string): Promise<number> {
+  const result = await sql<{ count: string }>`
+    select count(*) as "count" from app.paylinks where "businessId" = ${businessId}::uuid and "status" = 'active'
+  `.execute(context.transaction);
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+/** Business active and under no risk hold (migration 0084); callable without a business identity. */
+export async function isBusinessAcceptingPayments(context: DatabaseContext, businessId: string): Promise<boolean> {
+  const result = await sql<{ accepting: boolean }>`
+    select app.business_accepting_payments(${businessId}::uuid) as "accepting"
+  `.execute(context.transaction);
+  return result.rows[0]?.accepting ?? false;
+}
+
+export async function listStalePaylinkPayments(context: DatabaseContext, olderThanMinutes: number, afterCreatedAt: Date | null, maxRows: number): Promise<{ reference: string; createdAt: Date }[]> {
+  const result = await sql<{ reference: string; createdAt: Date }>`
+    select * from app.list_stale_paylink_payments(${`${olderThanMinutes} minutes`}::interval, ${afterCreatedAt}::timestamptz, ${maxRows})
+  `.execute(context.transaction);
+  return result.rows;
+}
+
+export async function countRecentWebhookSignatureFailures(context: DatabaseContext, withinMinutes: number): Promise<number> {
+  const result = await sql<{ failures: number }>`
+    select app.count_recent_webhook_signature_failures(${`${withinMinutes} minutes`}::interval) as "failures"
+  `.execute(context.transaction);
+  return Number(result.rows[0]?.failures ?? 0);
 }
 
 export async function ensurePaylinkChannel(
@@ -68,6 +107,30 @@ export async function isSlugAvailable(
       ${excludePaylinkId ? sql`and "id" <> ${excludePaylinkId}::uuid` : sql``}
   `.execute(context.transaction);
   return Number(result.rows[0]?.count ?? 0) === 0;
+}
+
+/** A link image must be a confirmed product-image upload of this same business — never an arbitrary object key, which the public page would presign for anyone. */
+export async function isConfirmedBusinessImage(context: DatabaseContext, businessId: string, objectKey: string): Promise<boolean> {
+  const result = await sql<{ found: number }>`
+    select 1 as "found" from app.uploads
+    where "objectKey" = ${objectKey} and "businessId" = ${businessId}::uuid
+      and "status" = 'confirmed' and "purpose" = 'product_image'
+    limit 1
+  `.execute(context.transaction);
+  return result.rows.length > 0;
+}
+
+/** The variant's current business-wide price, as get_public_paylink resolves it. */
+export async function findVariantPriceMinor(context: DatabaseContext, businessId: string, productVariantId: string): Promise<string | null> {
+  const result = await sql<{ amountMinor: string }>`
+    select pr."amountMinor"::text as "amountMinor"
+    from app.product_variants v
+    join app.product_prices pr on pr."productVariantId" = v."id" and pr."status" = 'active' and pr."locationId" is null
+    where v."id" = ${productVariantId}::uuid and v."businessId" = ${businessId}::uuid
+    order by pr."effectiveFrom" desc nulls last
+    limit 1
+  `.execute(context.transaction);
+  return result.rows[0]?.amountMinor ?? null;
 }
 
 export async function createPaylink(
@@ -122,18 +185,6 @@ export async function findPaylinkById(
   const result = await sql<PaylinkRow>`
     select * from app.paylinks
     where "id" = ${paylinkId}::uuid and "businessId" = ${businessId}::uuid
-    limit 1
-  `.execute(context.transaction);
-  return result.rows[0];
-}
-
-export async function findPaylinkBySlug(
-  context: DatabaseContext,
-  slug: string,
-): Promise<PaylinkRow | undefined> {
-  const result = await sql<PaylinkRow>`
-    select * from app.paylinks
-    where "slug" = ${slug} and "status" = 'active'
     limit 1
   `.execute(context.transaction);
   return result.rows[0];
@@ -203,12 +254,13 @@ export async function listPaylinks(
     storeId: row.storeId,
     channelId: row.channelId,
     slug: row.slug,
-    mode: row.mode as any,
+    publicUrl: publicPaylinkUrl(row.slug),
+    mode: row.mode as PaylinkMode,
     title: row.title,
     description: row.description,
     imageUrl: null,
     imageKey: row.imageKey,
-    amountType: row.amountType as any,
+    amountType: row.amountType as PaylinkAmountType,
     amountMinor: row.amountMinor ? String(row.amountMinor) : null,
     minAmountMinor: row.minAmountMinor ? String(row.minAmountMinor) : null,
     suggestedAmountsMinor: Array.isArray(row.suggestedAmountsMinor)
@@ -295,6 +347,8 @@ export async function listPaylinkPayments(
     status: string;
     customerName: string | null;
     customerEmail: string | null;
+    customerPhone: string | null;
+    deliveryAddress: DeliveryAddress | null;
     reference: string;
     paidAt: Date | null;
     createdAt: Date;
@@ -306,14 +360,25 @@ export async function listPaylinkPayments(
       pm."assetCode" as "currency",
       pm."status",
       party."displayName" as "customerName",
-      contact."value" as "customerEmail",
+      email."value" as "customerEmail",
+      phone."value" as "customerPhone",
+      o."deliveryAddress",
       coalesce(pm."externalReference", pm."id"::text) as "reference",
       case when pm."status" = 'captured' then pm."updatedAt" else null end as "paidAt",
       pm."createdAt"
     from app.payments pm
     join app.orders o on o."id" = pm."orderId" and o."businessId" = pm."businessId"
     left join app.parties party on party."id" = o."customerPartyId" and party."businessId" = o."businessId"
-    left join app.party_contacts contact on contact."partyId" = party."id" and contact."businessId" = party."businessId" and contact."kind" = 'email'
+    left join lateral (
+      select c."value" from app.party_contacts c
+      where c."partyId" = party."id" and c."businessId" = party."businessId" and c."kind" = 'email'
+      order by c."isPrimary" desc limit 1
+    ) email on true
+    left join lateral (
+      select c."value" from app.party_contacts c
+      where c."partyId" = party."id" and c."businessId" = party."businessId" and c."kind" = 'phone'
+      order by c."isPrimary" desc limit 1
+    ) phone on true
     where o."businessId" = ${businessId}::uuid and o."paylinkId" = ${paylinkId}::uuid
     order by pm."createdAt" desc
   `.execute(context.transaction);
@@ -326,6 +391,8 @@ export async function listPaylinkPayments(
     status: row.status,
     customerName: row.customerName,
     customerEmail: row.customerEmail,
+    customerPhone: row.customerPhone,
+    deliveryAddress: row.deliveryAddress,
     reference: row.reference,
     paidAt: row.paidAt ? row.paidAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
@@ -359,6 +426,7 @@ export interface PublicPaylinkData {
     name: string;
     sku: string | null;
     description: string | null;
+    priceMinor: string | null;
   } | null;
 }
 
@@ -370,6 +438,14 @@ export async function findPublicPaylink(
     select app.get_public_paylink(${slug}) as "paylink"
   `.execute(context.transaction);
   return result.rows[0]?.paylink ?? null;
+}
+
+export interface GuestCheckoutRecord {
+  readonly orderId: string;
+  readonly paymentId: string;
+  readonly reference: string;
+  readonly checkoutUrl: string | null;
+  readonly replayed: boolean;
 }
 
 export async function createGuestOrderAndPayment(
@@ -387,10 +463,11 @@ export async function createGuestOrderAndPayment(
     quantity: number;
     providerName: string;
     providerReference: string;
-    idempotencyKey?: string | null;
+    idempotencyKey: string;
+    deliveryAddress: DeliveryAddress | null;
   },
-): Promise<{ orderId: string; paymentId: string }> {
-  const result = await sql<{ orderId: string; paymentId: string }>`
+): Promise<GuestCheckoutRecord> {
+  const result = await sql<GuestCheckoutRecord>`
     select * from app.record_public_paylink_checkout(
       ${params.slug},
       ${params.customerName},
@@ -404,12 +481,17 @@ export async function createGuestOrderAndPayment(
       ${params.quantity},
       ${params.providerName},
       ${params.providerReference},
-      ${params.idempotencyKey ?? null}
+      ${params.idempotencyKey},
+      ${params.deliveryAddress ? JSON.stringify(params.deliveryAddress) : null}::jsonb
     )
   `.execute(context.transaction);
 
   if (!result.rows[0]) throw conflictError("Failed to record guest checkout");
   return result.rows[0];
+}
+
+export async function setCheckoutUrl(context: DatabaseContext, reference: string, checkoutUrl: string): Promise<void> {
+  await sql`select app.set_paylink_checkout_url(${reference}, ${checkoutUrl})`.execute(context.transaction);
 }
 
 export async function findPaymentByReference(

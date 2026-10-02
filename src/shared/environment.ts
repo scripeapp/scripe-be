@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const EnvironmentSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
+  /** Proxies (load balancer, CDN) in front of the API; Express needs it to read the real client IP for rate limiting. 0 = connected directly. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -56,6 +58,11 @@ const EnvironmentSchema = z.object({
   ANCHOR_API_KEY: z.string().optional(),
   ANCHOR_BASE_URL: z.string().url().default("https://api.sandbox.getanchor.co/api/v1"),
   PAYSTACK_SECRET_KEY: z.string().optional(),
+  /** Development/test only: with no PAYSTACK_SECRET_KEY, simulate Paystack checkout (instant success) instead of failing as unconfigured. Refused in production. */
+  PAYSTACK_MOCK_CHECKOUT: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   FLW_SECRET_KEY: z.string().optional(),
   FLW_WEBHOOK_HASH: z.string().optional(),
   ANCHOR_WEBHOOK_TOKEN: z.string().optional(),
@@ -99,6 +106,13 @@ const EnvironmentSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["R2_ACCOUNT_ID"],
       message: "R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME must be set together or not at all.",
+    });
+  }
+  if (environment.NODE_ENV === "production" && environment.PAYSTACK_MOCK_CHECKOUT) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["PAYSTACK_MOCK_CHECKOUT"],
+      message: "PAYSTACK_MOCK_CHECKOUT cannot be enabled in production.",
     });
   }
   if (environment.NODE_ENV === "production" && environment.LOCAL_OBJECT_STORAGE) {

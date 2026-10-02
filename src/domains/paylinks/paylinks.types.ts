@@ -23,6 +23,8 @@ export interface PaylinkSummary {
   readonly storeId: string;
   readonly channelId: string;
   readonly slug: string;
+  /** The shareable URL, built from FRONTEND_URL so it always matches the checkout callback host. */
+  readonly publicUrl: string;
   readonly mode: PaylinkMode;
   readonly title: string;
   readonly description: string | null;
@@ -87,10 +89,14 @@ export interface PublicPaylinkProduct {
   readonly name: string;
   readonly sku?: string | null;
   readonly description?: string | null;
+  /** The variant's current catalog price (get_public_paylink); a fixed link's own amountMinor is what is charged. */
+  readonly priceMinor?: string | null;
 }
 
 export interface PublicPaylink {
   readonly id: string;
+  /** False while the business is suspended or under a risk hold: the page shows a notice instead of the form. */
+  readonly acceptingPayments: boolean;
   readonly slug: string;
   readonly mode: PaylinkMode;
   readonly title: string;
@@ -115,11 +121,7 @@ export interface PublicCheckoutInput {
   readonly customerPhone?: string | null;
   readonly amountMinor?: string | number | null;
   readonly quantity?: number;
-  readonly deliveryAddress?: {
-    readonly streetAddress?: string;
-    readonly city?: string;
-    readonly state?: string;
-  } | null;
+  readonly deliveryAddress?: DeliveryAddress | null;
   readonly idempotencyKey?: string | null;
 }
 
@@ -147,7 +149,15 @@ export interface PaylinkPaymentSummary {
   readonly status: string;
   readonly customerName: string | null;
   readonly customerEmail: string | null;
+  readonly customerPhone: string | null;
+  readonly deliveryAddress: DeliveryAddress | null;
   readonly reference: string;
   readonly paidAt: string | null;
   readonly createdAt: string;
+}
+
+export interface DeliveryAddress {
+  readonly streetAddress?: string;
+  readonly city?: string;
+  readonly state?: string;
 }

@@ -23,6 +23,18 @@ export async function createNotification(context: DatabaseContext, input: Create
   return result.rows[0]!;
 }
 
+/**
+ * createNotification for callers with no signed-in user (webhooks, public
+ * pages, jobs). Same insert, but without RETURNING: RETURNING must also pass
+ * the "select own notifications" policy, which no anonymous caller can.
+ */
+export async function createSystemNotification(context: DatabaseContext, input: CreateNotificationInput): Promise<void> {
+  await sql`
+    insert into app.notifications ("userId", "businessId", "type", "title", "body", "data")
+    values (${input.userId}::uuid, ${input.businessId ?? null}::uuid, ${input.type}, ${input.title}, ${input.body ?? ""}, ${JSON.stringify(input.data ?? {})}::jsonb)
+  `.execute(context.transaction);
+}
+
 export async function listForUser(context: DatabaseContext, userId: string, filter: ListNotificationsFilter): Promise<NotificationRow[]> {
   const clauses: RawBuilder<unknown>[] = [sql`"userId" = ${userId}::uuid`];
   if (!filter.includeArchived) clauses.push(sql`"archivedAt" is null`);

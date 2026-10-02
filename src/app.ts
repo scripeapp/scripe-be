@@ -57,6 +57,7 @@ import { createDocsRouter } from "./routes/docs.js";
 
 export function createApp(): Express {
   const app = express();
+  app.set("trust proxy", loadEnvironment().TRUST_PROXY_HOPS);
 
   app.disable("x-powered-by");
   app.use(attachRequestId);

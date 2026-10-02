@@ -3,7 +3,6 @@ import type { DatabaseContext } from "../../db/database-context.js";
 import { conflictError, notFoundError } from "../../shared/errors.js";
 import type {
   CreateInvoiceLineInput,
-  InvoiceDocumentStatus,
   InvoiceLineRow,
   InvoiceMetrics,
   InvoiceRow,
@@ -94,6 +93,24 @@ export async function ensureManualInvoiceChannel(
   return created.rows[0].id;
 }
 
+/** An existing customer of this business with this email, so re-typing a known customer reuses their record instead of creating a duplicate. */
+export async function findCustomerPartyByEmail(
+  context: DatabaseContext,
+  businessId: string,
+  email: string,
+): Promise<string | undefined> {
+  const res = await sql<{ partyId: string }>`
+    select pc."partyId"
+    from app.party_contacts pc
+    join app.parties p on p."id" = pc."partyId" and p."businessId" = pc."businessId"
+    where pc."businessId" = ${businessId}::uuid and pc."kind" = 'email' and pc."status" = 'active'
+      and lower(pc."value") = lower(${email}) and p."status" = 'active'
+    order by pc."isPrimary" desc, pc."createdAt"
+    limit 1
+  `.execute(context.transaction);
+  return res.rows[0]?.partyId;
+}
+
 export async function findDefaultStore(
   context: DatabaseContext,
   businessId: string,
@@ -177,6 +194,7 @@ export async function updateDraft(
   invoiceId: string,
   fields: {
     storeId?: string;
+    channelId?: string;
     customerPartyId?: string;
     issueDate?: string;
     dueDate?: string;
@@ -192,6 +210,7 @@ export async function updateDraft(
 
   const setClauses: RawBuilder<unknown>[] = [];
   if (fields.storeId) setClauses.push(sql`"storeId" = ${fields.storeId}::uuid`);
+  if (fields.channelId) setClauses.push(sql`"channelId" = ${fields.channelId}::uuid`);
   if (fields.customerPartyId) setClauses.push(sql`"customerPartyId" = ${fields.customerPartyId}::uuid`);
   if (fields.issueDate) setClauses.push(sql`"issueDate" = ${fields.issueDate}::date`);
   if (fields.dueDate) setClauses.push(sql`"dueDate" = ${fields.dueDate}::date`);
@@ -298,22 +317,50 @@ export interface HydratedInvoiceData extends InvoiceRow {
   readonly customerPhone?: string | null;
   readonly orderPaymentStatus?: string | null;
   readonly amountPaidMinor?: string | null;
+  /** Due date is before today in the store's own time zone (app.invoice_local_today). */
+  readonly isPastDue?: boolean;
+  /** Same rule as the service's status: void/draft from the row, otherwise paid / partially_paid / overdue / pending from payments and the due date. */
+  readonly derivedStatus?: string;
 }
 
+/**
+ * Every invoice read goes through this one derived row (aliased `inv`), so the
+ * list's status filter, the metrics cards and the detail view all agree on
+ * what "paid", "overdue" and "pending" mean.
+ */
 const INVOICE_QUERY_CONTEXT = sql`
-  select i.*,
-    p."displayName" as "customerName",
-    (select pc."value" from app.party_contacts pc
-     where pc."partyId" = i."customerPartyId" and pc."businessId" = i."businessId" and pc."kind" = 'email' and pc."status" = 'active'
-     order by pc."isPrimary" desc, pc."createdAt" limit 1) as "customerEmail",
-    (select pc."value" from app.party_contacts pc
-     where pc."partyId" = i."customerPartyId" and pc."businessId" = i."businessId" and pc."kind" = 'phone' and pc."status" = 'active'
-     order by pc."isPrimary" desc, pc."createdAt" limit 1) as "customerPhone",
-    o."paymentStatus" as "orderPaymentStatus",
-    coalesce((select sum(pay."amountMinor") from app.payments pay where pay."orderId" = i."orderId" and pay."businessId" = i."businessId" and pay."status" in ('captured', 'authorized')), 0)::text as "amountPaidMinor"
-  from app.invoices i
-  left join app.parties p on p."id" = i."customerPartyId" and p."businessId" = i."businessId"
-  left join app.orders o on o."id" = i."orderId" and o."businessId" = i."businessId"
+  select * from (
+    select base.*,
+      case
+        when base."status" = 'void' then 'void'
+        when base."status" = 'draft' then 'draft'
+        when base."orderPaymentStatus" = 'paid' or (base."totalMinor" > 0 and base."amountPaidNumeric" >= base."totalMinor") then 'paid'
+        when base."amountPaidNumeric" > 0 then 'partially_paid'
+        when base."isPastDue" then 'overdue'
+        else 'pending'
+      end as "derivedStatus"
+    from (
+      select i.*,
+        p."displayName" as "customerName",
+        (select pc."value" from app.party_contacts pc
+         where pc."partyId" = i."customerPartyId" and pc."businessId" = i."businessId" and pc."kind" = 'email' and pc."status" = 'active'
+         order by pc."isPrimary" desc, pc."createdAt" limit 1) as "customerEmail",
+        (select pc."value" from app.party_contacts pc
+         where pc."partyId" = i."customerPartyId" and pc."businessId" = i."businessId" and pc."kind" = 'phone' and pc."status" = 'active'
+         order by pc."isPrimary" desc, pc."createdAt" limit 1) as "customerPhone",
+        o."paymentStatus" as "orderPaymentStatus",
+        paid."amount"::text as "amountPaidMinor",
+        paid."amount" as "amountPaidNumeric",
+        (i."dueDate" < app.invoice_local_today(i."storeId")) as "isPastDue"
+      from app.invoices i
+      left join app.parties p on p."id" = i."customerPartyId" and p."businessId" = i."businessId"
+      left join app.orders o on o."id" = i."orderId" and o."businessId" = i."businessId"
+      left join lateral (
+        select coalesce(sum(pay."amountMinor"), 0) as "amount" from app.payments pay
+        where pay."orderId" = i."orderId" and pay."businessId" = i."businessId" and pay."status" in ('captured', 'authorized')
+      ) paid on true
+    ) base
+  ) inv
 `;
 
 export async function findHydrated(
@@ -323,7 +370,7 @@ export async function findHydrated(
 ): Promise<HydratedInvoiceData | undefined> {
   const res = await sql<HydratedInvoiceData>`
     ${INVOICE_QUERY_CONTEXT}
-    where i."businessId" = ${businessId}::uuid and i."id" = ${invoiceId}::uuid
+    where inv."businessId" = ${businessId}::uuid and inv."id" = ${invoiceId}::uuid
     limit 1
   `.execute(context.transaction);
   return res.rows[0];
@@ -334,15 +381,19 @@ export async function list(
   businessId: string,
   filter: ListInvoicesFilter = {},
 ): Promise<HydratedInvoiceData[]> {
-  const clauses: RawBuilder<unknown>[] = [sql`i."businessId" = ${businessId}::uuid`];
+  const clauses: RawBuilder<unknown>[] = [sql`inv."businessId" = ${businessId}::uuid`];
+
+  if (filter.status) {
+    clauses.push(sql`inv."derivedStatus" = ${filter.status}`);
+  }
 
   if (filter.customerId) {
-    clauses.push(sql`i."customerPartyId" = ${filter.customerId}::uuid`);
+    clauses.push(sql`inv."customerPartyId" = ${filter.customerId}::uuid`);
   }
 
   if (filter.search) {
-    const term = `%${filter.search}%`;
-    clauses.push(sql`(i."invoiceNumber" ilike ${term} or p."displayName" ilike ${term})`);
+    const term = `%${filter.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    clauses.push(sql`(inv."invoiceNumber" ilike ${term} or inv."customerName" ilike ${term})`);
   }
 
   const whereClause = sql.join(clauses, sql` and `);
@@ -352,29 +403,21 @@ export async function list(
   const res = await sql<HydratedInvoiceData>`
     ${INVOICE_QUERY_CONTEXT}
     where ${whereClause}
-    order by i."createdAt" desc, i."id" desc
+    order by inv."createdAt" desc, inv."id" desc
     limit ${limit} offset ${offset}
   `.execute(context.transaction);
 
   return res.rows;
 }
 
+/** Drafts are not invoiced yet and void invoices are cancelled, so only sent (open) invoices count towards the cards. */
 export async function getMetrics(
   context: DatabaseContext,
   businessId: string,
 ): Promise<InvoiceMetrics> {
-  const rows = await sql<{
-    status: InvoiceDocumentStatus;
-    totalMinor: string;
-    dueDate: Date | string;
-    orderPaymentStatus: string | null;
-    amountPaidMinor: string;
-  }>`
-    select i."status", i."totalMinor", i."dueDate", o."paymentStatus" as "orderPaymentStatus",
-      coalesce((select sum(pay."amountMinor") from app.payments pay where pay."orderId" = i."orderId" and pay."businessId" = i."businessId" and pay."status" in ('captured', 'authorized')), 0)::text as "amountPaidMinor"
-    from app.invoices i
-    left join app.orders o on o."id" = i."orderId" and o."businessId" = i."businessId"
-    where i."businessId" = ${businessId}::uuid and i."status" <> 'void'
+  const res = await sql<{ totalMinor: string; amountPaidMinor: string; derivedStatus: string }>`
+    ${INVOICE_QUERY_CONTEXT}
+    where inv."businessId" = ${businessId}::uuid and inv."status" = 'open'
   `.execute(context.transaction);
 
   let totalInvoiced = 0n;
@@ -384,20 +427,18 @@ export async function getMetrics(
   let paidCount = 0;
   let pendingCount = 0;
   let overdueCount = 0;
-  const now = new Date();
 
-  for (const row of rows.rows) {
+  for (const row of res.rows) {
     const total = BigInt(row.totalMinor);
     const paid = BigInt(row.amountPaidMinor);
     const remaining = total > paid ? total - paid : 0n;
-    const dueDate = new Date(row.dueDate);
 
     totalInvoiced += total;
     paidAmount += paid;
 
-    if (row.orderPaymentStatus === "paid" || (total > 0n && paid >= total)) {
+    if (row.derivedStatus === "paid") {
       paidCount++;
-    } else if (dueDate < now) {
+    } else if (row.derivedStatus === "overdue") {
       overdueAmount += remaining;
       overdueCount++;
     } else {
@@ -411,7 +452,7 @@ export async function getMetrics(
     paidAmountMinor: paidAmount.toString(),
     pendingAmountMinor: pendingAmount.toString(),
     overdueAmountMinor: overdueAmount.toString(),
-    totalCount: rows.rows.length,
+    totalCount: res.rows.length,
     paidCount,
     pendingCount,
     overdueCount,
@@ -497,8 +538,12 @@ export interface PublicPaymentTarget {
   balanceDueMinor: string;
   customerEmail: string | null;
   customerName: string | null;
+  /** A checkout opened in the last 30 minutes for exactly the current balance and still pending — reused instead of opening another one. */
+  reusableCheckoutReference: string | null;
+  reusableCheckoutUrl: string | null;
 }
 
+/** Locks the invoice row until the transaction ends, so concurrent pay requests for one invoice are serialised. */
 export async function getPublicPaymentTarget(
   context: DatabaseContext,
   token: string,
@@ -515,9 +560,10 @@ export async function recordPublicPayment(
   provider: string,
   providerReference: string,
   idempotencyKey: string,
+  authorizationUrl: string,
 ): Promise<string> {
   const res = await sql<{ id: string }>`
-    select app.record_public_invoice_payment(${token}, ${provider}, ${providerReference}, ${idempotencyKey}) as "id"
+    select app.record_public_invoice_payment(${token}, ${provider}, ${providerReference}, ${idempotencyKey}, ${authorizationUrl}) as "id"
   `.execute(context.transaction);
   return res.rows[0]!.id;
 }
@@ -565,4 +611,60 @@ export async function getNextInvoiceNumber(
   `.execute(context.transaction);
   const sequence = res.rows[0]?.next ?? "1";
   return `INV-${sequence.padStart(6, "0")}`;
+}
+
+export interface InvoicePaymentNotification {
+  readonly invoiceId: string;
+  readonly businessId: string;
+  readonly invoiceNumber: string | null;
+  readonly publicToken: string;
+  readonly currency: string;
+  readonly totalMinor: string;
+  readonly amountPaidMinor: string;
+  readonly balanceDueMinor: string;
+  readonly businessName: string;
+  readonly ownerUserId: string | null;
+  readonly merchantEmail: string | null;
+  readonly customerName: string | null;
+  readonly customerEmail: string | null;
+}
+
+/** The open invoice behind an order, with what the "payment received" messages need; undefined when the order is not an invoice. */
+export async function getPaymentNotification(
+  context: DatabaseContext,
+  orderId: string,
+): Promise<InvoicePaymentNotification | undefined> {
+  const res = await sql<InvoicePaymentNotification>`
+    select "invoiceId", "businessId", "invoiceNumber", "publicToken", "currency",
+      "totalMinor"::text, "amountPaidMinor"::text, "balanceDueMinor"::text,
+      "businessName", "ownerUserId", "merchantEmail", "customerName", "customerEmail"
+    from app.get_invoice_payment_notification(${orderId}::uuid)
+  `.execute(context.transaction);
+  return res.rows[0];
+}
+
+export interface ReportedTransfer {
+  readonly invoiceId: string;
+  readonly businessId: string;
+  readonly invoiceNumber: string | null;
+  readonly currency: string;
+  readonly balanceDueMinor: string;
+  readonly businessName: string;
+  readonly ownerUserId: string | null;
+  readonly merchantEmail: string | null;
+  readonly customerName: string | null;
+  readonly firstReport: boolean;
+}
+
+/** Records the customer's transfer report on an open, unpaid invoice; undefined when the link isn't payable. */
+export async function reportPublicTransfer(
+  context: DatabaseContext,
+  token: string,
+): Promise<ReportedTransfer | undefined> {
+  const res = await sql<ReportedTransfer>`
+    select "invoiceId", "businessId", "invoiceNumber", "currency", "balanceDueMinor"::text,
+      "businessName", "ownerUserId", "merchantEmail", "customerName", "firstReport"
+    from app.report_public_invoice_transfer(${token})
+  `.execute(context.transaction);
+  return res.rows[0];
 }

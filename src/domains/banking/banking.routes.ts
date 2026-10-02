@@ -14,7 +14,7 @@ export function createBankingRouter(): Router {
 
   router.use(base, requireAuth);
   router.get("/api/businesses/:businessId/subaccount", requireAuth, controller.getSubaccount);
-  router.put("/api/businesses/:businessId/subaccount", requireAuth, controller.getSubaccount);
+  router.put("/api/businesses/:businessId/subaccount", requireAuth, controller.setupSubaccount);
   router.get(`${base}/banks`, controller.listBanks);
   router.get(`${base}/status`, controller.getStatus);
   router.get(`${base}/resolve-account`, controller.resolveBankAccount);

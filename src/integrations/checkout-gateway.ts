@@ -8,6 +8,12 @@ export interface InitializeCheckoutInput {
   readonly reference: string;
   readonly callbackUrl?: string;
   readonly metadata?: Record<string, unknown>;
+  /**
+   * Paystack subaccount the business's sale settles to (see
+   * domains/banking/checkout-subaccounts.ts). Omitted for Scripe's own
+   * revenue (subscriptions, message credits). Flutterwave ignores it.
+   */
+  readonly subaccountCode?: string;
 }
 
 export interface InitializedCheckout {
@@ -36,10 +42,17 @@ export interface CheckoutGateway {
   verifyCheckout(reference: string): Promise<CheckoutVerification>;
 }
 
+const paystackGateway = new PaystackCheckoutGateway();
+
 const gateways: Record<"paystack" | "flutterwave", CheckoutGateway> = {
-  paystack: new PaystackCheckoutGateway(),
+  paystack: paystackGateway,
   flutterwave: new FlutterwaveCheckoutGateway(),
 };
+
+/** The Paystack gateway itself, for its subaccount calls (settlement setup), which are not part of the CheckoutGateway contract. */
+export function getPaystackGateway(): PaystackCheckoutGateway {
+  return paystackGateway;
+}
 
 /** Both gateways construct cheaply (no client/SDK setup until a call actually needs credentials) — the caller picks which one per checkout. */
 export function getCheckoutGateway(name: "paystack" | "flutterwave"): CheckoutGateway {
