@@ -87,14 +87,21 @@ export class InvoicesController {
 
   readonly payPublic = this.handle(async (req) => {
     const p = schemas.publicTokenParams.parse(req.params);
-    const body = (req.body ?? {}) as { callbackUrl?: string };
-    const checkout = await this.service.initiatePublicPayment(
-      req.requestId,
-      p.token,
-      body,
-    );
+    // The amount and the return URL are decided server-side; any body is ignored.
+    const checkout = await this.service.initiatePublicPayment(req.requestId, p.token);
     return checkout;
   });
+
+  readonly reportTransferPublic = this.handle(async (req) => {
+    const p = schemas.publicTokenParams.parse(req.params);
+    return this.service.reportPublicTransfer(req.requestId, p.token);
+  });
+
+  readonly duplicate = this.handle(async (req) => {
+    const p = schemas.params.parse(req.params);
+    const invoice = await this.service.duplicate(this.operation(req, p.businessId), p.invoiceId);
+    return { invoice };
+  }, 201);
 
   private operation(request: Request, businessId: string): InvoiceOperation {
     return {

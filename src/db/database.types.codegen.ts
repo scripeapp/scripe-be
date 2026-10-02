@@ -1095,6 +1095,7 @@ export interface Orders {
   createdBy: string | null;
   currency: string;
   customerPartyId: string | null;
+  deliveryAddress: Json | null;
   discountMinor: Generated<Int8>;
   fulfillmentStatus: Generated<string>;
   id: Generated<string>;
@@ -1197,6 +1198,7 @@ export interface PaymentAllocations {
 
 export interface PaymentAttempts {
   businessId: string;
+  checkoutUrl: string | null;
   createdAt: Generated<Timestamp>;
   failureReason: string | null;
   id: Generated<string>;
@@ -1455,6 +1457,12 @@ export interface PurchaseOrders {
   storeId: string;
   supplierAccountId: string;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface RateLimitCounters {
+  bucket: string;
+  hits: Generated<number>;
+  windowStart: Timestamp;
 }
 
 export interface Registers {
@@ -2166,6 +2174,7 @@ export interface DB {
   provider_events: ProviderEvents;
   purchase_order_lines: PurchaseOrderLines;
   purchase_orders: PurchaseOrders;
+  rate_limit_counters: RateLimitCounters;
   register_shifts: RegisterShifts;
   registers: Registers;
   return_lines: ReturnLines;

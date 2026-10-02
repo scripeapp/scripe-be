@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"; import type { Database } from "../../db/database.types.js"; import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import { getCheckoutGateway } from "../../integrations/checkout-gateway.js"; import { notFoundError } from "../../shared/errors.js"; import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js"; import type { JournalLineInput } from "../accounting/accounting.types.js"; import { postJournalEntry } from "../accounting/accounting.service.js"; import * as authorization from "../authorization/authorization.service.js"; import * as receiptsRepo from "../receipts/receipts.repository.js"; import * as repo from "./payments.repository.js"; import type { OrderSnapshot } from "./payments.repository.js"; import type { CheckoutStatus, InitiateCheckoutInput, InitiatedCheckout, ListPaymentsFilter, PaymentOperation, PaymentRow, RecordPaymentInput } from "./payments.types.js";
+import { randomUUID } from "node:crypto"; import type { Database } from "../../db/database.types.js"; import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js"; import { withIdentity } from "../../db/principal.js"; import { getCheckoutGateway } from "../../integrations/checkout-gateway.js"; import { conflictError, notFoundError } from "../../shared/errors.js"; import { LEDGER_ACCOUNT_CODES } from "../accounting/accounting.types.js"; import type { JournalLineInput } from "../accounting/accounting.types.js"; import { postJournalEntry } from "../accounting/accounting.service.js"; import * as authorization from "../authorization/authorization.service.js"; import { requireCheckoutSubaccount } from "../banking/checkout-subaccounts.js"; import * as receiptsRepo from "../receipts/receipts.repository.js"; import * as repo from "./payments.repository.js"; import type { OrderSnapshot } from "./payments.repository.js"; import type { CheckoutStatus, InitiateCheckoutInput, InitiatedCheckout, ListPaymentsFilter, PaymentOperation, PaymentRow, RecordPaymentInput } from "./payments.types.js";
 
 /**
  * Shared by record() (an in-person/manual capture) and verifyCheckout() (an
@@ -39,11 +39,15 @@ export class PaymentsService{constructor(private readonly database:Database){} a
 
       const reference = `scripe_${randomUUID()}`;
       const gateway = getCheckoutGateway(input.gateway);
+      // Paystack sales settle to the business's own subaccount (refused with
+      // 409 when real Paystack is configured and payouts aren't set up).
+      const subaccountCode = input.gateway === "paystack" ? await requireCheckoutSubaccount(context, operation.businessId) : undefined;
       const checkout = await gateway.initializeCheckout({
         amountMinor: String(input.amountMinor),
         assetCode: input.assetCode,
         email: input.email,
         reference,
+        subaccountCode,
         callbackUrl: input.callbackUrl,
         metadata: { orderId: input.orderId, businessId: operation.businessId },
       });
@@ -83,6 +87,12 @@ export class PaymentsService{constructor(private readonly database:Database){} a
       const verification = await gateway.verifyCheckout(reference);
 
       if (verification.status === "success") {
+        // Never capture on the reference alone: the gateway must have charged
+        // at least this payment's amount, in its currency.
+        const chargedEnough = /^\d+$/.test(verification.amountMinor) && BigInt(verification.amountMinor) >= BigInt(payment.amountMinor);
+        if (!chargedEnough || verification.assetCode.toUpperCase() !== payment.assetCode.toUpperCase()) {
+          throw conflictError("The gateway's charged amount does not match this payment");
+        }
         const captured = await repo.captureCheckoutPayment(context, operation.businessId, payment.id);
         await repo.markAttempt(context, operation.businessId, reference, "captured", null);
         if (captured?.captured) await postCaptureJournal(context, operation.businessId, operation.userId, payment.id, captured.method, captured.amountMinor, captured.order.currency, captured.order);

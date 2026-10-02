@@ -58,12 +58,13 @@ export interface PendingPayment {
   readonly id: string;
   readonly orderId: string;
   readonly amountMinor: string;
+  readonly assetCode: string;
   readonly status: "pending" | "authorized" | "captured" | "failed" | "cancelled" | "refunded";
 }
 
 export async function findPaymentByExternalReference(c: DatabaseContext, businessId: string, externalReference: string): Promise<PendingPayment | undefined> {
   const result = await sql<PendingPayment>`
-    select "id","orderId","amountMinor","status" from app.payments where "businessId"=${businessId}::uuid and "externalReference"=${externalReference}
+    select "id","orderId","amountMinor","assetCode","status" from app.payments where "businessId"=${businessId}::uuid and "externalReference"=${externalReference}
   `.execute(c.transaction);
   return result.rows[0];
 }

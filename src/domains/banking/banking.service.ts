@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getCheckoutSettlementStatus, resolveCheckoutSubaccount, type CheckoutSettlementStatus } from "./checkout-subaccounts.js";
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
@@ -76,6 +77,19 @@ export class BankingService {
         availableBalanceMinor: balance,
         assetCode: ASSET_CODE,
       };
+    });
+  }
+
+  /**
+   * Where this business's online sales settle: its active virtual account,
+   * via a Paystack subaccount. `setup` creates the subaccount now instead of
+   * at the first checkout, so the payout screen can confirm it works.
+   */
+  async getCheckoutSettlement(operation: BankingOperation, setup = false): Promise<CheckoutSettlementStatus> {
+    return this.run(operation, async (context) => {
+      await requirePermission(context, operation.businessId, setup ? "banking.manage" : "banking.read");
+      if (setup) await resolveCheckoutSubaccount(context, operation.businessId);
+      return getCheckoutSettlementStatus(context, operation.businessId);
     });
   }
 

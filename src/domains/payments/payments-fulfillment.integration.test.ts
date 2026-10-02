@@ -3,7 +3,7 @@ let verificationMessages: { to: string; code: string }[];
 jest.mock("@/shared/email.js", () => ({ emailSender: { sendVerificationCode: (to: string, code: string) => verificationMessages.push({ to, code }), sendPasswordResetEmail: () => {} } }));
 import { request, startTestServer, type TestServer } from "@/test-support/http.js";
 let server: TestServer;
-beforeAll(async () => { verificationMessages = []; server = await startTestServer(); }); afterAll(async () => server.close());
+beforeAll(async () => { verificationMessages = []; process.env.PAYSTACK_MOCK_CHECKOUT = "false"; delete process.env.PAYSTACK_SECRET_KEY; server = await startTestServer(); }); afterAll(async () => server.close());
 describe("payments and fulfillment domains", () => {
   it("require authentication", async () => {
     const businessId = randomUUID();

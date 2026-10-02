@@ -44,6 +44,23 @@ export interface CaptureResult {
   readonly orderTotalMinor: string | null;
 }
 
+export interface CheckoutPaymentExpectation {
+  readonly paymentId: string;
+  readonly businessId: string;
+  readonly orderId: string;
+  readonly paylinkId: string | null;
+  readonly status: string;
+  readonly amountMinor: string;
+  readonly assetCode: string;
+}
+
+/** What a checkout payment expects to be charged — read before capture so a webhook or verify result can be checked against it (migration 0081). */
+export async function findCheckoutPaymentByReference(context: DatabaseContext, externalReference: string): Promise<CheckoutPaymentExpectation | undefined> {
+  const result = await sql<CheckoutPaymentExpectation>`select * from app.get_checkout_payment_by_reference(${externalReference})`.execute(context.transaction);
+  const row = result.rows[0];
+  return row ? { ...row, amountMinor: String(row.amountMinor) } : undefined;
+}
+
 /** Calls the SECURITY DEFINER function — the RLS bypass a webhook (no authenticated user) needs to update payments/orders. See migration 0029 for the SQL. */
 export async function captureCheckoutPaymentByReference(context: DatabaseContext, externalReference: string): Promise<CaptureResult> {
   const result = await sql<CaptureResult>`select * from app.capture_checkout_payment_from_webhook(${externalReference})`.execute(context.transaction);

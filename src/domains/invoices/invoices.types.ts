@@ -29,6 +29,7 @@ export interface InvoiceRow {
   readonly sentAt: Date | null;
   readonly voidedAt: Date | null;
   readonly lastReminderAt: Date | null;
+  readonly transferReportedAt: Date | null;
   readonly createdBy: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -103,6 +104,8 @@ export interface Invoice {
   readonly sentAt: string | null;
   readonly voidedAt: string | null;
   readonly lastReminderAt: string | null;
+  /** The customer said on the public page that they paid by bank transfer; the merchant still has to record it. */
+  readonly transferReportedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly lines: InvoiceLine[];

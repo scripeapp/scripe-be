@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+const minorAmount = z.union([z.number().int().positive().max(100_000_000_000), z.string().regex(/^[1-9]\d{0,11}$/)]);
+
+/** https only: the URL is opened after payment, so javascript:, data: and plain-http URLs are refused. */
+const redirectUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(500)
+  .refine((value) => value.toLowerCase().startsWith("https://"), "Redirect URL must start with https://");
+
 export const businessParamsSchema = z.object({
   businessId: z.string().uuid(),
 });
@@ -30,19 +40,26 @@ export const createPaylinkSchema = z.object({
   description: z.string().trim().max(1000).optional().nullable(),
   imageKey: z.string().trim().max(255).optional().nullable(),
   amountType: z.enum(["fixed", "customer_sets"]).default("fixed"),
-  amountMinor: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).optional().nullable(),
-  minAmountMinor: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).optional().nullable(),
-  suggestedAmountsMinor: z.array(z.union([z.number().int().positive(), z.string().regex(/^\d+$/)])).optional().default([]),
+  amountMinor: minorAmount.optional().nullable(),
+  minAmountMinor: minorAmount.optional().nullable(),
+  suggestedAmountsMinor: z.array(minorAmount).max(8).optional().default([]),
   currency: z.string().regex(/^[A-Z]{3}$/).default("NGN"),
   productVariantId: z.string().uuid().optional().nullable(),
   customSlug: z.string().trim().regex(/^[a-z0-9-]{3,60}$/, "Slug must be 3-60 lowercase characters, numbers or hyphens").optional().nullable(),
   collectName: z.boolean().default(true),
   collectPhone: z.boolean().default(true),
   collectAddress: z.boolean().default(false),
-  redirectUrl: z.string().trim().url().max(500).optional().nullable(),
+  redirectUrl: redirectUrl.optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
   storeId: z.string().uuid().optional().nullable(),
   status: z.enum(["active", "paused"]).default("active"),
+}).superRefine((value, ctx) => {
+  if (value.mode === "product" && !value.productVariantId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["productVariantId"], message: "Choose a product for a product link" });
+  }
+  if (value.amountType === "fixed" && value.mode !== "product" && !value.amountMinor) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["amountMinor"], message: "A fixed-amount link needs an amount" });
+  }
 });
 
 export const updatePaylinkSchema = z.object({
@@ -50,13 +67,13 @@ export const updatePaylinkSchema = z.object({
   description: z.string().trim().max(1000).optional().nullable(),
   imageKey: z.string().trim().max(255).optional().nullable(),
   amountType: z.enum(["fixed", "customer_sets"]).optional(),
-  amountMinor: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).optional().nullable(),
-  minAmountMinor: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).optional().nullable(),
-  suggestedAmountsMinor: z.array(z.union([z.number().int().positive(), z.string().regex(/^\d+$/)])).optional(),
+  amountMinor: minorAmount.optional().nullable(),
+  minAmountMinor: minorAmount.optional().nullable(),
+  suggestedAmountsMinor: z.array(minorAmount).max(8).optional(),
   collectName: z.boolean().optional(),
   collectPhone: z.boolean().optional(),
   collectAddress: z.boolean().optional(),
-  redirectUrl: z.string().trim().url().max(500).optional().nullable(),
+  redirectUrl: redirectUrl.optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
   status: z.enum(["active", "paused"]).optional(),
 });
@@ -65,8 +82,8 @@ export const publicCheckoutSchema = z.object({
   customerName: z.string().trim().min(1, "Name is required").max(120),
   customerEmail: z.string().trim().email("Valid email is required").max(255),
   customerPhone: z.string().trim().min(7).max(30).optional().nullable(),
-  amountMinor: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]).optional().nullable(),
-  quantity: z.number().int().positive().default(1),
+  amountMinor: minorAmount.optional().nullable(),
+  quantity: z.number().int().positive().max(100).default(1),
   deliveryAddress: z
     .object({
       streetAddress: z.string().trim().max(255).optional(),

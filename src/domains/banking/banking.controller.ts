@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import type { CheckoutSettlementStatus } from "./checkout-subaccounts.js";
 import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
 import * as schemas from "./banking.schemas.js";
@@ -41,24 +42,28 @@ export class BankingController {
     status: await this.service.getStatus(this.operation(request)),
   }));
 
-  readonly getSubaccount = this.handle(async (request) => {
-    const status = await this.service.getStatus(this.operation(request));
-    if (!status.virtualAccount) {
-      return null;
-    }
-    const bank = NIGERIAN_BANKS.find(
-      (b) =>
-        b.name.toLowerCase() === status.virtualAccount?.bankName?.toLowerCase() ||
-        b.code === status.virtualAccount?.bankName,
-    );
+  /**
+   * The payout destination for online sales (legacy /subaccount shape the
+   * payout settings screen reads). GET reads it; PUT sets the Paystack
+   * subaccount up now. The destination is always the business's own active
+   * virtual account; an external bank account can't be chosen here.
+   */
+  readonly getSubaccount = this.handle(async (request) => this.toSubaccountView(await this.service.getCheckoutSettlement(this.operation(request))));
+
+  readonly setupSubaccount = this.handle(async (request) => this.toSubaccountView(await this.service.getCheckoutSettlement(this.operation(request), true)));
+
+  private toSubaccountView(settlement: CheckoutSettlementStatus) {
+    if (!settlement.hasSettlementAccount) return null;
+    const bank = NIGERIAN_BANKS.find((b) => b.name.toLowerCase() === settlement.bankName?.toLowerCase());
     return {
-      subaccount_code: status.virtualAccount.providerAccountId || "",
-      business_name: status.virtualAccount.accountName || "",
-      settlement_bank: bank?.code || status.virtualAccount.bankName || "",
-      settlement_bank_name: status.virtualAccount.bankName || "",
-      account_number: status.virtualAccount.accountNumber || "",
+      subaccount_code: settlement.subaccountCode ?? "",
+      is_configured: Boolean(settlement.subaccountCode),
+      business_name: settlement.accountName || settlement.businessName,
+      settlement_bank: bank?.code || settlement.bankName || "",
+      settlement_bank_name: settlement.bankName || "",
+      account_number: settlement.accountNumber || "",
     };
-  });
+  }
 
   readonly resolveBankAccount = this.handle(async (request) => ({
     account: await this.service.resolveBankAccount(this.operation(request), schemas.resolveBankAccountQuerySchema.parse(request.query)),

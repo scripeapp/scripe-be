@@ -2,6 +2,7 @@ import { withDatabaseContext } from "../../db/database-context.js";
 import type { Database } from "../../db/database.types.js";
 import { anonymousPrincipal } from "../../db/principal.js";
 import { runInvoiceOverdueSweep } from "../invoices/invoices.service.js";
+import { reconcilePendingPaylinkPayments } from "../paylinks/paylinks.service.js";
 import { runDunningSweep } from "../subscriptions/subscriptions.service.js";
 import * as uploadsRepository from "../uploads/uploads.repository.js";
 import * as repository from "./jobs.repository.js";
@@ -13,6 +14,9 @@ const RESCHEDULE_INTERVAL_MS = 60 * 60 * 1000;
 
 const DUNNING_CHECK_JOB_TYPE = "subscriptions.dunning_check";
 const DUNNING_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+const PAYLINK_RECONCILE_JOB_TYPE = "paylinks.reconcile_pending";
+const PAYLINK_RECONCILE_INTERVAL_MS = 15 * 60 * 1000;
 
 const INVOICE_OVERDUE_SWEEP_JOB_TYPE = "invoices.overdue_sweep";
 const INVOICE_OVERDUE_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -64,11 +68,25 @@ function invoiceOverdueSweepHandler(database: Database) {
   };
 }
 
+/**
+ * Every 15 minutes: re-verifies paylink payments still pending (lost
+ * webhook, closed tab) and raises "[alert]" log lines for monitoring - see
+ * paylinks.service.ts's reconcilePendingPaylinkPayments.
+ */
+function paylinkReconcileHandler(database: Database) {
+  return async (): Promise<{ rescheduleAt: Date }> => {
+    const summary = await reconcilePendingPaylinkPayments(database);
+    if (summary.checked > 0) console.log(`[jobs] paylink reconcile: ${JSON.stringify(summary)}`);
+    return { rescheduleAt: new Date(Date.now() + PAYLINK_RECONCILE_INTERVAL_MS) };
+  };
+}
+
 /** Registers every built-in job handler and seeds their first run - called once from server.ts, never from app.ts (so it never runs under the test harness). */
 export function registerBuiltinJobHandlers(scheduler: JobScheduler, database: Database): void {
   scheduler.register(UPLOAD_EXPIRY_JOB_TYPE, expireStalePendingUploadsHandler(database));
   scheduler.register(DUNNING_CHECK_JOB_TYPE, dunningCheckHandler(database));
   scheduler.register(INVOICE_OVERDUE_SWEEP_JOB_TYPE, invoiceOverdueSweepHandler(database));
+  scheduler.register(PAYLINK_RECONCILE_JOB_TYPE, paylinkReconcileHandler(database));
 }
 
 /** Idempotent: only seeds a recurring job if one isn't already pending/running, so restarts don't pile up duplicates. */
@@ -77,5 +95,6 @@ export async function seedBuiltinJobs(database: Database): Promise<void> {
     await repository.ensureRecurringJob(context, UPLOAD_EXPIRY_JOB_TYPE, 5);
     await repository.ensureRecurringJob(context, DUNNING_CHECK_JOB_TYPE, 5);
     await repository.ensureRecurringJob(context, INVOICE_OVERDUE_SWEEP_JOB_TYPE, 5);
+    await repository.ensureRecurringJob(context, PAYLINK_RECONCILE_JOB_TYPE, 5);
   });
 }
