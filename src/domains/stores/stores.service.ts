@@ -1,4 +1,5 @@
 import type { Database } from "../../db/database.types.js";
+import { absoluteBrandingImageUrl, loadBusinessBranding, type BusinessBranding } from "../businesses/businesses.branding.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { DatabaseError, normalizeDatabaseError } from "../../db/errors.js";
 import { anonymousPrincipal, withIdentity } from "../../db/principal.js";
@@ -109,7 +110,7 @@ export class StoresService {
     return this.runAnonymous(requestId, async (context) => {
       const store = await repository.findActiveStoreBySlug(context, slug);
       if (!store) throw notFoundError("Store not found");
-      return toPublicStore(store);
+      return toPublicStore(store, await publicBranding(context, store.businessId));
     });
   }
 
@@ -150,7 +151,7 @@ export class StoresService {
       if (!store) throw notFoundError("Store not found");
       const product = await getPublicProduct(context, store.businessId, store.id, productIdOrSlug);
       if (!product) throw notFoundError("Product not found");
-      return { store: toPublicStore(store), product };
+      return { store: toPublicStore(store, await publicBranding(context, store.businessId)), product };
     });
   }
 
@@ -178,7 +179,7 @@ export class StoresService {
       if (!found) throw notFoundError("Order not found");
       const { order, lines, customerName, customerEmail, customerPhone } = found;
       const storeRow = await repository.findStore(context, order.businessId, order.storeId);
-      const publicStore = storeRow ? toPublicStore(storeRow) : null;
+      const publicStore = storeRow ? toPublicStore(storeRow, await publicBranding(context, storeRow.businessId)) : null;
       return {
         id: order.id,
         store_id: order.storeId,
@@ -742,8 +743,19 @@ export class StoresService {
   }
 }
 
-function toPublicStore(row: StoreRow): PublicStore {
+/** The business's branding for a public page, with absolute image URLs (the storefront renders them as-is). */
+async function publicBranding(context: DatabaseContext, businessId: string): Promise<BusinessBranding> {
+  const branding = await loadBusinessBranding(context, businessId);
   return {
+    logoUrl: absoluteBrandingImageUrl(branding?.logoUrl ?? null),
+    coverUrl: absoluteBrandingImageUrl(branding?.coverUrl ?? null),
+    brandColor: branding?.brandColor ?? null,
+  };
+}
+
+function toPublicStore(row: StoreRow, branding: BusinessBranding): PublicStore {
+  return {
+    branding,
     id: row.id,
     businessId: row.businessId,
     name: row.name,
@@ -753,6 +765,13 @@ function toPublicStore(row: StoreRow): PublicStore {
     sellsInPerson: row.sellsInPerson,
     contactEmail: row.contactEmail,
     contactPhone: row.contactPhone,
+    location: row.location,
+    websiteUrl: row.websiteUrl,
+    socialLinks: row.socialLinks,
+    businessHours: row.businessHours,
+    privacyPolicy: row.privacyPolicy,
+    refundPolicy: row.refundPolicy,
+    productBrowsingMode: row.productBrowsingMode,
   };
 }
 

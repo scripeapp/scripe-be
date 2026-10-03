@@ -253,3 +253,46 @@ describe("auth domain", () => {
     expect(await profileFor(userId)).toBeUndefined();
   });
 });
+
+describe("changing the sign-in email", () => {
+  it("sends a code to the new address and switches the email once it's entered", async () => {
+    const email = `it-change-${randomUUID()}@example.com`;
+    const newEmail = `it-changed-${randomUUID()}@example.com`;
+    const signup = await request(server.baseUrl, "/api/auth/sign-up/email", { method: "POST", body: signUpBody(email) });
+    const userId = (signup.body as { user: { id: string } }).user.id;
+    const verified = await request(server.baseUrl, "/api/auth/email-otp/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ email, otp: verificationCodeFor(email) }),
+    });
+    const cookies = verified.cookies;
+
+    const requested = await request(server.baseUrl, "/api/auth/email-otp/request-email-change", {
+      method: "POST",
+      cookie: cookies,
+      body: JSON.stringify({ newEmail }),
+    });
+    expect(requested.status).toBe(200);
+    const code = verificationCodeFor(newEmail);
+
+    const wrong = await request(server.baseUrl, "/api/auth/email-otp/change-email", {
+      method: "POST",
+      cookie: cookies,
+      body: JSON.stringify({ newEmail, otp: code === "000000" ? "111111" : "000000" }),
+    });
+    expect(wrong.status).toBe(400);
+
+    const changed = await request(server.baseUrl, "/api/auth/email-otp/change-email", {
+      method: "POST",
+      cookie: cookies,
+      body: JSON.stringify({ newEmail, otp: code }),
+    });
+    expect(changed.status).toBe(200);
+    expect((await profileFor(userId))?.email).toBe(newEmail);
+
+    const signIn = await request(server.baseUrl, "/api/auth/sign-in/email", {
+      method: "POST",
+      body: JSON.stringify({ email: newEmail, password: PASSWORD }),
+    });
+    expect(signIn.status).toBe(200);
+  });
+});

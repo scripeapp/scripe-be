@@ -1,6 +1,6 @@
 import { sql, type RawBuilder } from "kysely";
 import type { DatabaseContext } from "../../db/database-context.js";
-import type { BusinessCreateInput, BusinessListRow, BusinessRow, BusinessUpdateInput } from "./businesses.types.js";
+import type { BusinessBrandingUpdateInput, BusinessCreateInput, BusinessListRow, BusinessRow, BusinessUpdateInput } from "./businesses.types.js";
 
 export async function listBusinesses(context: DatabaseContext): Promise<BusinessListRow[]> {
   const result = await sql<BusinessListRow>`
@@ -80,4 +80,18 @@ export async function archiveBusiness(context: DatabaseContext, businessId: stri
     returning *
   `.execute(context.transaction);
   return result.rows[0];
+}
+
+/** Applies only the fields present in `input`; returns false when the business isn't visible to the caller. */
+export async function updateBranding(context: DatabaseContext, businessId: string, input: BusinessBrandingUpdateInput): Promise<boolean> {
+  const sets: RawBuilder<unknown>[] = [];
+  if (input.logoUploadId !== undefined) sets.push(sql`"logoUploadId" = ${input.logoUploadId}::uuid`);
+  if (input.coverUploadId !== undefined) sets.push(sql`"coverUploadId" = ${input.coverUploadId}::uuid`);
+  if (input.brandColor !== undefined) sets.push(sql`"brandColor" = ${input.brandColor?.toUpperCase() ?? null}`);
+  if (sets.length === 0) return true;
+  const result = await sql`
+    update app.businesses set ${sql.join(sets, sql`, `)}
+    where "id" = ${businessId}::uuid and "status" <> 'archived'
+  `.execute(context.transaction);
+  return Number(result.numAffectedRows ?? 0) > 0;
 }

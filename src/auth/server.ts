@@ -21,12 +21,17 @@ function createAuth() {
   const environment = loadEnvironment();
   const baseUrl = new URL(environment.BETTER_AUTH_URL);
 
-  const socialProviders: { google?: { clientId: string; clientSecret: string } } =
-    {};
+  const socialProviders: {
+    google?: { clientId: string; clientSecret: string; accessType: "offline"; prompt: "select_account" };
+  } = {};
   if (environment.GOOGLE_CLIENT_ID && environment.GOOGLE_CLIENT_SECRET) {
     socialProviders.google = {
       clientId: environment.GOOGLE_CLIENT_ID,
       clientSecret: environment.GOOGLE_CLIENT_SECRET,
+      // Offline access returns a refresh token, so Google Calendar sync keeps
+      // working after the hour-long access token expires.
+      accessType: "offline",
+      prompt: "select_account",
     };
   }
 
@@ -52,6 +57,11 @@ function createAuth() {
       autoSignInAfterVerification: true,
     },
     socialProviders,
+    account: {
+      // Settings › Integrations links a Google account for Calendar, which may
+      // use a different address than the Scripe login.
+      accountLinking: { enabled: true, allowDifferentEmails: true },
+    },
     plugins: [
       passkey({
         // The browser validates rpID against the page origin (www.scripe.app),
@@ -66,6 +76,10 @@ function createAuth() {
         allowedAttempts: EMAIL_VERIFICATION_MAX_ATTEMPTS,
         storeOTP: "hashed",
         overrideDefaultEmailVerification: true,
+        // Settings › Profile › Email: a code goes to the new address, and the
+        // email changes once it's entered (POST /email-otp/request-email-change
+        // then /email-otp/change-email, both needing a fresh session).
+        changeEmail: { enabled: true },
         rateLimit: EMAIL_VERIFICATION_RATE_LIMIT,
         sendVerificationOTP: async ({ email, otp, type }) => {
           console.log(`\n========================================\n[AUTH OTP] to=${email} otp=${otp} (type=${type})\n========================================\n`);

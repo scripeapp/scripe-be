@@ -40,6 +40,25 @@ export async function requireOwnConfirmedUpload(
   return upload;
 }
 
+/**
+ * requireOwnConfirmedUpload's business counterpart: the upload belongs to
+ * `businessId`, has `purpose`, and is confirmed (used when a business links
+ * its logo or icon). The caller has already checked the business permission.
+ */
+export async function requireBusinessConfirmedUpload(
+  context: DatabaseContext,
+  userId: string,
+  businessId: string,
+  uploadId: string,
+  purpose: CreateUploadInput["purpose"],
+): Promise<UploadRow> {
+  const upload = await repository.findAccessible(context, userId, uploadId);
+  if (!upload || upload.businessId !== businessId) throw notFoundError("Upload not found");
+  if (upload.purpose !== purpose) throw conflictError(`Upload is not a confirmed ${purpose}`);
+  if (upload.status !== "confirmed") throw conflictError("Upload has not been confirmed yet");
+  return upload;
+}
+
 export class UploadsService {
   constructor(private readonly database: Database) {}
 

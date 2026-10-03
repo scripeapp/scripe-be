@@ -1,9 +1,12 @@
 import type { NextFunction, Request, Response } from "express";
 import { requireAuthContext } from "../../middleware/auth.js";
 import { ApiResponse } from "../../shared/api-response.js";
+import { notFoundError } from "../../shared/errors.js";
 import {
+  brandingImageParamsSchema,
   businessIdParamsSchema,
   createBusinessSchema,
+  updateBrandingSchema,
   updateBusinessSchema,
 } from "./businesses.schemas.js";
 import type { BusinessesService } from "./businesses.service.js";
@@ -30,6 +33,40 @@ export class BusinessesController {
     }),
     201,
   );
+
+  readonly updateBranding = this.handle(async (request) => {
+    const { businessId } = businessIdParamsSchema.parse(request.params);
+    return {
+      business: await this.service.updateBranding(this.operation(request), businessId, updateBrandingSchema.parse(request.body)),
+    };
+  });
+
+  /** Public: no requireAuth. Colours and image URLs for a business's public pages. */
+  readonly getPublicBranding = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId } = businessIdParamsSchema.parse(request.params);
+      ApiResponse.success(response, { branding: await this.service.getPublicBranding(request.requestId, businessId) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Public: redirects to a short-lived download URL for the logo or icon (like /api/users/:userId/avatar). */
+  readonly getBrandingImage = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, kind } = brandingImageParamsSchema.parse(request.params);
+      const downloadUrl = await this.service.resolveBrandingImageUrl(request.requestId, businessId, kind);
+      if (!downloadUrl) {
+        next(notFoundError("Image not found"));
+        return;
+      }
+      // ?v= in the path changes with the image, so the redirect itself can be cached briefly.
+      response.set("Cache-Control", "public, max-age=300");
+      response.redirect(302, downloadUrl);
+    } catch (error) {
+      next(error);
+    }
+  };
 
   readonly get = this.handle(async (request) => {
     const { businessId } = businessIdParamsSchema.parse(request.params);

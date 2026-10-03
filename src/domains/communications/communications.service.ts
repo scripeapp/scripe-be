@@ -11,6 +11,7 @@ import { emailSender } from "../../shared/email.js";
 import { loadEnvironment } from "../../shared/environment.js";
 import { AppError, conflictError, notFoundError, validationError } from "../../shared/errors.js";
 import * as auditRepository from "../audit/audit.repository.js";
+import * as businessesRepository from "../businesses/businesses.repository.js";
 import { requirePermission } from "../authorization/authorization.service.js";
 import { estimateCommunicationCost, appendSmsOptOutFooter } from "./communications.cost.js";
 import * as repository from "./communications.repository.js";
@@ -152,12 +153,20 @@ export class CommunicationsService {
   async createSender(operation: CommunicationsOperation, input: CreateSenderInput): Promise<CommunicationSender> {
     return this.run(operation, async (context) => {
       await requirePermission(context, operation.businessId, "communications.manage");
-      if (input.domainId) {
-        const domain = await repository.findDomain(context, operation.businessId, input.domainId);
-        if (!domain || domain.status !== "verified") throw validationError("The sending domain must be verified before creating a sender on it");
-        if (!input.email.toLowerCase().endsWith(`@${domain.domain.toLowerCase()}`)) throw validationError("Sender email must belong to the selected domain");
+      // A sender must be on a domain this business has verified: anything
+      // else would let a business email customers as an address it doesn't
+      // own, and the provider would reject or flag it anyway.
+      const emailDomain = input.email.split("@").pop()!.toLowerCase();
+      const domain = input.domainId
+        ? await repository.findDomain(context, operation.businessId, input.domainId)
+        : (await repository.listDomains(context, operation.businessId)).find((entry) => entry.domain.toLowerCase() === emailDomain);
+      if (input.domainId && (!domain || domain.domain.toLowerCase() !== emailDomain)) {
+        throw validationError("Sender email must belong to the selected domain");
       }
-      const created = await repository.createSender(context, operation.businessId, input);
+      if (!domain || domain.status !== "verified") {
+        throw validationError(`Verify ${emailDomain} under Communications before adding a sender on it`, { field: "email" });
+      }
+      const created = await repository.createSender(context, operation.businessId, { ...input, domainId: domain.id });
       const isFirstSender = (await repository.listSenders(context, operation.businessId)).length === 1;
       if (isFirstSender) await repository.setDefaultSender(context, operation.businessId, created.id);
       const final = await repository.findSender(context, operation.businessId, created.id);
@@ -194,15 +203,17 @@ export class CommunicationsService {
 
   /** Explicit sender → business default → platform fallback. This is the fix for legacy's disconnect: both call sites here actually resolve and use it, instead of a hard-coded slug address. */
   private async resolveSender(context: DatabaseContext, businessId: string, senderId: string | null): Promise<ResolvedSender> {
-    if (senderId) {
-      const sender = await repository.findSender(context, businessId, senderId);
-      if (!sender || !sender.isActive) throw validationError("Selected sender not found or inactive");
-      return { name: sender.name, email: sender.email };
-    }
-    const defaultSender = await repository.findDefaultSender(context, businessId);
-    if (defaultSender) return { name: defaultSender.name, email: defaultSender.email };
-    const environment = loadEnvironment();
-    return { name: "Scripe", email: environment.PLUNK_FROM_EMAIL ?? "noreply@scripe.app" };
+    const sender = senderId
+      ? await repository.findSender(context, businessId, senderId)
+      : await repository.findDefaultSender(context, businessId);
+    if (senderId && (!sender || !sender.isActive)) throw validationError("Selected sender not found or inactive");
+    // Only send as the sender while its domain is still verified (and for
+    // senders saved before verification was required, at all).
+    const domain = sender?.domainId ? await repository.findDomain(context, businessId, sender.domainId) : undefined;
+    if (sender && domain?.status === "verified") return { name: sender.name, email: sender.email };
+    // Otherwise: the business's own name on Scripe's sending address.
+    const business = await businessesRepository.findBusiness(context, businessId);
+    return { name: business?.displayName ?? "Scripe", email: loadEnvironment().PLUNK_FROM_EMAIL ?? "noreply@scripe.app" };
   }
 
   // ---------------------------------------------------------------------

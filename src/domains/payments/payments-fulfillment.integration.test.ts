@@ -64,6 +64,22 @@ describe("payments and fulfillment domains", () => {
     expect(response.status).toBe(503);
   });
 
+  it("refuses Flutterwave for order checkouts, since only Paystack settles sales to the business", async () => {
+    const email = `checkout-flutterwave-${randomUUID()}@example.com`;
+    await request(server.baseUrl, "/api/auth/sign-up/email", { method: "POST", body: JSON.stringify({ email, name: "Checkout", password: "Sup3rSecret!pass" }) });
+    const code = verificationMessages.find((m) => m.to === email)?.code;
+    const verified = await request(server.baseUrl, "/api/auth/email-otp/verify-email", { method: "POST", body: JSON.stringify({ email, otp: code }) });
+    const business = await request(server.baseUrl, "/api/businesses", { method: "POST", cookie: verified.cookies, body: JSON.stringify({ displayName: "Flutterwave Checkout Co" }) });
+    const id = (business.body as { data: { business: { id: string } } }).data.business.id;
+
+    const response = await request(server.baseUrl, `/api/businesses/${id}/payments/checkout`, {
+      method: "POST",
+      cookie: verified.cookies,
+      body: JSON.stringify({ orderId: randomUUID(), gateway: "flutterwave", assetCode: "NGN", amountMinor: 500000, email, idempotencyKey: `co-${randomUUID()}` }),
+    });
+    expect(response.status).toBe(409);
+  });
+
   it("returns not found when verifying a checkout reference that was never initiated", async () => {
     const email = `checkout-verify-${randomUUID()}@example.com`;
     await request(server.baseUrl, "/api/auth/sign-up/email", { method: "POST", body: JSON.stringify({ email, name: "Checkout", password: "Sup3rSecret!pass" }) });

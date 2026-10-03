@@ -7,7 +7,7 @@ jest.mock("@/shared/email.js", () => ({
 
 import { getDatabase } from "@/db/database.js";
 import { withDatabaseContext } from "@/db/database-context.js";
-import { withIdentity } from "@/db/principal.js";
+import { anonymousPrincipal, withIdentity } from "@/db/principal.js";
 import { request, startTestServer, type TestServer } from "@/test-support/http.js";
 import * as notificationsRepository from "./notifications.repository.js";
 
@@ -15,7 +15,7 @@ let server: TestServer;
 beforeAll(async () => { server = await startTestServer(); });
 afterAll(async () => server.close());
 
-async function authenticate(label: string): Promise<{ cookies: string; userId: string }> {
+async function authenticate(label: string): Promise<{ cookies: string; userId: string; email: string }> {
   const email = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${randomUUID()}@example.com`;
   const signup = await request(server.baseUrl, "/api/auth/sign-up/email", {
     method: "POST",
@@ -30,19 +30,19 @@ async function authenticate(label: string): Promise<{ cookies: string; userId: s
     method: "POST",
     body: JSON.stringify({ email, otp: code }),
   });
-  return { cookies: verified.cookies, userId };
+  return { cookies: verified.cookies, userId, email };
 }
 
 /** Simulates a future domain calling createNotification server-side — no route exposes this in this slice. */
 async function createNotificationDirectly(userId: string, requestId: string, overrides: Partial<Parameters<typeof notificationsRepository.createNotification>[1]> = {}) {
-  return withDatabaseContext(getDatabase(), withIdentity(requestId, userId, null), (context) =>
-    notificationsRepository.createNotification(context, {
+  return withDatabaseContext(getDatabase(), withIdentity(requestId, userId, null), async (context) =>
+    (await notificationsRepository.createNotification(context, {
       userId,
       type: "test.event",
       title: "Something happened",
       body: "Details about the event",
       ...overrides,
-    }),
+    }))!,
   );
 }
 
@@ -142,5 +142,33 @@ describe("notifications domain", () => {
     const preferences = (list.body as { data: { preferences: { type: string; channel: string; enabled: boolean }[] } }).data.preferences;
     expect(preferences).toHaveLength(1);
     expect(preferences[0]).toMatchObject({ type: "order.placed", channel: "email", enabled: true });
+  });
+
+  it("honours a turned-off category when sending, for in-app and email", async () => {
+    const user = await authenticate("Quiet Owner");
+    const turnOff = (category: string, channel: string) =>
+      request(server.baseUrl, `/api/me/notification-preferences/${category}/${channel}`, {
+        method: "PUT",
+        cookie: user.cookies,
+        body: JSON.stringify({ enabled: false }),
+      });
+    expect((await turnOff("sales", "in_app")).status).toBe(200);
+    expect((await turnOff("sales", "email")).status).toBe(200);
+
+    // Webhook path: no signed-in user, so the own-rows policy hides the preference.
+    const system = anonymousPrincipal(randomUUID());
+    await withDatabaseContext(getDatabase(), system, async (context) => {
+      await notificationsRepository.createSystemNotification(context, { userId: user.userId, type: "invoice.paid", title: "Muted sale" });
+      await notificationsRepository.createSystemNotification(context, { userId: user.userId, type: "team.joined", title: "Still on" });
+      expect(await notificationsRepository.wantsEmail(context, user.email, "sales")).toBe(false);
+      expect(await notificationsRepository.wantsEmail(context, user.email.toUpperCase(), "sales")).toBe(false);
+      expect(await notificationsRepository.wantsEmail(context, user.email, "deposits")).toBe(true);
+      expect(await notificationsRepository.wantsEmail(context, `nobody-${randomUUID()}@example.com`, "sales")).toBe(true);
+    });
+
+    const listed = await request(server.baseUrl, "/api/me/notifications", { cookie: user.cookies });
+    const titles = (listed.body as { data: { notifications: { title: string }[] } }).data.notifications.map((n) => n.title);
+    expect(titles).toContain("Still on");
+    expect(titles).not.toContain("Muted sale");
   });
 });

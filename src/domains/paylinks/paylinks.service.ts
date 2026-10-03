@@ -1,4 +1,5 @@
 import { randomInt, randomUUID } from "node:crypto";
+import { absoluteBrandingImageUrl, loadBusinessBranding } from "../businesses/businesses.branding.js";
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
 import { anonymousPrincipal, withIdentity } from "../../db/principal.js";
@@ -368,7 +369,7 @@ export class PaylinksService {
           collectPhone: link.collectPhone,
           collectAddress: link.collectAddress,
           businessName: link.businessName,
-          businessLogoUrl: null,
+          businessLogoUrl: absoluteBrandingImageUrl((await loadBusinessBranding(context, link.businessId))?.logoUrl ?? null),
           product: link.product,
         };
       },

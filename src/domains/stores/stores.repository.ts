@@ -129,6 +129,20 @@ export async function updateStore(
     assignments.push(sql`"contactEmail" = ${input.contactEmail}`);
   if (input.contactPhone !== undefined)
     assignments.push(sql`"contactPhone" = ${input.contactPhone}`);
+  if (input.location !== undefined)
+    assignments.push(sql`"location" = ${input.location}`);
+  if (input.websiteUrl !== undefined)
+    assignments.push(sql`"websiteUrl" = ${input.websiteUrl}`);
+  if (input.socialLinks !== undefined)
+    assignments.push(sql`"socialLinks" = ${JSON.stringify(input.socialLinks)}::jsonb`);
+  if (input.businessHours !== undefined)
+    assignments.push(sql`"businessHours" = ${JSON.stringify(input.businessHours)}::jsonb`);
+  if (input.privacyPolicy !== undefined)
+    assignments.push(sql`"privacyPolicy" = ${input.privacyPolicy}`);
+  if (input.refundPolicy !== undefined)
+    assignments.push(sql`"refundPolicy" = ${input.refundPolicy}`);
+  if (input.productBrowsingMode !== undefined)
+    assignments.push(sql`"productBrowsingMode" = ${input.productBrowsingMode}`);
   if (input.timezone !== undefined)
     assignments.push(sql`"timezone" = ${input.timezone}`);
   if (input.status !== undefined)

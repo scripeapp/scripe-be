@@ -8,6 +8,7 @@ import * as authorization from "../authorization/authorization.service.js";
 import * as repo from "./bookings.repository.js";
 import { toServiceBooking, type AvailableSlot, type BookingStatus, type ReservedBooking, type ServiceBooking } from "./bookings.types.js";
 import * as slots from "./slots.js";
+import { calendarOccupiedRanges, syncBookingCalendars } from "./bookings.calendar.js";
 
 const DEFAULT_HOLD_MINUTES = 10;
 const DEFAULT_TIMEZONE = "Africa/Lagos";
@@ -83,7 +84,7 @@ export class BookingsService {
       items: { productId: string; variantId: string | null; staffId: string; modifierOptionIds: string[] }[];
     },
   ): Promise<ServiceBooking> {
-    return this.forBusiness(userId, requestId, storeId, "booking.create", async (context, businessId) => {
+    const booking = await this.forBusiness(userId, requestId, storeId, "booking.create", async (context, businessId) => {
       const locationId = await repo.resolveStoreLocation(context, businessId, storeId, input.locationId);
       if (!locationId) throw validationError("Unknown booking location.");
 
@@ -124,10 +125,12 @@ export class BookingsService {
         }
         throw error;
       }
-      const booking = await repo.findById(context, businessId, bookingId);
-      if (!booking) throw notFoundError("Booking not found");
-      return toServiceBooking(booking);
+      const created = await repo.findById(context, businessId, bookingId);
+      if (!created) throw notFoundError("Booking not found");
+      return toServiceBooking(created);
     });
+    await syncBookingCalendars(this.database, booking.id);
+    return booking;
   }
 
   async list(
@@ -158,7 +161,7 @@ export class BookingsService {
     bookingId: string,
     patch: { status: BookingStatus; cancelReason?: string | null; startsAt?: string },
   ): Promise<ServiceBooking> {
-    return this.forBusiness(userId, requestId, storeId, "booking.update", async (context, businessId) => {
+    const booking = await this.forBusiness(userId, requestId, storeId, "booking.update", async (context, businessId) => {
       const existing = await repo.findById(context, businessId, bookingId);
       if (!existing) throw notFoundError("Booking not found");
       this.assertTransition(existing.status, patch.status);
@@ -201,6 +204,8 @@ export class BookingsService {
       if (!updated) throw notFoundError("Booking not found");
       return toServiceBooking(updated);
     });
+    await syncBookingCalendars(this.database, bookingId, { rescheduled: Boolean(patch.startsAt) });
+    return booking;
   }
 
   async availableSlots(
@@ -232,10 +237,12 @@ export class BookingsService {
       const fromMs = this.windowStart(input.date, -1);
       const toMs = this.windowStart(input.date, input.days + 2);
 
-      const [schedules, exceptions, occupied, unavailableLocationIds, extraMinutes] = await Promise.all([
+      const [schedules, exceptions, booked, calendarBusy, unavailableLocationIds, extraMinutes] = await Promise.all([
         slots.scheduleEntries(context, businessId, staffIds, input.locationId),
         slots.exceptionEntries(context, businessId, staffIds, fromMs, toMs),
         slots.occupiedRanges(context, businessId, staffIds, fromMs, toMs, null),
+        // Staff who connected Google Calendar are also busy whenever their own calendar says so.
+        calendarOccupiedRanges(context, businessId, staffIds, fromMs, toMs),
         slots.unavailableLocations(context, businessId, input.productId),
         slots.modifierExtraMinutes(context, businessId, input.modifierOptionIds ?? []),
       ]);
@@ -247,7 +254,7 @@ export class BookingsService {
         staff,
         schedules,
         exceptions,
-        occupied,
+        occupied: [...booked, ...calendarBusy],
         locationFilter: input.locationId,
         staffFilter: input.staffId,
         nowMilliseconds: Date.now(),

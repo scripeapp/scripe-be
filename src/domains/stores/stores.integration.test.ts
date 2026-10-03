@@ -534,5 +534,52 @@ describe("stores domain", () => {
       });
       expect(asOutsider.status).toBe(404);
     });
+
+    it("saves the storefront profile and serves it on the public store", async () => {
+      const owner = await authenticate("Profile Owner");
+      const business = await createBusiness(owner, "Profile Shop");
+      const slug = `profile-shop-${randomUUID().slice(0, 8)}`;
+      await activateDefaultStore(owner, business, slug);
+      const storePath = `/api/businesses/${business.id}/stores/${business.defaultStore.id}`;
+
+      const saved = await request(server.baseUrl, storePath, {
+        method: "PATCH",
+        cookie: owner.cookies,
+        body: JSON.stringify({
+          location: "12 Allen Avenue, Ikeja",
+          websiteUrl: "https://profile.example",
+          socialLinks: { instagram: "@profileshop", facebook: "" },
+          businessHours: { monday: { open: "09:00", close: "17:00" }, sunday: null },
+          refundPolicy: "Returns within 7 days.",
+          privacyPolicy: "",
+          productBrowsingMode: "quick_view",
+        }),
+      });
+      expect(saved.status).toBe(200);
+      expect(entity(saved, "store")).toMatchObject({
+        location: "12 Allen Avenue, Ikeja",
+        socialLinks: { instagram: "@profileshop" },
+        privacyPolicy: null,
+        productBrowsingMode: "quick_view",
+      });
+
+      const publicStore = entity<Record<string, unknown>>(await request(server.baseUrl, `/api/store/public/${slug}`), "store");
+      expect(publicStore).toMatchObject({
+        location: "12 Allen Avenue, Ikeja",
+        websiteUrl: "https://profile.example",
+        socialLinks: { instagram: "@profileshop" },
+        businessHours: { monday: { open: "09:00", close: "17:00" }, sunday: null },
+        refundPolicy: "Returns within 7 days.",
+        productBrowsingMode: "quick_view",
+      });
+      expect((publicStore.branding as { coverUrl: unknown }).coverUrl).toBeNull();
+
+      const badHours = await request(server.baseUrl, storePath, {
+        method: "PATCH",
+        cookie: owner.cookies,
+        body: JSON.stringify({ businessHours: { monday: { open: "9am", close: "17:00" } } }),
+      });
+      expect(badHours.status).toBe(400);
+    });
   });
 });

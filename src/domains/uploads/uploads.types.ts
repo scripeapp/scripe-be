@@ -1,4 +1,4 @@
-export type UploadPurpose = "product_image" | "compliance_document" | "avatar" | "other";
+export type UploadPurpose = "product_image" | "compliance_document" | "avatar" | "business_logo" | "business_cover" | "other";
 export type UploadStatus = "pending" | "confirmed" | "failed" | "deleted";
 
 export interface UploadRow {

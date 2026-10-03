@@ -37,11 +37,19 @@ export class PaymentsService{constructor(private readonly database:Database){} a
     return withDatabaseContext(this.database, withIdentity(operation.requestId, operation.userId, operation.businessId), async (context) => {
       await authorization.requirePermission(context, operation.businessId, "payment.manage");
 
+      // A sale must settle to the business. Only Paystack can do that today
+      // (via the business's subaccount); Flutterwave has no split set up, so
+      // an order paid through it would land in Scripe's own balance. Until
+      // Flutterwave subaccounts exist, order checkouts are Paystack only.
+      // (Scripe's own revenue, such as message credits, may still use Flutterwave.)
+      if (input.gateway !== "paystack") {
+        throw conflictError("Online payments for orders go through Paystack. Choose Paystack to pay.");
+      }
       const reference = `scripe_${randomUUID()}`;
       const gateway = getCheckoutGateway(input.gateway);
-      // Paystack sales settle to the business's own subaccount (refused with
-      // 409 when real Paystack is configured and payouts aren't set up).
-      const subaccountCode = input.gateway === "paystack" ? await requireCheckoutSubaccount(context, operation.businessId) : undefined;
+      // Sales settle to the business's own subaccount (refused with 409 when
+      // real Paystack is configured and payouts aren't set up).
+      const subaccountCode = await requireCheckoutSubaccount(context, operation.businessId);
       const checkout = await gateway.initializeCheckout({
         amountMinor: String(input.amountMinor),
         assetCode: input.assetCode,
