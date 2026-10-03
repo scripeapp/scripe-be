@@ -13,6 +13,9 @@ export function createBusinessesRouter(): Router {
   router.post("/api/businesses", requireAuth, controller.create);
   router.get("/api/businesses/:businessId", requireAuth, controller.get);
   router.patch("/api/businesses/:businessId", requireAuth, controller.update);
+  router.patch("/api/businesses/:businessId/branding", requireAuth, controller.updateBranding);
+  router.get("/api/businesses/:businessId/branding", controller.getPublicBranding);
+  router.get("/api/businesses/:businessId/branding/:kind", controller.getBrandingImage);
   router.delete("/api/businesses/:businessId", requireAuth, controller.archive);
 
   return router;

@@ -3,6 +3,7 @@ import type { DatabaseContext } from "../../db/database-context.js";
 import { emailSender, escapeHtml } from "../../shared/email.js";
 import { loadEnvironment } from "../../shared/environment.js";
 import * as notificationsRepo from "../notifications/notifications.repository.js";
+import { absoluteBrandingImageUrl, loadBusinessBranding } from "../businesses/businesses.branding.js";
 import * as repository from "./invoices.repository.js";
 import type { ReportedTransfer } from "./invoices.repository.js";
 
@@ -15,6 +16,12 @@ export function formatMinor(minor: string | number | bigint, currency: string): 
   const cents = (abs % 100n).toString().padStart(2, "0");
   const symbol = currency === "NGN" ? "₦" : `${currency} `;
   return `${negative ? "-" : ""}${symbol}${whole}.${cents}`;
+}
+
+/** Logo (absolute URL) and brand colour for a business's invoice emails; empty when it has none. */
+export async function invoiceEmailBranding(context: DatabaseContext, businessId: string): Promise<{ logoUrl: string | null; brandColor: string | null }> {
+  const branding = await loadBusinessBranding(context, businessId);
+  return { logoUrl: absoluteBrandingImageUrl(branding?.logoUrl ?? null), brandColor: branding?.brandColor ?? null };
 }
 
 export function publicInvoiceUrl(token: string): string {
@@ -96,7 +103,7 @@ export async function notifyInvoicePayment(context: DatabaseContext, orderId: st
     );
   }
 
-  if (found.merchantEmail) {
+  if (found.merchantEmail && (await notificationsRepo.wantsEmail(context, found.merchantEmail, "sales"))) {
     await sendQuietly("merchant payment", () =>
       emailSender.sendTransactional({
         to: found.merchantEmail!,
@@ -129,7 +136,7 @@ export async function notifyTransferReported(context: DatabaseContext, report: R
     });
   }
 
-  if (report.merchantEmail) {
+  if (report.merchantEmail && (await notificationsRepo.wantsEmail(context, report.merchantEmail, "sales"))) {
     await sendQuietly("merchant transfer report", () =>
       emailSender.sendTransactional({
         to: report.merchantEmail!,

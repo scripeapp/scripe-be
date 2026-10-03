@@ -31,6 +31,19 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** Business logo (or name) at the top of an invoice email. */
+function invoiceEmailHeader(params: { businessName: string; logoUrl?: string | null }): string {
+  const identity = params.logoUrl
+    ? `<img src="${escapeHtml(params.logoUrl)}" alt="${escapeHtml(params.businessName)}" style="max-height:48px;max-width:200px;display:block" />`
+    : `<h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">${escapeHtml(params.businessName)}</h2>`;
+  return `<div style="margin-bottom:20px;border-bottom:1px solid #e5e7eb;padding-bottom:12px">${identity}</div>`;
+}
+
+/** Only a validated #RRGGBB reaches a style attribute; anything else uses Scripe's default. */
+function invoiceButtonColor(brandColor?: string | null): string {
+  return brandColor && /^#[0-9A-Fa-f]{6}$/.test(brandColor) ? brandColor : "#FF5B1F";
+}
+
 export interface EmailSender {
   sendVerificationCode(to: string, code: string): Promise<void>;
   sendPasswordResetEmail(to: string, url: string): Promise<void>;
@@ -73,10 +86,29 @@ export interface EmailSender {
     to: string,
     params: InvoiceReminderEmail,
   ): Promise<void>;
+  sendPurchaseOrder(to: string, params: PurchaseOrderEmail): Promise<void>;
+}
+
+export interface PurchaseOrderEmail {
+  readonly businessName: string;
+  readonly supplierName: string;
+  readonly orderNumber: string;
+  /** Already formatted for display, e.g. "3 Oct 2026". */
+  readonly orderDate: string;
+  readonly expectedDate?: string | null;
+  readonly lines: readonly { name: string; quantity: string; unitCostFormatted: string; totalFormatted: string }[];
+  readonly totalFormatted: string;
+  readonly notes?: string | null;
+  /** Where the supplier's reply should go — the business's own email, when known. */
+  readonly replyToEmail?: string | null;
 }
 
 export interface InvoiceIssuedEmail {
   readonly businessName: string;
+  /** Absolute URL of the business's logo; the header falls back to the business name. */
+  readonly logoUrl?: string | null;
+  /** The business's brand colour (#RRGGBB) for the pay button. */
+  readonly brandColor?: string | null;
   readonly customerName: string;
   readonly invoiceNumber: string;
   readonly amountFormatted: string;
@@ -87,6 +119,10 @@ export interface InvoiceIssuedEmail {
 
 export interface InvoiceReminderEmail {
   readonly businessName: string;
+  /** Absolute URL of the business's logo; the header falls back to the business name. */
+  readonly logoUrl?: string | null;
+  /** The business's brand colour (#RRGGBB) for the pay button. */
+  readonly brandColor?: string | null;
   readonly customerName: string;
   readonly invoiceNumber: string;
   readonly amountFormatted: string;
@@ -292,9 +328,7 @@ export class PlunkEmailSender implements EmailSender {
       subject: `Invoice ${params.invoiceNumber} from ${params.businessName} — Scripe`,
       html:
         `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
-        `<div style="margin-bottom:20px;border-bottom:1px solid #e5e7eb;padding-bottom:12px">` +
-        `<h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">${escapeHtml(params.businessName)}</h2>` +
-        `</div>` +
+        invoiceEmailHeader(params) +
         `<p style="font-size:15px;line-height:22px;color:#374151">Hello ${escapeHtml(params.customerName)},</p>` +
         `<p style="font-size:15px;line-height:22px;color:#374151">You have received invoice <strong>${escapeHtml(params.invoiceNumber)}</strong> from <strong>${escapeHtml(params.businessName)}</strong>.</p>` +
         `<div style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:20px 0">` +
@@ -314,7 +348,7 @@ export class PlunkEmailSender implements EmailSender {
         (params.notes
           ? `<p style="font-size:14px;color:#6b7280;font-style:italic;margin-bottom:20px">${escapeHtml(params.notes)}</p>`
           : "") +
-        `<p style="margin:28px 0"><a href="${escapeHtml(params.payUrl)}" style="background-color:#FF5B1F;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:24px;font-weight:600;font-size:14px;display:inline-block">View & Pay Invoice</a></p>` +
+        `<p style="margin:28px 0"><a href="${escapeHtml(params.payUrl)}" style="background-color:${invoiceButtonColor(params.brandColor)};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:24px;font-weight:600;font-size:14px;display:inline-block">View & Pay Invoice</a></p>` +
         `<p style="color:#9ca3af;font-size:12px;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px">` +
         `If the button above does not work, visit: <br/><a href="${escapeHtml(params.payUrl)}" style="color:#FF5B1F">${escapeHtml(params.payUrl)}</a>` +
         `</p>` +
@@ -335,9 +369,7 @@ export class PlunkEmailSender implements EmailSender {
       subject: `Reminder: Invoice ${params.invoiceNumber} from ${params.businessName} — Scripe`,
       html:
         `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
-        `<div style="margin-bottom:20px;border-bottom:1px solid #e5e7eb;padding-bottom:12px">` +
-        `<h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">${escapeHtml(params.businessName)}</h2>` +
-        `</div>` +
+        invoiceEmailHeader(params) +
         `<h3 style="font-size:16px;font-weight:600;color:${params.isOverdue ? "#ef4444" : "#111827"};margin-bottom:12px">${title}</h3>` +
         `<p style="font-size:15px;line-height:22px;color:#374151">Hello ${escapeHtml(params.customerName)},</p>` +
         `<p style="font-size:15px;line-height:22px;color:#374151">This is a reminder regarding invoice <strong>${escapeHtml(params.invoiceNumber)}</strong> from <strong>${escapeHtml(params.businessName)}</strong>.</p>` +
@@ -355,12 +387,52 @@ export class PlunkEmailSender implements EmailSender {
         `<span style="font-weight:500;font-size:13px;color:#111827">${escapeHtml(params.dueDate)}</span>` +
         `</div>` +
         `</div>` +
-        `<p style="margin:28px 0"><a href="${escapeHtml(params.payUrl)}" style="background-color:#FF5B1F;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:24px;font-weight:600;font-size:14px;display:inline-block">View & Pay Invoice</a></p>` +
+        `<p style="margin:28px 0"><a href="${escapeHtml(params.payUrl)}" style="background-color:${invoiceButtonColor(params.brandColor)};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:24px;font-weight:600;font-size:14px;display:inline-block">View & Pay Invoice</a></p>` +
         `<p style="color:#9ca3af;font-size:12px;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px">` +
         `If the button above does not work, visit: <br/><a href="${escapeHtml(params.payUrl)}" style="color:#FF5B1F">${escapeHtml(params.payUrl)}</a>` +
         `</p>` +
         `</div>`,
       logHint: `invoice_reminder=${params.invoiceNumber}`,
+    });
+  }
+
+  async sendPurchaseOrder(to: string, params: PurchaseOrderEmail): Promise<void> {
+    const cell = "padding:8px 0;font-size:13px;border-bottom:1px solid #e5e7eb";
+    const rows = params.lines
+      .map(
+        (line) =>
+          `<tr><td style="${cell};color:#111827">${escapeHtml(line.name)}</td>` +
+          `<td style="${cell};color:#374151;text-align:right">${escapeHtml(line.quantity)}</td>` +
+          `<td style="${cell};color:#374151;text-align:right">${escapeHtml(line.unitCostFormatted)}</td>` +
+          `<td style="${cell};color:#111827;text-align:right;font-weight:500">${escapeHtml(line.totalFormatted)}</td></tr>`,
+      )
+      .join("");
+    await this.send({
+      to,
+      subject: `Purchase order ${params.orderNumber} from ${params.businessName}`,
+      html:
+        `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px 16px;color:#111827">` +
+        invoiceEmailHeader(params) +
+        `<p style="font-size:15px;line-height:22px;color:#374151">Hello ${escapeHtml(params.supplierName)},</p>` +
+        `<p style="font-size:15px;line-height:22px;color:#374151"><strong>${escapeHtml(params.businessName)}</strong> has sent you purchase order <strong>${escapeHtml(params.orderNumber)}</strong>, dated ${escapeHtml(params.orderDate)}` +
+        (params.expectedDate ? `, with delivery expected by <strong>${escapeHtml(params.expectedDate)}</strong>` : "") +
+        `.</p>` +
+        `<table style="width:100%;border-collapse:collapse;margin:20px 0">` +
+        `<thead><tr>` +
+        `<th style="text-align:left;font-size:12px;color:#6b7280;font-weight:500;padding-bottom:6px">Item</th>` +
+        `<th style="text-align:right;font-size:12px;color:#6b7280;font-weight:500;padding-bottom:6px">Qty</th>` +
+        `<th style="text-align:right;font-size:12px;color:#6b7280;font-weight:500;padding-bottom:6px">Unit cost</th>` +
+        `<th style="text-align:right;font-size:12px;color:#6b7280;font-weight:500;padding-bottom:6px">Amount</th>` +
+        `</tr></thead><tbody>${rows}</tbody></table>` +
+        `<p style="text-align:right;font-size:15px;color:#111827;margin:0 0 20px">Total: <strong>${escapeHtml(params.totalFormatted)}</strong></p>` +
+        (params.notes ? `<p style="font-size:14px;color:#6b7280;font-style:italic">${escapeHtml(params.notes)}</p>` : "") +
+        `<p style="font-size:14px;line-height:21px;color:#374151">` +
+        (params.replyToEmail
+          ? `Please confirm or ask any questions by emailing <a href="mailto:${escapeHtml(params.replyToEmail)}" style="color:#FF5B1F">${escapeHtml(params.replyToEmail)}</a>.`
+          : `Please contact ${escapeHtml(params.businessName)} to confirm this order.`) +
+        `</p>` +
+        `</div>`,
+      logHint: `purchase_order=${params.orderNumber}`,
     });
   }
 

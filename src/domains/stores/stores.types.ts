@@ -1,7 +1,20 @@
+import type { BusinessBranding } from "../businesses/businesses.branding.js";
 export type StoreStatus = "draft" | "active" | "archived";
 export type LocationStatus = "active" | "inactive" | "archived";
 export type RegisterStatus = "active" | "inactive" | "archived";
 export type ChannelStatus = "active" | "paused" | "archived";
+export type ProductBrowsingMode = "full_page" | "quick_view";
+export type StoreWeekday = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+
+export interface StoreSocialLinks {
+  readonly facebook?: string;
+  readonly instagram?: string;
+  readonly twitter?: string;
+  readonly whatsapp?: string;
+}
+
+/** Storefront opening hours by weekday ("HH:MM", store time); null or missing means closed. */
+export type StoreBusinessHours = Partial<Record<StoreWeekday, { readonly open: string; readonly close: string } | null>>;
 
 export interface StoreRow {
   readonly id: string;
@@ -15,6 +28,13 @@ export interface StoreRow {
   readonly sellsInPerson: boolean;
   readonly contactEmail: string | null;
   readonly contactPhone: string | null;
+  readonly location: string | null;
+  readonly websiteUrl: string | null;
+  readonly socialLinks: StoreSocialLinks;
+  readonly businessHours: StoreBusinessHours;
+  readonly privacyPolicy: string | null;
+  readonly refundPolicy: string | null;
+  readonly productBrowsingMode: ProductBrowsingMode;
   readonly timezone: string;
   readonly createdBy: string;
   readonly createdAt: Date;
@@ -24,6 +44,8 @@ export interface StoreRow {
 
 /** What an anonymous storefront visitor may see — no createdBy/timezone/isDefault, and only ever an "active" row (migration 0046's RLS policy is what actually enforces that). */
 export interface PublicStore {
+  /** The business's logo, icon and colours (absolute image URLs). */
+  readonly branding: BusinessBranding;
   readonly id: string;
   readonly businessId: string;
   readonly name: string;
@@ -33,6 +55,13 @@ export interface PublicStore {
   readonly sellsInPerson: boolean;
   readonly contactEmail: string | null;
   readonly contactPhone: string | null;
+  readonly location: string | null;
+  readonly websiteUrl: string | null;
+  readonly socialLinks: StoreSocialLinks;
+  readonly businessHours: StoreBusinessHours;
+  readonly privacyPolicy: string | null;
+  readonly refundPolicy: string | null;
+  readonly productBrowsingMode: ProductBrowsingMode;
 }
 
 export interface Store {
@@ -47,6 +76,13 @@ export interface Store {
   readonly sellsInPerson: boolean;
   readonly contactEmail: string | null;
   readonly contactPhone: string | null;
+  readonly location: string | null;
+  readonly websiteUrl: string | null;
+  readonly socialLinks: StoreSocialLinks;
+  readonly businessHours: StoreBusinessHours;
+  readonly privacyPolicy: string | null;
+  readonly refundPolicy: string | null;
+  readonly productBrowsingMode: ProductBrowsingMode;
   readonly timezone: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -176,7 +212,18 @@ export interface StoreCreateInput {
   readonly timezone: string;
 }
 
-export type StoreUpdateInput = Partial<Omit<StoreCreateInput, "slug">> & {
+/** The storefront profile fields a store update may set (create leaves them at their defaults). */
+export interface StoreProfileInput {
+  readonly location?: string | null;
+  readonly websiteUrl?: string | null;
+  readonly socialLinks?: StoreSocialLinks;
+  readonly businessHours?: StoreBusinessHours;
+  readonly privacyPolicy?: string | null;
+  readonly refundPolicy?: string | null;
+  readonly productBrowsingMode?: ProductBrowsingMode;
+}
+
+export type StoreUpdateInput = Partial<Omit<StoreCreateInput, "slug">> & StoreProfileInput & {
   readonly slug?: string;
   readonly status?: Exclude<StoreStatus, "archived">;
 };

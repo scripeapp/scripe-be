@@ -32,9 +32,36 @@ export const createStoreSchema = z.object({
   timezone: z.string().trim().min(1).max(100).default("Africa/Lagos"),
 });
 
-export const updateStoreSchema = createStoreSchema.partial().extend({
+/** Optional free text where an empty string clears the field. */
+const clearableText = (max: number) =>
+  z.string().trim().max(max).transform((value) => value || null).nullable().optional();
+const socialHandle = z.string().trim().max(300).optional().transform((value) => value || undefined);
+const clockTime = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Use a 24-hour time like 09:00");
+const openingHours = z
+  .object({ open: clockTime, close: clockTime })
+  .refine((hours) => hours.open !== hours.close, "Opening and closing times must differ")
+  .nullable();
+const weekday = z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
+
+/** What the public storefront shows about the shop (migration 0088). */
+const storeProfileSchema = z.object({
+  location: clearableText(300),
+  websiteUrl: clearableText(500),
+  socialLinks: z
+    .object({ facebook: socialHandle, instagram: socialHandle, twitter: socialHandle, whatsapp: socialHandle })
+    .strict()
+    // Drop cleared links so the stored object only lists the ones that are set.
+    .transform((links) => Object.fromEntries(Object.entries(links).filter(([, value]) => value)))
+    .optional(),
+  businessHours: z.record(weekday, openingHours).optional(),
+  privacyPolicy: clearableText(20000),
+  refundPolicy: clearableText(20000),
+  productBrowsingMode: z.enum(["full_page", "quick_view"]).optional(),
+});
+
+export const updateStoreSchema = createStoreSchema.partial().merge(storeProfileSchema).extend({
   status: z.enum(["draft", "active"]).optional(),
-}).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+}).refine((value) => Object.values(value).some((field) => field !== undefined), "At least one field is required");
 
 const operationType = z.enum(["dine_in", "pickup", "delivery", "curbside"]);
 const serviceChargeRates = z.record(operationType, z.number().min(0).max(100)).default({});
@@ -112,6 +139,13 @@ const storeResponseSchema = z.object({
   sellsInPerson: z.boolean(),
   contactEmail: z.string().nullable(),
   contactPhone: z.string().nullable(),
+  location: z.string().nullable(),
+  websiteUrl: z.string().nullable(),
+  socialLinks: z.record(z.string(), z.string()),
+  businessHours: z.record(z.string(), z.object({ open: z.string(), close: z.string() }).nullable()),
+  privacyPolicy: z.string().nullable(),
+  refundPolicy: z.string().nullable(),
+  productBrowsingMode: z.enum(["full_page", "quick_view"]),
   timezone: z.string(),
   createdAt: timestamp,
   updatedAt: timestamp,

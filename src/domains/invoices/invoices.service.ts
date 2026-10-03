@@ -16,8 +16,9 @@ import * as partiesRepo from "../parties/parties.repository.js";
 import type { PaymentsService } from "../payments/payments.service.js";
 import * as receiptsRepo from "../receipts/receipts.repository.js";
 import * as repository from "./invoices.repository.js";
-import { formatMinor, notifyInvoicePayment, notifyTransferReported, publicInvoiceUrl } from "./invoices.notifications.js";
+import { formatMinor, invoiceEmailBranding, notifyInvoicePayment, notifyTransferReported, publicInvoiceUrl } from "./invoices.notifications.js";
 import { requireCheckoutSubaccount } from "../banking/checkout-subaccounts.js";
+import { absoluteBrandingImageUrl, loadBusinessBranding } from "../businesses/businesses.branding.js";
 import type {
   CreateInvoiceInput,
   Invoice,
@@ -190,14 +191,14 @@ export class InvoicesService {
     operation: InvoiceOperation,
     invoiceId: string,
   ): Promise<Invoice> {
-    const { invoice, newlySent, businessName } = await this.run(operation, async (context) => {
+    const { invoice, newlySent, businessName, branding } = await this.run(operation, async (context) => {
       await this.require(context, operation.businessId, "invoice.manage");
 
       const current = await repository.lockForUpdate(context, operation.businessId, invoiceId);
       if (!current) throw notFoundError("Invoice not found");
 
       if (current.status === "open" && current.orderId && current.invoiceNumber) {
-        return { invoice: await this.hydrate(context, operation.businessId, invoiceId), newlySent: false, businessName: "" };
+        return { invoice: await this.hydrate(context, operation.businessId, invoiceId), newlySent: false, businessName: "", branding: { logoUrl: null, brandColor: null } };
       }
 
       if (current.status === "void") {
@@ -283,6 +284,7 @@ export class InvoicesService {
         invoice: await this.hydrate(context, operation.businessId, invoiceId),
         newlySent: true,
         businessName: await this.businessName(context, operation.businessId),
+        branding: await invoiceEmailBranding(context, operation.businessId),
       };
     });
 
@@ -290,6 +292,7 @@ export class InvoicesService {
       try {
         await emailSender.sendInvoiceIssued(invoice.customer.email, {
           businessName,
+          ...branding,
           customerName: invoice.customer.name,
           invoiceNumber: invoice.invoiceNumber || "Invoice",
           amountFormatted: formatMinor(invoice.totalMinor, invoice.currency),
@@ -385,7 +388,7 @@ export class InvoicesService {
     operation: InvoiceOperation,
     invoiceId: string,
   ): Promise<{ success: boolean; lastReminderAt: string }> {
-    const { invoice, businessName } = await this.run(operation, async (context) => {
+    const { invoice, businessName, branding } = await this.run(operation, async (context) => {
       await this.require(context, operation.businessId, "invoice.manage");
 
       const current = await repository.lockForUpdate(context, operation.businessId, invoiceId);
@@ -407,11 +410,16 @@ export class InvoicesService {
       if (!hydrated.customer?.email) throw conflictError("This customer has no email address");
 
       await repository.recordReminderSent(context, operation.businessId, invoiceId);
-      return { invoice: hydrated, businessName: await this.businessName(context, operation.businessId) };
+      return {
+        invoice: hydrated,
+        businessName: await this.businessName(context, operation.businessId),
+        branding: await invoiceEmailBranding(context, operation.businessId),
+      };
     });
 
     await emailSender.sendInvoiceReminder(invoice.customer!.email, {
       businessName,
+      ...branding,
       customerName: invoice.customer!.name,
       invoiceNumber: invoice.invoiceNumber || "Invoice",
       amountFormatted: formatMinor(invoice.balanceDueMinor, invoice.currency),
@@ -498,7 +506,10 @@ export class InvoicesService {
     return withDatabaseContext(this.database, anonymousPrincipal(requestId), async (context) => {
       const publicData = await repository.findByPublicToken(context, token);
       if (!publicData) throw notFoundError("Invoice not found or link has expired");
-      return publicData;
+      // The logo, as an absolute URL like the paylink page.
+      const business = (publicData.business ?? {}) as Record<string, unknown>;
+      const branding = typeof business.id === "string" ? await loadBusinessBranding(context, business.id) : undefined;
+      return { ...publicData, business: { ...business, logoUrl: absoluteBrandingImageUrl(branding?.logoUrl ?? null) } };
     });
   }
 
@@ -729,6 +740,7 @@ export async function runInvoiceOverdueSweep(
     try {
       await emailSender.sendInvoiceReminder(inv.customerEmail, {
         businessName: inv.businessName,
+        ...(await invoiceEmailBranding(context, inv.businessId)),
         customerName: inv.customerName,
         invoiceNumber: inv.invoiceNumber || "Invoice",
         amountFormatted,

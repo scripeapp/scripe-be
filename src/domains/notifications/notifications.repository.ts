@@ -9,12 +9,66 @@ import type {
 } from "./notifications.types.js";
 
 /**
- * Not called by any route in this slice — server-side domain code calls this
- * directly once a real notification trigger is evidenced (e.g. a team
- * invitation, an order event). The recipient is data, not the caller's own
- * identity, so this intentionally does not go through requirePermission.
+ * The preference category an event type belongs to; the Settings ›
+ * Notifications switches are per category and channel. Types outside every
+ * category (none today besides tests) are always delivered.
  */
-export async function createNotification(context: DatabaseContext, input: CreateNotificationInput): Promise<NotificationRow> {
+export type NotificationCategory = "sales" | "deposits" | "team";
+
+export function notificationCategory(type: string): NotificationCategory | null {
+  if (type.startsWith("invoice.") || type.startsWith("paylink.")) return "sales";
+  if (type.startsWith("deposit.")) return "deposits";
+  if (type.startsWith("team.")) return "team";
+  return null;
+}
+
+/** Whether the user wants this category on this channel (no saved preference means yes). Works without a signed-in user. */
+export async function isNotificationEnabled(context: DatabaseContext, userId: string, category: NotificationCategory, channel: NotificationChannel): Promise<boolean> {
+  const result = await sql<{ enabled: boolean }>`
+    select app.notification_enabled(${userId}::uuid, ${category}, ${channel}) as "enabled"
+  `.execute(context.transaction);
+  return result.rows[0]?.enabled ?? true;
+}
+
+/** isNotificationEnabled for a recipient known only by email address; an address that is no user's is always sent to. */
+export async function isNotificationEnabledForEmail(context: DatabaseContext, email: string, category: NotificationCategory, channel: NotificationChannel): Promise<boolean> {
+  const result = await sql<{ enabled: boolean }>`
+    select app.notification_enabled_for_email(${email}, ${category}, ${channel}) as "enabled"
+  `.execute(context.transaction);
+  return result.rows[0]?.enabled ?? true;
+}
+
+/**
+ * Whether to send a merchant email in this category, for senders on a
+ * payment or webhook path: the lookup runs under its own savepoint so a
+ * failure never aborts the caller's transaction, and errs towards sending.
+ */
+export async function wantsEmail(context: DatabaseContext, email: string, category: NotificationCategory): Promise<boolean> {
+  await sql`savepoint notification_preference`.execute(context.transaction);
+  try {
+    const enabled = await isNotificationEnabledForEmail(context, email, category, "email");
+    await sql`release savepoint notification_preference`.execute(context.transaction);
+    return enabled;
+  } catch (error) {
+    await sql`rollback to savepoint notification_preference`.execute(context.transaction);
+    console.warn("[notifications] could not read email preference:", error);
+    return true;
+  }
+}
+
+async function wantsInApp(context: DatabaseContext, input: CreateNotificationInput): Promise<boolean> {
+  const category = notificationCategory(input.type);
+  return category === null || (await isNotificationEnabled(context, input.userId, category, "in_app"));
+}
+
+/**
+ * Server-side domain code calls this directly (e.g. a team invitation). The
+ * recipient is data, not the caller's own identity, so this intentionally
+ * does not go through requirePermission. Returns undefined when the
+ * recipient has turned in-app notifications off for this category.
+ */
+export async function createNotification(context: DatabaseContext, input: CreateNotificationInput): Promise<NotificationRow | undefined> {
+  if (!(await wantsInApp(context, input))) return undefined;
   const result = await sql<NotificationRow>`
     insert into app.notifications ("userId", "businessId", "type", "title", "body", "data")
     values (${input.userId}::uuid, ${input.businessId ?? null}::uuid, ${input.type}, ${input.title}, ${input.body ?? ""}, ${JSON.stringify(input.data ?? {})}::jsonb)
@@ -29,6 +83,7 @@ export async function createNotification(context: DatabaseContext, input: Create
  * the "select own notifications" policy, which no anonymous caller can.
  */
 export async function createSystemNotification(context: DatabaseContext, input: CreateNotificationInput): Promise<void> {
+  if (!(await wantsInApp(context, input))) return;
   await sql`
     insert into app.notifications ("userId", "businessId", "type", "title", "body", "data")
     values (${input.userId}::uuid, ${input.businessId ?? null}::uuid, ${input.type}, ${input.title}, ${input.body ?? ""}, ${JSON.stringify(input.data ?? {})}::jsonb)

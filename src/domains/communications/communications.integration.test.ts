@@ -115,10 +115,18 @@ describe("communications domain", () => {
     });
     expect(senderRejected.status).toBe(400);
 
+    const unverifiedDomain = await request(server.baseUrl, `${base}/communications/senders`, {
+      method: "POST",
+      cookie: owner.cookies,
+      body: JSON.stringify({ name: "Spoof", email: "ceo@somebank.com" }),
+    });
+    expect(unverifiedDomain.status).toBe(400);
+
+    // The verified domain is found from the address itself.
     const sender = await request(server.baseUrl, `${base}/communications/senders`, {
       method: "POST",
       cookie: owner.cookies,
-      body: JSON.stringify({ name: "Sales", email: "sales@example.com", domainId: domain.id }),
+      body: JSON.stringify({ name: "Sales", email: "Sales@Example.com" }),
     });
     expect(sender.status).toBe(201);
     expect((sender.body as { data: { sender: { isDefault: boolean } } }).data.sender.isDefault).toBe(true);

@@ -312,6 +312,15 @@ export interface Bills {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface BookingCalendarEvents {
+  bookingItemId: string;
+  businessId: string;
+  googleEventId: string;
+  meetUrl: string | null;
+  syncedAt: Generated<Timestamp>;
+  userId: string;
+}
+
 export interface BookingItems {
   bookingId: string;
   businessId: string;
@@ -368,13 +377,16 @@ export interface Businesses {
   addressLine1: string | null;
   addressLine2: string | null;
   archivedAt: Timestamp | null;
+  brandColor: string | null;
   city: string | null;
   country: Generated<string>;
+  coverUploadId: string | null;
   createdAt: Generated<Timestamp>;
   createdBy: string;
   defaultCurrency: Generated<string>;
   displayName: string;
   id: Generated<string>;
+  logoUploadId: string | null;
   postalCode: string | null;
   primaryVertical: string | null;
   state: string | null;
@@ -437,6 +449,13 @@ export interface BusinessSubscriptions {
   startedAt: Generated<Timestamp>;
   status: Generated<string>;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface CalendarConnections {
+  createdAt: Generated<Timestamp>;
+  meetEnabled: Generated<boolean>;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
 }
 
 export interface CartLines {
@@ -507,6 +526,20 @@ export interface CheckoutSessions {
   idempotencyKey: string;
   orderId: string | null;
   status: Generated<string>;
+}
+
+export interface CheckoutSubaccounts {
+  businessId: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  provider: Generated<string>;
+  settlementAccountName: string | null;
+  settlementAccountNumber: string;
+  settlementBankCode: string;
+  status: Generated<string>;
+  subaccountCode: string;
+  updatedAt: Generated<Timestamp>;
+  virtualAccountId: string | null;
 }
 
 export interface CommunicationAudienceSegmentMembers {
@@ -890,6 +923,10 @@ export interface InvoiceLines {
 export interface Invoices {
   businessId: string;
   channelId: string;
+  checkoutAmountMinor: Int8 | null;
+  checkoutCreatedAt: Timestamp | null;
+  checkoutReference: string | null;
+  checkoutUrl: string | null;
   createdAt: Generated<Timestamp>;
   createdBy: string;
   currency: Generated<string>;
@@ -915,6 +952,7 @@ export interface Invoices {
   taxMinor: Generated<Int8>;
   terms: string | null;
   totalMinor: Generated<Int8>;
+  transferReportedAt: Timestamp | null;
   updatedAt: Generated<Timestamp>;
   voidedAt: Timestamp | null;
 }
@@ -1725,6 +1763,7 @@ export interface StockTransfers {
 
 export interface Stores {
   archivedAt: Timestamp | null;
+  businessHours: Generated<Json>;
   businessId: string;
   carrierDeliveryEnabled: Generated<boolean>;
   contactEmail: string | null;
@@ -1734,13 +1773,19 @@ export interface Stores {
   description: Generated<string>;
   id: Generated<string>;
   isDefault: Generated<boolean>;
+  location: string | null;
   name: string;
+  privacyPolicy: string | null;
+  productBrowsingMode: Generated<string>;
+  refundPolicy: string | null;
   sellsInPerson: Generated<boolean>;
   sellsOnline: Generated<boolean>;
   slug: string;
+  socialLinks: Generated<Json>;
   status: Generated<string>;
   timezone: Generated<string>;
   updatedAt: Generated<Timestamp>;
+  websiteUrl: string | null;
 }
 
 export interface SubscriptionDunningEvents {
@@ -2093,6 +2138,7 @@ export interface DB {
   bill_lines: BillLines;
   bill_payment_allocations: BillPaymentAllocations;
   bills: Bills;
+  booking_calendar_events: BookingCalendarEvents;
   booking_items: BookingItems;
   booking_tips: BookingTips;
   bookings: Bookings;
@@ -2101,11 +2147,13 @@ export interface DB {
   business_memberships: BusinessMemberships;
   business_subscriptions: BusinessSubscriptions;
   businesses: Businesses;
+  calendar_connections: CalendarConnections;
   cart_lines: CartLines;
   carts: Carts;
   cash_movements: CashMovements;
   categories: Categories;
   checkout_sessions: CheckoutSessions;
+  checkout_subaccounts: CheckoutSubaccounts;
   communication_audience_segment_members: CommunicationAudienceSegmentMembers;
   communication_audience_segments: CommunicationAudienceSegments;
   communication_credit_accounts: CommunicationCreditAccounts;

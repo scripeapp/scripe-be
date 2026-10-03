@@ -10,6 +10,7 @@ import { createProfilesRouter } from "./domains/profiles/profiles.routes.js";
 import { createAddressesRouter } from "./domains/addresses/addresses.routes.js";
 import { createHelpdeskRouter } from "./domains/helpdesk/helpdesk.routes.js";
 import { createPreferencesRouter } from "./domains/preferences/preferences.routes.js";
+import { createIntegrationsRouter } from "./domains/integrations/integrations.routes.js";
 import { createNotificationsRouter } from "./domains/notifications/notifications.routes.js";
 import { createComplianceRouter } from "./domains/compliance/compliance.routes.js";
 import { createAuditRouter } from "./domains/audit/audit.routes.js";
@@ -94,6 +95,7 @@ export function createApp(): Express {
   app.use(createAddressesRouter());
   app.use(createHelpdeskRouter());
   app.use(createPreferencesRouter());
+  app.use(createIntegrationsRouter());
   app.use(createNotificationsRouter());
   app.use(createComplianceRouter());
   app.use(createAuditRouter());

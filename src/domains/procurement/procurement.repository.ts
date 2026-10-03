@@ -71,7 +71,36 @@ async function resolveInventoryItemId(c: DatabaseContext, businessId: string, li
   throw new Error("Line item must have an inventoryItemId, variantId, or productId");
 }
 
-export async function createPurchaseOrder(c: DatabaseContext, businessId: string, userId: string, input: PurchaseOrderInput): Promise<{ id: string }> {
+/**
+ * The supplier account behind an id that may be either the account's own id
+ * or its party's id — vendor pickers list parties, so both arrive here.
+ */
+export async function resolveSupplierAccountId(c: DatabaseContext, businessId: string, supplierOrPartyId: string): Promise<string | undefined> {
+  const result = await sql<{ id: string }>`
+    select "id" from app.supplier_accounts
+    where ("id" = ${supplierOrPartyId}::uuid or "partyId" = ${supplierOrPartyId}::uuid) and "businessId" = ${businessId}::uuid
+    limit 1
+  `.execute(c.transaction);
+  return result.rows[0]?.id;
+}
+
+/** Who a purchase order goes to: the supplier's primary active email, and the business sending it. */
+export async function findOrderEmailRecipient(c: DatabaseContext, businessId: string, orderId: string): Promise<{ supplierName: string; supplierEmail: string | null; businessName: string } | undefined> {
+  const result = await sql<{ supplierName: string; supplierEmail: string | null; businessName: string }>`
+    select party."displayName" as "supplierName", business."displayName" as "businessName",
+      (select contact."value" from app.party_contacts contact
+        where contact."partyId" = party."id" and contact."kind" = 'email' and contact."status" = 'active'
+        order by contact."isPrimary" desc, contact."createdAt" limit 1) as "supplierEmail"
+    from app.purchase_orders po
+    join app.supplier_accounts account on account."id" = po."supplierAccountId" and account."businessId" = po."businessId"
+    join app.parties party on party."id" = account."partyId"
+    join app.businesses business on business."id" = po."businessId"
+    where po."id" = ${orderId}::uuid and po."businessId" = ${businessId}::uuid
+  `.execute(c.transaction);
+  return result.rows[0];
+}
+
+export async function createPurchaseOrder(c: DatabaseContext, businessId: string, userId: string, input: PurchaseOrderInput & { supplierAccountId: string }): Promise<{ id: string }> {
   const order = (await sql<{ id: string }>`
     insert into app.purchase_orders ("businessId", "supplierAccountId", "storeId", "orderNumber", "expectedAt", "notes", "createdBy")
     values (${businessId}::uuid, ${input.supplierAccountId}::uuid, ${input.storeId}::uuid, ${input.orderNumber}, ${input.expectedAt ?? null}::timestamptz, ${input.notes ?? ''}, ${userId}::uuid)
@@ -92,7 +121,7 @@ export async function createPurchaseOrder(c: DatabaseContext, businessId: string
 export async function listPurchaseOrders(c: DatabaseContext, businessId: string, f: ListPurchaseOrdersFilter): Promise<{ purchaseOrders: PurchaseOrderRow[]; total: number }> {
   const clauses: RawBuilder<unknown>[] = [sql`po."businessId" = ${businessId}::uuid`];
   if (f.storeId) clauses.push(sql`po."storeId" = ${f.storeId}::uuid`);
-  if (f.supplierAccountId) clauses.push(sql`po."supplierAccountId" = ${f.supplierAccountId}::uuid`);
+  if (f.supplierAccountId) clauses.push(sql`(po."supplierAccountId" = ${f.supplierAccountId}::uuid or s."partyId" = ${f.supplierAccountId}::uuid)`);
   if (f.status) clauses.push(sql`po."status" = ${f.status}`);
   if (f.search) clauses.push(sql`(po."orderNumber" ilike ${`%${f.search}%`} or sp."displayName" ilike ${`%${f.search}%`})`);
 

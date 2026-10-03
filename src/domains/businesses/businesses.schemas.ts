@@ -35,3 +35,18 @@ export const updateBusinessSchema = createBusinessSchema
 
 export type CreateBusinessRequest = z.infer<typeof createBusinessSchema>;
 export type UpdateBusinessRequest = z.infer<typeof updateBusinessSchema>;
+
+const hexColor = z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, "Use a hex colour like #1A2B3C");
+
+export const updateBrandingSchema = z
+  .object({
+    logoUploadId: z.string().uuid().nullable().optional(),
+    coverUploadId: z.string().uuid().nullable().optional(),
+    brandColor: hexColor.nullable().optional(),
+  })
+  .strict();
+
+export const brandingImageParamsSchema = z.object({
+  businessId: z.string().uuid(),
+  kind: z.enum(["logo", "cover"]),
+});

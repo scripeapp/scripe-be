@@ -1,3 +1,4 @@
+import * as notificationsRepository from "../notifications/notifications.repository.js";
 import { sql } from "kysely";
 import type { Database } from "../../db/database.types.js";
 import { withDatabaseContext, type DatabaseContext } from "../../db/database-context.js";
@@ -283,7 +284,7 @@ export class ProviderEventsService {
           assetCode: asString(attributes.currency) ?? "NGN",
           description: "Virtual account deposit",
         });
-        if (result.found && result.email && result.accountNumber && result.bankName) {
+        if (result.found && result.email && result.accountNumber && result.bankName && (await notificationsRepository.wantsEmail(context, result.email, "deposits"))) {
           const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
           const amountFormatted = `₦${(Number(amountMinor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
           void emailSender.sendVirtualAccountDeposit(result.email, {
@@ -336,7 +337,7 @@ export class ProviderEventsService {
           assetCode: asString(data.currency) ?? "NGN",
           description: "Virtual account deposit",
         });
-        if (result.found && result.email && result.accountNumber && result.bankName) {
+        if (result.found && result.email && result.accountNumber && result.bankName && (await notificationsRepository.wantsEmail(context, result.email, "deposits"))) {
           const frontendUrl = loadEnvironment().FRONTEND_URL || "https://scripe.app";
           const amountFormatted = `₦${(Number(amountMinor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
           void emailSender.sendVirtualAccountDeposit(result.email, {

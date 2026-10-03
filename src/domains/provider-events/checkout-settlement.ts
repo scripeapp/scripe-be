@@ -166,7 +166,7 @@ async function notifyPaylinkPayment(context: DatabaseContext, reference: string)
     }
   }
 
-  if (details.merchantEmail) {
+  if (details.merchantEmail && (await notificationsRepository.wantsEmail(context, details.merchantEmail, "sales"))) {
     try {
       const dashboardUrl = `${loadEnvironment().FRONTEND_URL}/dashboard/payments/paylinks`;
       await emailSender.sendTransactional({

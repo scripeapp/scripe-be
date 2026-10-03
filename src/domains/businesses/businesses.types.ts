@@ -1,3 +1,4 @@
+import type { BusinessBranding } from "./businesses.branding.js";
 export type BusinessStatus = "active" | "suspended" | "archived";
 
 export interface BusinessRow {
@@ -15,13 +16,17 @@ export interface BusinessRow {
   readonly state: string | null;
   readonly postalCode: string | null;
   readonly country: string;
+  readonly logoUploadId: string | null;
+  readonly coverUploadId: string | null;
+  readonly brandColor: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly archivedAt: Date | null;
 }
 
-export interface Business extends Omit<BusinessRow, "createdAt" | "updatedAt" | "archivedAt"> {
+export interface Business extends Omit<BusinessRow, "createdAt" | "updatedAt" | "archivedAt" | "logoUploadId" | "coverUploadId" | "brandColor"> {
   readonly roleCodes: string[];
+  readonly branding: BusinessBranding;
   readonly defaultStore: {
     readonly id: string;
     readonly name: string;
@@ -63,4 +68,11 @@ export interface BusinessUpdateInput {
 export interface BusinessOperation {
   readonly userId: string;
   readonly requestId: string;
+}
+
+/** null removes the image or colour; undefined leaves it as it is. */
+export interface BusinessBrandingUpdateInput {
+  readonly logoUploadId?: string | null;
+  readonly coverUploadId?: string | null;
+  readonly brandColor?: string | null;
 }
